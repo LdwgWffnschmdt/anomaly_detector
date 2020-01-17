@@ -4,3 +4,8 @@ A small script to convert bag files to [TensorFlow TFRecords](https://www.tensor
 
 ## Install dependencies
 ```pip install opencv-python```
+
+## Usage
+```bash
+rosrun rosbag_to_tfrecord rosbag_to_tfrecord _bag_file:=/path/to/file.bag
+```
