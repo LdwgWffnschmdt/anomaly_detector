@@ -9,3 +9,14 @@ A small script to convert bag files to [TensorFlow TFRecords](https://www.tensor
 ```bash
 rosrun rosbag_to_tfrecord rosbag_to_tfrecord _bag_file:=/path/to/file.bag
 ```
+
+### Parameters
+```
+bag_file      : ""
+output_dir    : Defaults to {bag_file}-TFRecord
+image_topic   : "/camera/color/image_raw"
+dataset_name  : "train"
+images_per_bin: 10000
+tf_map        : "map"
+tf_base_link  : "base_link"
+```
