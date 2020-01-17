@@ -21,13 +21,13 @@ def rosbag_to_tfrecord():
     ################
     #  Parameters  #
     ################
-    bag_file       = rospy.get_param("bag_file"       , "/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense.bag")
-    output_dir     = rospy.get_param("output_dir"     , "") # Defaults to {bag_file}-TFRecord
-    image_topic    = rospy.get_param("image_topic"    , "/camera/color/image_raw")
-    dataset_name   = rospy.get_param("dataset_name"   , "train")
-    images_per_bin = rospy.get_param("images_per_bin" , 100)
-    tf_map         = rospy.get_param("tf_map"         , "map")
-    tf_base_link   = rospy.get_param("tf_base_link"   , "base_link")
+    bag_file       = rospy.get_param("~bag_file"       , "")
+    output_dir     = rospy.get_param("~output_dir"     , "") # Defaults to {bag_file}-TFRecord
+    image_topic    = rospy.get_param("~image_topic"    , "/camera/color/image_raw")
+    dataset_name   = rospy.get_param("~dataset_name"   , "train")
+    images_per_bin = rospy.get_param("~images_per_bin" , 10000)
+    tf_map         = rospy.get_param("~tf_map"         , "map")
+    tf_base_link   = rospy.get_param("~tf_base_link"   , "base_link")
 
     # Check parameters
     if bag_file == "" or not os.path.exists(bag_file) or not os.path.isfile(bag_file):
@@ -128,7 +128,7 @@ def rosbag_to_tfrecord():
 
         ### Get images
         print_progress(0, 1, prefix = 'Writing TFRecord:     ')
-        
+
         expected_im_count = bag.get_message_count(image_topic)
         number_of_bins = expected_im_count // images_per_bin
 
@@ -179,7 +179,7 @@ def rosbag_to_tfrecord():
                     if tfWriter:
                         tfWriter.close()
                     bin_number = total_saved_count // images_per_bin + 1
-                    output_filename = '%s-%.5d-of-%.5d' % (dataset_name, bin_number, number_of_bins)
+                    output_filename = '%s-%.5d-of-%.5d.tfrecord' % (dataset_name, bin_number, number_of_bins)
                     output_file = os.path.join(output_dir, output_filename)
                     tfWriter = tensorflow.io.TFRecordWriter(output_file)
                     per_bin_count = 0
