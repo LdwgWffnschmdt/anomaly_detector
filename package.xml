@@ -1,11 +1,10 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>rosbag_to_tfrecord</name>
+  <name>anomaly_detector</name>
   <version>0.0.1</version>
-  <description>A node to convert info from a rosbag to a TensorFlow TFRecord</description>
+  <description>Detect anomalies in images using deep features</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
-  <!-- Example:  -->
   <maintainer email="ludwig.waffenschmidt@outlook.com">Ludwig Waffenschmidt</maintainer>
 
   <!-- One license tag required, multiple allowed, one license per tag -->
@@ -15,7 +14,7 @@
 
   <!-- Url tags are optional, but multiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
-  <url type="website">https://github.com/LdwgWffnschmdt/rosbag_to_tfrecord</url>
+  <url type="website">https://github.com/LdwgWffnschmdt/anomaly_detector</url>
 
 
   <!-- Author tags are optional, multiple are allowed, one per tag -->
@@ -52,6 +51,7 @@
   <exec_depend>rospy</exec_depend>
   <exec_depend>opencv2</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>python-tensorflow-pip</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->
