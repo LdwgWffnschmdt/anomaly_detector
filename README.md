@@ -1,11 +1,15 @@
-# rosbag_to_tfrecord
+# anomaly_detector
+Detect anomalies in images using deep features
+
+
+## rosbag_to_tfrecord
 
 A small script to convert bag files to [TensorFlow TFRecords](https://www.tensorflow.org/tutorials/load_data/tfrecord). Will as of now only include an image topic with position and rotation from /tf.
 
-## Install dependencies
+### Install dependencies
 ```pip install opencv-python```
 
-## Usage
+### Usage
 ```bash
 rosrun rosbag_to_tfrecord rosbag_to_tfrecord _bag_file:=/path/to/file.bag
 ```
