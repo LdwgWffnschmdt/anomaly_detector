@@ -1,4 +1,5 @@
 # anomaly_detector
+WORK IN PROGRESS!
 Detect anomalies in images using deep features
 
 

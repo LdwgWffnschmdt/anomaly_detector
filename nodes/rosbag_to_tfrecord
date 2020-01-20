@@ -95,7 +95,7 @@ def rosbag_to_tfrecord():
             utils.print_progress(0, 1, prefix = 'Writing TFRecord:')
 
             expected_im_count = bag.get_message_count(image_topic)
-            number_of_bins = expected_im_count // images_per_bin
+            number_of_bins = expected_im_count // images_per_bin + 1
 
             total_count = 0
             total_saved_count = 0

@@ -8,7 +8,7 @@ import feature_extractor.utils as utils
 def anomaly_detector():
     rospy.init_node('anomaly_detector')
     extractor = FeatureExtractorBase()
-    extractor.extract_batch("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/train-00001-of-00000.tfrecord")
+    extractor.extract_batch("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/train-00001-of-00001.tfrecord")
 
 if __name__ == '__main__':
     try:
