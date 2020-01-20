@@ -2,6 +2,11 @@
 WORK IN PROGRESS!
 Detect anomalies in images using deep features
 
+## Dependencies
+```bash
+pip install --user --upgrade tensorflow
+pip install --user -q pyyaml h5py  # Required to save extracted features in HDF5 format
+```
 
 ## rosbag_to_tfrecord
 

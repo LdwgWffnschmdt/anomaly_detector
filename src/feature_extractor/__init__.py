@@ -1,1 +1,1 @@
-from featureExtractorBase import FeatureExtractorBase
+from featureExtractorMobileNetV2 import FeatureExtractorMobileNetV2
