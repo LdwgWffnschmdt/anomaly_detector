@@ -2,13 +2,18 @@
 # -*- coding: utf-8 -*-
 
 import rospy
+
 import feature_extractor
 import feature_extractor.utils as utils
 
+import anomaly_model
+
 def anomaly_detector():
     rospy.init_node("anomaly_detector")
-    extractor = feature_extractor.FeatureExtractorMobileNetV2()
-    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/train-00001-of-00001.tfrecord")
+    # extractor = feature_extractor.FeatureExtractorMobileNetV2()
+    # extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/train-00001-of-00001.tfrecord")
+    model = anomaly_model.AnomalyModelSVG()
+    model.generate_model("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2.h5")
 
 if __name__ == "__main__":
     try:

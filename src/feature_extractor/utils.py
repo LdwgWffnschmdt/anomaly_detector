@@ -10,15 +10,27 @@ import h5py
 
 def write_hdf5(filename, location_dataset, feature_dataset):
     """
-    Writes features to HDF5 file.
+    Writes locations and features to HDF5 file.
     :param filename: str, filename to output
     :param location_dataset: list of dict locations
     :param feature_dataset: list of feature vectors
     :return:
     """
+    print("Writing locations and features to: %s" % filename)
     with h5py.File(filename, "w") as hf:
         hf.create_dataset("locations", data=location_dataset)
         hf.create_dataset("features", data=feature_dataset, dtype=np.float32)
+    print("Successfully written locations and features to: %s" % filename)
+
+def read_hdf5(filename):
+    """
+    Reads locations and features from a HDF5 file.
+    :param filename: str, filename to read
+    :return:
+    """
+    print("Reading locations and features from: %s" % filename)
+    with h5py.File(filename, "r") as hf:
+        return np.array(hf["locations"]), np.array(hf["features"])
 
 def _int64_feature(value):
     """Wrapper for inserting int64 features into Example proto."""

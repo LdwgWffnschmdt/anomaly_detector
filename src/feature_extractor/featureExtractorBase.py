@@ -3,6 +3,7 @@ import time
 
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import numpy as np
 
 import feature_extractor.utils as utils
 
@@ -12,9 +13,6 @@ class FeatureExtractorBase(object):
         self.name = ""              # Should be set by the implementing class
         self.IMG_SIZE = 260
     
-    def extract(self, image):     # Should be implemented by child class
-        pass  
-
     def extract_batch(self, batch): # Should be implemented by child class
         pass  
     
@@ -28,6 +26,11 @@ class FeatureExtractorBase(object):
     # Common functionality #
     ########################
 
+    def extract(self, image):
+        # A single image is of shape (w, h, 3), but the network wants (None, w, h, 3) as input
+        batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
+        return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
+    
     def extract_files(self, filenames, output_file = "", batch_size = 32):
         if not isinstance(filenames, list):
             filenames = [filenames]
@@ -95,6 +98,7 @@ class FeatureExtractorBase(object):
         batches = parsed_dataset.batch(batch_size)
 
         feature_dataset = []
+        feature_dataset2 = []
 
         start = time.time()
 
@@ -108,7 +112,7 @@ class FeatureExtractorBase(object):
                 feature_batch = self.extract_batch(batch)
 
                 # Add features to list
-                for feature_vector in feature_batch:
+                for index, feature_vector in enumerate(feature_batch):
                     feature_dataset.append(feature_vector.numpy())
                 
                 # Print progress
@@ -120,6 +124,5 @@ class FeatureExtractorBase(object):
 
         # Write locations and features to disk as HDF5 file
         utils.write_hdf5(output_file, location_dataset, feature_dataset)
-        print("Successfully written locations and features to: %s" % output_file)
 
         return True
