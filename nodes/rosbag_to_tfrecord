@@ -74,7 +74,7 @@ def rosbag_to_tfrecord():
             tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(bag.get_end_time() - bag.get_start_time()))
             for topic, msg, t in bag.read_messages(topics=["/tf", "/tf_static"]):
                 if h.interrupted:
-                    print "Interrupted!"
+                    print "\nInterrupted!"
                     return
                 
                 for msg_tf in msg.transforms:
@@ -110,7 +110,7 @@ def rosbag_to_tfrecord():
 
             for topic, msg, t in bag.read_messages(topics=image_topic):
                 if h.interrupted:
-                    print "Interrupted!"
+                    print "\nInterrupted!"
                     return
                 
                 total_count += 1

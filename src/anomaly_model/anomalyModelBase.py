@@ -6,16 +6,8 @@ import feature_extractor.utils as utils
 class AnomalyModelBase(object):
     
     def __init__(self):
-        self.name = ""          # Should be set by the implementing class
+        self.NAME = ""          # Should be set by the implementing class
     
-    def classify(self, feature_vector):
-        """ Classify a single feature vector based on the loaded model """
-        pass
-    
-    def load_model_from_file(self, model_file):
-        """ Load a model from file """
-        pass
-
     def generate_model(self, locations, features):
         """
         Generate a model based on the features and locations
@@ -23,15 +15,23 @@ class AnomalyModelBase(object):
             locations   - Required  : Array of locations for the features
             features    - Required  : Array of features as extracted by a FeatureExtractor
         """
-        pass
+        raise NotImplementedError
         
+    def classify(self, feature_vector):
+        """ Classify a single feature vector based on the loaded model """
+        raise NotImplementedError
+    
+    def load_model_from_file(self, model_file):
+        """ Load a model from file """
+        raise NotImplementedError
+
     def save_model_to_file(self, output_file):
         """
         Save the model to output_file
         @params:
             output_file     - Required  : Output path for the model file
         """
-        pass
+        raise NotImplementedError
 
     ########################
     # Common functionality #
@@ -50,17 +50,21 @@ class AnomalyModelBase(object):
             return
         
         if output_file == "":
-            output_file = os.path.abspath(features_file.replace(".h5", "")) + "AnomalyModel" + self.name + ".h5"
+            output_file = os.path.abspath(features_file.replace(".h5", "")) + "AnomalyModel" + self.NAME + ".h5"
             print("Output file set to %s" % output_file)
         
         # Read file
         locations, features = utils.read_hdf5(features_file)
 
         # Generate model
-        self.generate_model(locations, features)
+        if self.generate_model(locations, features) == False:
+            print("Could not generate model.")
+            return False
 
         # Save model
         self.save_model_to_file(output_file)
+        
+        return True
 
     def reduce_feature_array(self, features_vector_array):
         """

@@ -105,14 +105,14 @@ class FeatureExtractorBase(object):
         with utils.GracefulInterruptHandler() as h:
             for batch in batches:
                 if h.interrupted:
-                    print "Interrupted!"
+                    print "\nInterrupted!"
                     return
                 
                 # Extract features
                 feature_batch = self.extract_batch(batch)
 
                 # Add features to list
-                for index, feature_vector in enumerate(feature_batch):
+                for feature_vector in feature_batch:
                     feature_dataset.append(feature_vector.numpy())
                 
                 # Print progress
