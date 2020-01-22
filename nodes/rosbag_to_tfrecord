@@ -127,18 +127,21 @@ def rosbag_to_tfrecord():
                 
                     # Add image and position to TFRecord
                     feature_dict = {
-                        'image/location/translation/x': utils._float_feature(translation.x),
-                        'image/location/translation/y': utils._float_feature(translation.y),
-                        'image/location/translation/z': utils._float_feature(translation.z),
-                        'image/location/rotation/x': utils._float_feature(euler[0]),
-                        'image/location/rotation/y': utils._float_feature(euler[1]),
-                        'image/location/rotation/z': utils._float_feature(euler[2]),
-                        'image/height': utils._int64_feature(msg.height),
-                        'image/width': utils._int64_feature(msg.width),
-                        'image/channels': utils._int64_feature(channels),
-                        'image/colorspace': utils._bytes_feature(colorspace),
-                        'image/format': utils._bytes_feature('jpeg'),
-                        'image/encoded': utils._bytes_feature(encoded.tobytes())
+                        'metadata/location/translation/x'   : utils._float_feature(translation.x),
+                        'metadata/location/translation/y'   : utils._float_feature(translation.y),
+                        'metadata/location/translation/z'   : utils._float_feature(translation.z),
+                        'metadata/location/rotation/x'      : utils._float_feature(euler[0]),
+                        'metadata/location/rotation/y'      : utils._float_feature(euler[1]),
+                        'metadata/location/rotation/z'      : utils._float_feature(euler[2]),
+                        'metadata/time'                     : utils._float_feature(t),
+                        'metadata/label'                    : utils._int64_feature(0), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+                        'metadata/rosbag'                   : utils._bytes_feature(bag_file),
+                        'image/height'      : utils._int64_feature(msg.height),
+                        'image/width'       : utils._int64_feature(msg.width),
+                        'image/channels'    : utils._int64_feature(channels),
+                        'image/colorspace'  : utils._bytes_feature(colorspace),
+                        'image/format'      : utils._bytes_feature('jpeg'),
+                        'image/encoded'     : utils._bytes_feature(encoded.tobytes())
                     }
 
                     example = tensorflow.train.Example(features=tensorflow.train.Features(feature=feature_dict))

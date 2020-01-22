@@ -8,29 +8,29 @@ import tensorflow as tf
 import numpy as np
 import h5py
 
-def write_hdf5(filename, location_dataset, feature_dataset):
+def write_hdf5(filename, metadata_dataset, feature_dataset):
     """
-    Writes locations and features to HDF5 file.
+    Writes metadata and features to HDF5 file.
     :param filename: str, filename to output
-    :param location_dataset: list of dict locations
+    :param metadata_dataset: list of dict metadata
     :param feature_dataset: list of feature vectors
     :return:
     """
-    print("Writing locations and features to: %s" % filename)
+    print("Writing metadata and features to: %s" % filename)
     with h5py.File(filename, "w") as hf:
-        hf.create_dataset("locations", data=location_dataset)
+        hf.create_dataset("metadata", data=metadata_dataset)
         hf.create_dataset("features", data=feature_dataset, dtype=np.float32)
-    print("Successfully written locations and features to: %s" % filename)
+    print("Successfully written metadata and features to: %s" % filename)
 
 def read_hdf5(filename):
     """
-    Reads locations and features from a HDF5 file.
+    Reads metadata and features from a HDF5 file.
     :param filename: str, filename to read
     :return:
     """
-    print("Reading locations and features from: %s" % filename)
+    print("Reading metadata and features from: %s" % filename)
     with h5py.File(filename, "r") as hf:
-        return np.array(hf["locations"]), np.array(hf["features"])
+        return np.array(hf["metadata"]), np.array(hf["features"])
 
 def _int64_feature(value):
     """Wrapper for inserting int64 features into Example proto."""

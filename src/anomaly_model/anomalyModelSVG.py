@@ -46,7 +46,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         #     self._varI = np.linalg.inv(np.diag(self._var))
         # return distance.mahalanobis(feature_vector, self._mean, self._varI)
 
-    def generate_model(self, locations, features):
+    def generate_model(self, metadata, features):
         # Reduce features to simple list
         features_flat = self.reduce_feature_array(features)
 
@@ -94,9 +94,9 @@ if __name__ == "__main__":
     model = AnomalyModelSVG()
     model.generate_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2.h5")
 
-    locations, features = utils.read_hdf5("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2.h5")
+    metadata, features = utils.read_hdf5("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2.h5")
 
-    # model.generate_model(locations, features)
+    # model.generate_model(metadata, features)
     # model.load_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2AnomalyModelSVG.h5")
     
     features_flat = model.reduce_feature_array(features)

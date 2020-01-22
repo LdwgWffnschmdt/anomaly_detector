@@ -66,7 +66,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         return distance.mahalanobis(feature_vector, self._mean, self._covI)
 
 
-    def generate_model(self, locations, features):
+    def generate_model(self, metadata, features):
         # Reduce features to simple list
         features_flat = self.reduce_feature_array(features)[:5000]
 
@@ -175,10 +175,10 @@ if __name__ == "__main__":
     model = AnomalyModelBalancedDistribution()
     model.generate_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2.h5")
 
-    locations, features = utils.read_hdf5("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2.h5")
+    metadata, features = utils.read_hdf5("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2.h5")
 
     # model.load_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2AnomalyModelBalancedDistribution.h5")
-    # model.generate_model(locations, features)
+    # model.generate_model(metadata, features)
     # model.save_model_to_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2AnomalyModelBalancedDistribution.h5")
     
     features_flat = model.reduce_feature_array(features)

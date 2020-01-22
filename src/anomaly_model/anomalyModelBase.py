@@ -8,11 +8,11 @@ class AnomalyModelBase(object):
     def __init__(self):
         self.NAME = ""          # Should be set by the implementing class
     
-    def generate_model(self, locations, features):
+    def generate_model(self, metadata, features):
         """
-        Generate a model based on the features and locations
+        Generate a model based on the features and metadata
         @params:
-            locations   - Required  : Array of locations for the features
+            metadata   - Required  : Array of metadata for the features
             features    - Required  : Array of features as extracted by a FeatureExtractor
         """
         raise NotImplementedError
@@ -41,7 +41,7 @@ class AnomalyModelBase(object):
         """
         Generate a model based on the features in features_file and save it to output_file
         @params:
-            features_file   - Required  : HDF5 file containing locations and features (see feature_extractor for details)
+            features_file   - Required  : HDF5 file containing metadata and features (see feature_extractor for details)
             output_file     - Optional  : Output path for the model file (same path as features_file if not specified)
         """
         # Check parameters
@@ -54,10 +54,10 @@ class AnomalyModelBase(object):
             print("Output file set to %s" % output_file)
         
         # Read file
-        locations, features = utils.read_hdf5(features_file)
+        metadata, features = utils.read_hdf5(features_file)
 
         # Generate model
-        if self.generate_model(locations, features) == False:
+        if self.generate_model(metadata, features) == False:
             print("Could not generate model.")
             return False
 

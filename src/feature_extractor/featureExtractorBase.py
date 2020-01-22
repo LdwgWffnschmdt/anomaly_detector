@@ -52,22 +52,25 @@ class FeatureExtractorBase(object):
 
         # Create a dictionary describing the features.
         feature_description = {
-            "image/location/translation/x": tf.io.FixedLenFeature([], tf.float32),
-            "image/location/translation/y": tf.io.FixedLenFeature([], tf.float32),
-            "image/location/translation/z": tf.io.FixedLenFeature([], tf.float32),
-            "image/location/rotation/x": tf.io.FixedLenFeature([], tf.float32),
-            "image/location/rotation/y": tf.io.FixedLenFeature([], tf.float32),
-            "image/location/rotation/z": tf.io.FixedLenFeature([], tf.float32),
-            "image/height": tf.io.FixedLenFeature([], tf.int64),
-            "image/width": tf.io.FixedLenFeature([], tf.int64),
-            "image/channels": tf.io.FixedLenFeature([], tf.int64),
-            "image/colorspace": tf.io.FixedLenFeature([], tf.string),
-            "image/format": tf.io.FixedLenFeature([], tf.string),
-            "image/encoded": tf.io.FixedLenFeature([], tf.string),
+            "metadata/location/translation/x"   : tf.io.FixedLenFeature([], tf.float32),
+            "metadata/location/translation/y"   : tf.io.FixedLenFeature([], tf.float32),
+            "metadata/location/translation/z"   : tf.io.FixedLenFeature([], tf.float32),
+            "metadata/location/rotation/x"      : tf.io.FixedLenFeature([], tf.float32),
+            "metadata/location/rotation/y"      : tf.io.FixedLenFeature([], tf.float32),
+            "metadata/location/rotation/z"      : tf.io.FixedLenFeature([], tf.float32),
+            "metadata/time"                     : tf.io.FixedLenFeature([], tf.float32),
+            "metadata/label"                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+            "metadata/rosbag"                   : tf.io.FixedLenFeature([], tf.string),
+            "image/height"      : tf.io.FixedLenFeature([], tf.int64),
+            "image/width"       : tf.io.FixedLenFeature([], tf.int64),
+            "image/channels"    : tf.io.FixedLenFeature([], tf.int64),
+            "image/colorspace"  : tf.io.FixedLenFeature([], tf.string),
+            "image/format"      : tf.io.FixedLenFeature([], tf.string),
+            "image/encoded"     : tf.io.FixedLenFeature([], tf.string),
         }
 
-        # Get locations as list
-        location_dataset = []
+        # Get metadata as list
+        metadata_dataset = []
 
         def _parse_function(example_proto):
             # Parse the input tf.Example proto using the dictionary above.
@@ -75,15 +78,18 @@ class FeatureExtractorBase(object):
             image = tf.image.decode_jpeg(example["image/encoded"])
             image = self.format_image(image)
 
-            location = {
-                "translation/x": example["image/location/translation/x"],
-                "translation/y": example["image/location/translation/y"],
-                "translation/z": example["image/location/translation/z"],
-                "rotation/x":    example["image/location/rotation/x"],
-                "rotation/y":    example["image/location/rotation/y"],
-                "rotation/z":    example["image/location/rotation/z"]
+            metadata = {
+                "location/translation/x": example["metadata/location/translation/x"],
+                "location/translation/y": example["metadata/location/translation/y"],
+                "location/translation/z": example["metadata/location/translation/z"],
+                "location/rotation/x"   : example["metadata/location/rotation/x"],
+                "location/rotation/y"   : example["metadata/location/rotation/y"],
+                "location/rotation/z"   : example["metadata/location/rotation/z"],
+                "time"                  : example["metadata/time"],
+                "label"                 : example["metadata/label"],
+                "rosbag"                : example["metadata/rosbag"]
             }
-            location_dataset.append(str(location))
+            metadata_dataset.append(str(metadata))
 
             return image
 
@@ -122,7 +128,7 @@ class FeatureExtractorBase(object):
                                      suffix = "(%i / %i)" % (len(feature_dataset), total),
                                      time_start = start)
 
-        # Write locations and features to disk as HDF5 file
-        utils.write_hdf5(output_file, location_dataset, feature_dataset)
+        # Write metadata and features to disk as HDF5 file
+        utils.write_hdf5(output_file, metadata_dataset, feature_dataset)
 
         return True
