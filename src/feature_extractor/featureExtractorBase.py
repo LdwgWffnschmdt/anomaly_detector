@@ -4,6 +4,7 @@ import time
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
+import h5py
 
 import feature_extractor.utils as utils
 
@@ -31,7 +32,7 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, filenames, output_format="tfrecord", output_file="", batch_size=32):
+    def extract_files(self, filenames, output_format="h5", output_file="", batch_size=32):
         if not isinstance(filenames, list):
             filenames = [filenames]
 
@@ -94,9 +95,10 @@ class FeatureExtractorBase(object):
             if output_format == "tfrecord":
                 tfWriter = tf.io.TFRecordWriter(output_file)
             elif output_format == "h5":
-                feature_dataset = []
-                metadata_dataset = []
-            
+                h5Writer = h5py.File(output_file, "w")
+                metadata_dataset = h5Writer.create_dataset("metadata", (total,), dtype=h5py.string_dtype())
+                feature_dataset  = None
+        
             # For the progress bar
             counter = 0
             start = time.time()
@@ -132,8 +134,10 @@ class FeatureExtractorBase(object):
                         example = tf.train.Example(features=tf.train.Features(feature=feature_dict))
                         tfWriter.write(example.SerializeToString())
                     elif output_format == "h5":
-                        feature_dataset.append(feature_vector.numpy())
-                        metadata_dataset.append(str({
+                        if feature_dataset is None:
+                            feature_dataset = h5Writer.create_dataset("features", (total, feature_vector.shape[0], feature_vector.shape[1], feature_vector.shape[2]), dtype=np.float32)
+                        feature_dataset[index] = feature_vector.numpy()
+                        metadata_dataset[index] = str({
                             "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
                             "location/translation/y": batch[1]["metadata/location/translation/y"][index].numpy(),
                             "location/translation/z": batch[1]["metadata/location/translation/z"][index].numpy(),
@@ -145,7 +149,7 @@ class FeatureExtractorBase(object):
                             "rosbag"                : batch[1]["metadata/rosbag"][index].numpy(),
                             "tfrecord"              : batch[1]["metadata/tfrecord"][index].numpy(),
                             "feature_extractor"     : self.NAME
-                        }))
+                        })
                 
                 # Print progress
                 utils.print_progress(counter,
@@ -158,6 +162,6 @@ class FeatureExtractorBase(object):
             tfWriter.close()
         elif output_format == "h5":
             # Write metadata and features to disk as HDF5 file
-            utils.write_hdf5(output_file, metadata_dataset, feature_dataset)
+            h5Writer.close()
 
         return True
