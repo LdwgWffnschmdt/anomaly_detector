@@ -31,7 +31,7 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, filenames, output_file="", batch_size=32):
+    def extract_files(self, filenames, output_file="", batch_size=5):
         if not isinstance(filenames, list):
             filenames = [filenames]
 
@@ -80,36 +80,6 @@ class FeatureExtractorBase(object):
         parsed_dataset = raw_dataset.map(_parse_function)
         
         with utils.GracefulInterruptHandler() as h:
-            
-            ### Extract metadata
-            utils.print_progress(0, 1, prefix = "Extracting metadata:")
-            metadata_dataset = []
-            start = time.time()
-            for example in parsed_dataset:
-                if h.interrupted:
-                    print "\nInterrupted!"
-                    return
-                
-                metadata_dataset.append(str({
-                    "location/translation/x": example[1]["metadata/location/translation/x"].numpy(),
-                    "location/translation/y": example[1]["metadata/location/translation/y"].numpy(),
-                    "location/translation/z": example[1]["metadata/location/translation/z"].numpy(),
-                    "location/rotation/x"   : example[1]["metadata/location/rotation/x"].numpy(),
-                    "location/rotation/y"   : example[1]["metadata/location/rotation/y"].numpy(),
-                    "location/rotation/z"   : example[1]["metadata/location/rotation/z"].numpy(),
-                    "time"                  : example[1]["metadata/time"].numpy(),
-                    "label"                 : example[1]["metadata/label"].numpy(),
-                    "rosbag"                : example[1]["metadata/rosbag"].numpy(),
-                    "tfrecord"              : example[1]["metadata/tfrecord"].numpy(),
-                    "feature_extractor"     : self.NAME
-                }))
-                # Print progress
-                utils.print_progress(len(metadata_dataset),
-                                        total,
-                                        prefix = "Extracting metadata:",
-                                        suffix = "(%i / %i)" % (len(metadata_dataset), total),
-                                        time_start = start)
-
             ### Extract features
             utils.print_progress(0, 1, prefix = "Extracting features:")
             
@@ -117,6 +87,7 @@ class FeatureExtractorBase(object):
             batches = parsed_dataset.batch(batch_size)
 
             feature_dataset = []
+            metadata_dataset = []
             
             start = time.time()
 
@@ -129,8 +100,22 @@ class FeatureExtractorBase(object):
                 feature_batch = self.extract_batch(batch[0])
 
                 # Add features to list
-                for feature_vector in feature_batch:
+                for index, feature_vector in enumerate(feature_batch):
                     feature_dataset.append(feature_vector.numpy())
+                    
+                    metadata_dataset.append(str({
+                        "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
+                        "location/translation/y": batch[1]["metadata/location/translation/y"][index].numpy(),
+                        "location/translation/z": batch[1]["metadata/location/translation/z"][index].numpy(),
+                        "location/rotation/x"   : batch[1]["metadata/location/rotation/x"][index].numpy(),
+                        "location/rotation/y"   : batch[1]["metadata/location/rotation/y"][index].numpy(),
+                        "location/rotation/z"   : batch[1]["metadata/location/rotation/z"][index].numpy(),
+                        "time"                  : batch[1]["metadata/time"][index].numpy(),
+                        "label"                 : batch[1]["metadata/label"][index].numpy(),
+                        "rosbag"                : batch[1]["metadata/rosbag"][index].numpy(),
+                        "tfrecord"              : batch[1]["metadata/tfrecord"][index].numpy(),
+                        "feature_extractor"     : self.NAME
+                    }))
                 
                 # Print progress
                 utils.print_progress(len(feature_dataset),
