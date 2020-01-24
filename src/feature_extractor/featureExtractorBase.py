@@ -136,8 +136,8 @@ class FeatureExtractorBase(object):
                     elif output_format == "h5":
                         if feature_dataset is None:
                             feature_dataset = h5Writer.create_dataset("features", (total, feature_vector.shape[0], feature_vector.shape[1], feature_vector.shape[2]), dtype=np.float32)
-                        feature_dataset[index] = feature_vector.numpy()
-                        metadata_dataset[index] = str({
+                        feature_dataset[counter - 1] = feature_vector.numpy()
+                        metadata_dataset[counter - 1] = str({
                             "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
                             "location/translation/y": batch[1]["metadata/location/translation/y"][index].numpy(),
                             "location/translation/z": batch[1]["metadata/location/translation/z"][index].numpy(),
