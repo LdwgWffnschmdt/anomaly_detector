@@ -173,9 +173,9 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelBalancedDistribution()
-    model.generate_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2.h5")
+    model.generate_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.MobileNetV2.h5")
 
-    metadata, features = utils.read_hdf5("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2.h5")
+    metadata, features = utils.read_hdf5("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.MobileNetV2.h5")
 
     # model.load_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2AnomalyModelBalancedDistribution.h5")
     # model.generate_model(metadata, features)

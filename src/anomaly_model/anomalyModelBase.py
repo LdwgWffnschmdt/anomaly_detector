@@ -50,12 +50,15 @@ class AnomalyModelBase(object):
             return
         
         if output_file == "":
-            output_file = os.path.abspath(features_file.replace(".h5", "")) + "AnomalyModel" + self.NAME + ".h5"
+            output_file = os.path.abspath(features_file.replace(".h5", "")) + "." + self.NAME + ".h5"
             print("Output file set to %s" % output_file)
         
         # Read file
         metadata, features = utils.read_hdf5(features_file)
 
+        # Only take feature vectors of images labeled as anomaly free (label == 1)
+        features = features[[m["label"] == 1 for m in metadata]]
+        
         # Generate model
         if self.generate_model(metadata, features) == False:
             print("Could not generate model.")

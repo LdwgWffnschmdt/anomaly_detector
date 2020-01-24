@@ -4,9 +4,16 @@ import sys
 import time
 import signal
 
+import ast
 import tensorflow as tf
 import numpy as np
 import h5py
+
+import cv2
+
+##############
+# Feature IO #
+##############
 
 def write_hdf5(filename, metadata_dataset, feature_dataset):
     """
@@ -30,7 +37,9 @@ def read_hdf5(filename):
     """
     print("Reading metadata and features from: %s" % filename)
     with h5py.File(filename, "r") as hf:
-        return np.array(hf["metadata"]), np.array(hf["features"])
+        # Parse metadata object
+        metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
+        return metadata, np.array(hf["features"])
 
 def _int64_feature(value):
     """Wrapper for inserting int64 features into Example proto."""
@@ -47,6 +56,10 @@ def _float_feature(value):
 def _bytes_feature(value):
     """Wrapper for inserting bytes features into Example proto."""
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+#################
+# Output helper #
+#################
 
 # Print iterations progress (https://gist.github.com/aubricus/f91fb55dc6ba5557fbab06119420dd6a)
 def print_progress(iteration, total, prefix="", suffix="", decimals=1, bar_length=40, time_start=None):
@@ -92,6 +105,40 @@ def format_time(t):
         output = "%ih %s" % (hours, output)
 
     return output
+
+def image_write_label(image, label):
+    # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+    
+    text = {
+        0: "Unknown",
+        1: "No anomaly",
+        2: "Contains anomaly"
+    }
+
+    colors = {
+        0: (255,255,255),   # Unknown
+        1: (0, 204, 0),     # No anomaly
+        2: (0, 0, 255)      # Contains anomaly
+    }
+
+    font                   = cv2.FONT_HERSHEY_SIMPLEX
+    bottomLeftCornerOfText = (10,50)
+    fontScale              = 0.5
+    thickness              = 1
+
+    cv2.putText(image,'Label: ',
+        bottomLeftCornerOfText,
+        font,
+        fontScale,
+        (255,255,255),
+        thickness)
+    
+    cv2.putText(image, text.get(label, 0),
+        (bottomLeftCornerOfText[0] + 50, bottomLeftCornerOfText[1]),
+        font,
+        fontScale,
+        colors.get(label, 0),
+        thickness)
 
 # https://gist.github.com/nonZero/2907502
 class GracefulInterruptHandler(object):

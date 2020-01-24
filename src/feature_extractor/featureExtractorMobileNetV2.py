@@ -11,7 +11,7 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
 
     def __init__(self):
         FeatureExtractorBase.__init__(self)
-        self.name = "MobileNetV2"
+        self.NAME = "MobileNetV2"
 
         self.IMG_SIZE  = 160 # All images will be resized to 160x160
         self.IMG_SHAPE = (self.IMG_SIZE, self.IMG_SIZE, 3)
@@ -34,4 +34,4 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
 # Only for tests
 if __name__ == "__main__":
     extractor = FeatureExtractorMobileNetV2()
-    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/train-00001-of-00001.tfrecord")
+    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.tfrecord")

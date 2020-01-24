@@ -10,7 +10,7 @@ import feature_extractor.utils as utils
 class FeatureExtractorBase(object):
     
     def __init__(self):
-        self.name = ""              # Should be set by the implementing class
+        self.NAME = ""              # Should be set by the implementing class
         self.IMG_SIZE = 260
     
     def extract_batch(self, batch): # Should be implemented by child class
@@ -31,7 +31,7 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, filenames, output_file = "", batch_size = 32):
+    def extract_files(self, filenames, output_file="", batch_size=32):
         if not isinstance(filenames, list):
             filenames = [filenames]
 
@@ -41,9 +41,9 @@ class FeatureExtractorBase(object):
             return False
         
         if output_file == "":
-            output_file = os.path.join(os.path.abspath(os.path.dirname(filenames[0])), "Features" + self.name + ".h5")
+            output_file = os.path.join(os.path.abspath(os.path.dirname(filenames[0])), os.path.basename(filenames[0]).split(".")[0] + "." + self.NAME + ".h5")
             print("Output file set to %s" % output_file)
-        
+            
         print ("Loading dataset")
         raw_dataset = tf.data.TFRecordDataset(filenames)
 
@@ -61,6 +61,7 @@ class FeatureExtractorBase(object):
             "metadata/time"                     : tf.io.FixedLenFeature([], tf.float32),
             "metadata/label"                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
             "metadata/rosbag"                   : tf.io.FixedLenFeature([], tf.string),
+            "metadata/tfrecord"                 : tf.io.FixedLenFeature([], tf.string),
             "image/height"      : tf.io.FixedLenFeature([], tf.int64),
             "image/width"       : tf.io.FixedLenFeature([], tf.int64),
             "image/channels"    : tf.io.FixedLenFeature([], tf.int64),
@@ -68,54 +69,64 @@ class FeatureExtractorBase(object):
             "image/format"      : tf.io.FixedLenFeature([], tf.string),
             "image/encoded"     : tf.io.FixedLenFeature([], tf.string),
         }
-
-        # Get metadata as list
-        metadata_dataset = []
-
+        
         def _parse_function(example_proto):
             # Parse the input tf.Example proto using the dictionary above.
             example = tf.io.parse_single_example(example_proto, feature_description)
             image = tf.image.decode_jpeg(example["image/encoded"])
-            image = self.format_image(image)
-
-            metadata = {
-                "location/translation/x": example["metadata/location/translation/x"],
-                "location/translation/y": example["metadata/location/translation/y"],
-                "location/translation/z": example["metadata/location/translation/z"],
-                "location/rotation/x"   : example["metadata/location/rotation/x"],
-                "location/rotation/y"   : example["metadata/location/rotation/y"],
-                "location/rotation/z"   : example["metadata/location/rotation/z"],
-                "time"                  : example["metadata/time"],
-                "label"                 : example["metadata/label"],
-                "rosbag"                : example["metadata/rosbag"]
-            }
-            metadata_dataset.append(str(metadata))
-
-            return image
+            return self.format_image(image), example
 
         print ("Parsing dataset")
-
         parsed_dataset = raw_dataset.map(_parse_function)
         
-        ### Extract features
-        utils.print_progress(0, 1, prefix = "Extracting features:")
-        
-        # Get batches (seems to be better performance wise than extracting individual images)
-        batches = parsed_dataset.batch(batch_size)
-
-        feature_dataset = []
-        feature_dataset2 = []
-
-        start = time.time()
-
         with utils.GracefulInterruptHandler() as h:
+            
+            ### Extract metadata
+            utils.print_progress(0, 1, prefix = "Extracting metadata:")
+            metadata_dataset = []
+            start = time.time()
+            for example in parsed_dataset:
+                if h.interrupted:
+                    print "\nInterrupted!"
+                    return
+                
+                metadata_dataset.append(str({
+                    "location/translation/x": example[1]["metadata/location/translation/x"].numpy(),
+                    "location/translation/y": example[1]["metadata/location/translation/y"].numpy(),
+                    "location/translation/z": example[1]["metadata/location/translation/z"].numpy(),
+                    "location/rotation/x"   : example[1]["metadata/location/rotation/x"].numpy(),
+                    "location/rotation/y"   : example[1]["metadata/location/rotation/y"].numpy(),
+                    "location/rotation/z"   : example[1]["metadata/location/rotation/z"].numpy(),
+                    "time"                  : example[1]["metadata/time"].numpy(),
+                    "label"                 : example[1]["metadata/label"].numpy(),
+                    "rosbag"                : example[1]["metadata/rosbag"].numpy(),
+                    "tfrecord"              : example[1]["metadata/tfrecord"].numpy(),
+                    "feature_extractor"     : self.NAME
+                }))
+                # Print progress
+                utils.print_progress(len(metadata_dataset),
+                                        total,
+                                        prefix = "Extracting metadata:",
+                                        suffix = "(%i / %i)" % (len(metadata_dataset), total),
+                                        time_start = start)
+
+            ### Extract features
+            utils.print_progress(0, 1, prefix = "Extracting features:")
+            
+            # Get batches (seems to be better performance wise than extracting individual images)
+            batches = parsed_dataset.batch(batch_size)
+
+            feature_dataset = []
+            
+            start = time.time()
+
             for batch in batches:
                 if h.interrupted:
                     print "\nInterrupted!"
                     return
                 
                 # Extract features
-                feature_batch = self.extract_batch(batch)
+                feature_batch = self.extract_batch(batch[0])
 
                 # Add features to list
                 for feature_vector in feature_batch:
