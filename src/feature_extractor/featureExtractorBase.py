@@ -28,11 +28,24 @@ class FeatureExtractorBase(object):
     ########################
 
     def extract(self, image):
+        """ Extract the features of a single image """
         # A single image is of shape (w, h, 3), but the network wants (None, w, h, 3) as input
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, filenames, output_format="h5", output_file="", batch_size=32):
+    def extract_files(self, filenames, output_format="tfrecord", output_file="", batch_size=32, compression="gzip", compression_opts=4):
+        """Loads a set of files, extracts the features and saves them to file
+        Args:
+            filenames (string / string[]): TFRecord file(s) extracted by rosbag_to_tfrecord
+            output_format (string): Either "tfrecord" or "h5" (Default: "tfrecord")
+            output_file (string): Filename and path of the output file
+            batch_size (string): Size of image batches fed to the extractor (Defaults: 32)
+            compression (string): Output file compression, set to None for no compression (Default: "gzip"), can be extremely slow combined with HDF5
+            compression_opts (string): Compression level, set to None for no compression (Default: 4)
+
+        Returns:
+            success (bool)
+        """
         if not isinstance(filenames, list):
             filenames = [filenames]
 
@@ -93,10 +106,15 @@ class FeatureExtractorBase(object):
 
             # IO stuff
             if output_format == "tfrecord":
-                tfWriter = tf.io.TFRecordWriter(output_file)
+                tfOptions = tf.io.TFRecordOptions(compression_type=compression.upper(), compression_level=compression_opts)
+                tfWriter = tf.io.TFRecordWriter(output_file, options=tfOptions)
             elif output_format == "h5":
                 h5Writer = h5py.File(output_file, "w")
-                metadata_dataset = h5Writer.create_dataset("metadata", (total,), dtype=h5py.string_dtype())
+                metadata_dataset = h5Writer.create_dataset("metadata",
+                                                           shape=(total,),
+                                                           dtype=h5py.string_dtype(),
+                                                           compression=compression,
+                                                           compression_opts=compression_opts)
                 feature_dataset  = None
         
             # For the progress bar
@@ -135,7 +153,14 @@ class FeatureExtractorBase(object):
                         tfWriter.write(example.SerializeToString())
                     elif output_format == "h5":
                         if feature_dataset is None:
-                            feature_dataset = h5Writer.create_dataset("features", (total, feature_vector.shape[0], feature_vector.shape[1], feature_vector.shape[2]), dtype=np.float32)
+                            feature_dataset = h5Writer.create_dataset("features",
+                                                                      shape=(total,
+                                                                             feature_vector.shape[0],
+                                                                             feature_vector.shape[1],
+                                                                             feature_vector.shape[2]),
+                                                                      dtype=np.float32,
+                                                                      compression=compression,
+                                                                      compression_opts=compression_opts)
                         feature_dataset[counter - 1] = feature_vector.numpy()
                         metadata_dataset[counter - 1] = str({
                             "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
