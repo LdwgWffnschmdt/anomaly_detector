@@ -5,23 +5,27 @@ import tensorflow as tf
 from featureExtractorBase import FeatureExtractorBase
 import feature_extractor.utils as utils
 
-class FeatureExtractorMobileNetV2(FeatureExtractorBase):
+class FeatureExtractorMobileNetV2_Block6(FeatureExtractorBase):
     """
     Feature extractor based on MobileNetV2 (trained on ImageNet).
-    Generates 5x5x1280 feature vectors per image
+    Output layer: block_6_project_BN
+    Generates 14x14x64 feature vectors per image
     """
 
     def __init__(self):
         FeatureExtractorBase.__init__(self)
-        self.NAME = "MobileNetV2"
+        self.NAME = "MobileNetV2_Block6"
 
         self.IMG_SIZE  = 224 # All images will be resized to 224x224
         self.IMG_SHAPE = (self.IMG_SIZE, self.IMG_SIZE, 3)
 
         # Create the base model from the pre-trained model MobileNet V2
-        self.model = tf.keras.applications.MobileNetV2(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
+        model_full = tf.keras.applications.MobileNetV2(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
                                                        include_top=False,
                                                        weights="imagenet")
+        model_full.trainable = False
+
+        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer("block_6_project_BN").output)   
         self.model.trainable = False
     
     def format_image(self, image):
@@ -36,7 +40,7 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
 
 # Only for tests
 if __name__ == "__main__":
-    extractor = FeatureExtractorMobileNetV2()
+    extractor = FeatureExtractorMobileNetV2_Block6()
     
     tf.keras.utils.plot_model(
         extractor.model,
@@ -48,4 +52,4 @@ if __name__ == "__main__":
         dpi=96
     )
 
-    # extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.tfrecord") # ~2800 MB RAM
+    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.tfrecord")

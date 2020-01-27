@@ -8,6 +8,8 @@ from scipy.spatial import distance
 from anomalyModelBase import AnomalyModelBase
 import feature_extractor.utils as utils
 
+import matplotlib.pyplot as plt
+
 class AnomalyModelSVG(AnomalyModelBase):
     """
     Anomaly model formed by a Single Variate Gaussian (SVG) with model parameters Θ_SVG = (μ,σ²)
@@ -19,7 +21,6 @@ class AnomalyModelSVG(AnomalyModelBase):
         self._var        = None # Variance σ²
         self._mean       = None # Mean μ
         self.threshold  = None # Threshold for classification
-
     
     def classify(self, feature_vector, threshold=None):
         """
@@ -67,6 +68,12 @@ class AnomalyModelSVG(AnomalyModelBase):
         print("Calculating the threshold")
         dists = np.array(list(map(self._mahalanobis_distance, features_flat)))
         self.threshold = np.amax(dists)
+
+        data = features_flat[:,0]
+        fig1, ax1 = plt.subplots()
+        ax1.set_title(self._mean[0])
+        ax1.hist(data, bins=50)
+        plt.show()
 
         return True
 

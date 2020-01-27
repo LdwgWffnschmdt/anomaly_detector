@@ -1,1 +1,2 @@
 from featureExtractorMobileNetV2 import FeatureExtractorMobileNetV2
+from featureExtractorMobileNetV2_Block6 import FeatureExtractorMobileNetV2_Block6

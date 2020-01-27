@@ -15,9 +15,11 @@ class FeatureExtractorBase(object):
         self.IMG_SIZE = 260
     
     def extract_batch(self, batch): # Should be implemented by child class
+        """ Extract the features of batch of images """
         pass  
     
     def format_image(self, image):  # Can be overridden by child class
+        """ Format an image to be compliant with extractor (NN) input """
         image = tf.cast(image, tf.float32)
         image = image/255.0
         image = tf.image.resize(image, (self.IMG_SIZE, self.IMG_SIZE))
@@ -186,7 +188,6 @@ class FeatureExtractorBase(object):
         if output_format == "tfrecord":
             tfWriter.close()
         elif output_format == "h5":
-            # Write metadata and features to disk as HDF5 file
             h5Writer.close()
 
         return True
