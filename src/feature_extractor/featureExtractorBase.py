@@ -15,11 +15,11 @@ class FeatureExtractorBase(object):
         self.IMG_SIZE = 260
     
     def extract_batch(self, batch): # Should be implemented by child class
-        """ Extract the features of batch of images """
+        """Extract the features of batch of images"""
         pass  
     
     def format_image(self, image):  # Can be overridden by child class
-        """ Format an image to be compliant with extractor (NN) input """
+        """Format an image to be compliant with extractor (NN) input"""
         image = tf.cast(image, tf.float32)
         image = image/255.0
         image = tf.image.resize(image, (self.IMG_SIZE, self.IMG_SIZE))
@@ -30,45 +30,23 @@ class FeatureExtractorBase(object):
     ########################
 
     def extract(self, image):
-        """ Extract the features of a single image """
+        """Extract the features of a single image"""
         # A single image is of shape (w, h, 3), but the network wants (None, w, h, 3) as input
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, filenames, output_format="tfrecord", output_file="", batch_size=32, compression="gzip", compression_opts=4):
-        """Loads a set of files, extracts the features and saves them to file
+    def load_dataset(self, filenames):
+        """Loads a set of TFRecord files
         Args:
-            filenames (string / string[]): TFRecord file(s) extracted by rosbag_to_tfrecord
-            output_format (string): Either "tfrecord" or "h5" (Default: "tfrecord")
-            output_file (string): Filename and path of the output file
-            batch_size (string): Size of image batches fed to the extractor (Defaults: 32)
-            compression (string): Output file compression, set to None for no compression (Default: "gzip"), can be extremely slow combined with HDF5
-            compression_opts (string): Compression level, set to None for no compression (Default: 4)
+            filenames (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
 
         Returns:
-            success (bool)
+            tf.data.MapDataset
         """
-        if not isinstance(filenames, list):
-            filenames = [filenames]
-
-        # Check parameters
         if not filenames or len(filenames) < 1 or filenames[0] == "":
-            print("Please specify at least one filename (%s)" % filenames)
-            return False
+            raise ValueError("Please specify at least one filename (%s)" % filenames)
         
-        if output_format != "tfrecord" and output_format != "h5":
-            print("Supported output formats are 'tfrecord' and 'h5'")
-            return False
-            
-        if output_file == "":
-            output_file = os.path.join(os.path.abspath(os.path.dirname(filenames[0])), os.path.basename(filenames[0]).split(".")[0] + "." + self.NAME + "." + output_format)
-            print("Output file set to %s" % output_file)
-            
-        print ("Loading dataset")
         raw_dataset = tf.data.TFRecordDataset(filenames)
-
-        # Get number of examples in dataset
-        total = sum(1 for record in raw_dataset)
 
         # Create a dictionary describing the features.
         feature_description = {
@@ -96,9 +74,41 @@ class FeatureExtractorBase(object):
             image = tf.image.decode_jpeg(example["image/encoded"])
             return self.format_image(image), example
 
-        print ("Parsing dataset")
-        parsed_dataset = raw_dataset.map(_parse_function)
+        return raw_dataset.map(_parse_function)
+
+    def extract_files(self, filenames, output_format="tfrecord", output_file="", batch_size=32, compression="gzip", compression_opts=4):
+        """Loads a set of files, extracts the features and saves them to file
+        Args:
+            filenames (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
+            output_format (str): Either "tfrecord" or "h5" (Default: "tfrecord")
+            output_file (str): Filename and path of the output file
+            batch_size (str): Size of image batches fed to the extractor (Defaults: 32)
+            compression (str): Output file compression, set to None for no compression (Default: "gzip"), can be extremely slow combined with HDF5
+            compression_opts (str): Compression level, set to None for no compression (Default: 4)
+
+        Returns:
+            success (bool)
+        """
+        if not isinstance(filenames, list):
+            filenames = [filenames]
+
+        # Check parameters
+        if not filenames or len(filenames) < 1 or filenames[0] == "":
+            raise ValueError("Please specify at least one filename (%s)" % filenames)
         
+        if output_format != "tfrecord" and output_format != "h5":
+            raise ValueError("Supported output formats are 'tfrecord' and 'h5'")
+            
+        if output_file == "":
+            output_file = os.path.join(os.path.abspath(os.path.dirname(filenames[0])), os.path.basename(filenames[0]).split(".")[0] + "." + self.NAME + "." + output_format)
+            print("Output file set to %s" % output_file)
+            
+        print ("Loading dataset")
+        parsed_dataset = self.load_dataset(filenames)
+        
+        # Get number of examples in dataset
+        total = sum(1 for record in parsed_dataset)
+
         with utils.GracefulInterruptHandler() as h:
             ### Extract features
             utils.print_progress(0, 1, prefix = "Extracting features:")
@@ -126,7 +136,7 @@ class FeatureExtractorBase(object):
             for batch in batches:
                 if h.interrupted:
                     print "\nInterrupted!"
-                    return
+                    return False
                 
                 # Extract features
                 feature_batch = self.extract_batch(batch[0])

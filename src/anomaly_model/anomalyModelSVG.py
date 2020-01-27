@@ -11,8 +11,7 @@ import feature_extractor.utils as utils
 import matplotlib.pyplot as plt
 
 class AnomalyModelSVG(AnomalyModelBase):
-    """
-    Anomaly model formed by a Single Variate Gaussian (SVG) with model parameters Θ_SVG = (μ,σ²)
+    """Anomaly model formed by a Single Variate Gaussian (SVG) with model parameters Θ_SVG = (μ,σ²)
     Reference: https://www.mdpi.com/1424-8220/16/11/1904/htm
     """
     def __init__(self):
@@ -23,8 +22,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         self.threshold  = None # Threshold for classification
     
     def classify(self, feature_vector, threshold=None):
-        """
-        The anomaly measure is defined as the Mahalanobis distance between a feature sample
+        """The anomaly measure is defined as the Mahalanobis distance between a feature sample
         and the single variate Gaussian distribution along each dimension.
         """
         if threshold is None:
@@ -32,9 +30,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         return self._mahalanobis_distance(feature_vector) > threshold
     
     def _mahalanobis_distance(self, feature_vector):
-        """
-        Calculate the Mahalanobis distance between the input and the model
-        """
+        """Calculate the Mahalanobis distance between the input and the model"""
         assert not self._var is None and not self._mean is None, \
             "You need to load a model before computing a Mahalanobis distance"
         assert feature_vector.shape == self._var.shape == self._mean.shape, \
@@ -78,7 +74,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         return True
 
     def load_model_from_file(self, model_file):
-        """ Load a SVG model from file """
+        """Load a SVG model from file"""
         print("Reading model parameters from: %s" % model_file)
         with h5py.File(model_file, "r") as hf:
             self._var       = np.array(hf["var"])
@@ -88,7 +84,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         print("Successfully loaded model parameters of dimension %i" % len(self._var))
     
     def save_model_to_file(self, output_file = ""):
-        """ Save the model to disk """
+        """Save the model to disk"""
         print("Writing model parameters to: %s" % output_file)
         with h5py.File(output_file, "w") as hf:
             hf.create_dataset("var",        data=self._var, dtype=np.float64)

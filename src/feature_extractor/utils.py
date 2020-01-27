@@ -63,15 +63,15 @@ def _bytes_feature(value):
 
 # Print iterations progress (https://gist.github.com/aubricus/f91fb55dc6ba5557fbab06119420dd6a)
 def print_progress(iteration, total, prefix="", suffix="", decimals=1, bar_length=40, time_start=None):
-    """
-    Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        bar_length  - Optional  : character length of bar (Int)
+    """Call in a loop to create terminal progress bar
+
+    Args:
+        iteration (int): (Required) current iteration
+        total (int): (Required) total iterations
+        prefix (str): (Optional) prefix string
+        suffix (str): (Optional) suffix string
+        decimals (int): (Optional) positive number of decimals in percent complete
+        bar_length (int): (Optional) character length of bar
     """
     iteration = min(iteration, total)
 
@@ -84,7 +84,7 @@ def print_progress(iteration, total, prefix="", suffix="", decimals=1, bar_lengt
         elapsed = time.time() - time_start
         fps = iteration / elapsed
         eta = (total - iteration) / fps
-        t = "[Elapsed: %s, ETA: %s, FPS: %.2f]" % (format_time(elapsed), format_time(eta), fps)
+        t = "[Elapsed: %s, ETA: %s, FPS: %.2f]" % (format_duration(elapsed), format_duration(eta), fps)
 
     sys.stdout.write("\r%-25s |%s| %5s%s %-40s%-30s" % (prefix, bar, percents, "%", suffix, t)),
 
@@ -92,7 +92,14 @@ def print_progress(iteration, total, prefix="", suffix="", decimals=1, bar_lengt
         sys.stdout.write("\n")
     sys.stdout.flush()
 
-def format_time(t):
+def format_duration(t):
+    """Format duration in seconds to a nice string (e.g. "1h 5m 20s")
+    Args:
+        t (int / float): Duration in seconds
+
+    Returns:
+        str
+    """
     hours, remainder = divmod(t, 3600)
     minutes, seconds = divmod(remainder, 60)
     
@@ -107,7 +114,11 @@ def format_time(t):
     return output
 
 def image_write_label(image, label):
-    # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+    """Write the specified label (0: Unknown, 1: No anomaly, 2: Contains an anomaly) on an image for debug purposes
+    
+    Args:
+        image (Image)
+    """
     
     text = {
         0: "Unknown",

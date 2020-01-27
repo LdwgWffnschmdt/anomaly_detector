@@ -6,8 +6,7 @@ from featureExtractorBase import FeatureExtractorBase
 import feature_extractor.utils as utils
 
 class FeatureExtractorMobileNetV2(FeatureExtractorBase):
-    """
-    Feature extractor based on MobileNetV2 (trained on ImageNet).
+    """Feature extractor based on MobileNetV2 (trained on ImageNet).
     Generates 5x5x1280 feature vectors per image
     """
 

@@ -10,8 +10,7 @@ from anomalyModelBase import AnomalyModelBase
 import feature_extractor.utils as utils
 
 class AnomalyModelBalancedDistribution(AnomalyModelBase):
-    """
-    Anomaly model formed by a Balanced Distribution of feature vectors
+    """Anomaly model formed by a Balanced Distribution of feature vectors
     Reference: https://www.mdpi.com/2076-3417/9/4/757
     """
     def __init__(self, initial_normal_features=1000, threshold_learning=1000, threshold_classification=5, pruning_parameter=0.5):
@@ -32,8 +31,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
     
     def classify(self, feature_vector, threshold_classification=None):
-        """
-        The anomaly measure is defined as the Mahalanobis distance between a feature sample
+        """The anomaly measure is defined as the Mahalanobis distance between a feature sample
         and the Balanced Distribution.
         """
         if threshold_classification is None:
@@ -45,7 +43,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         return dist > threshold_classification
     
     def _calculate_mean_and_covariance(self):
-        """ Calculate mean and inverse of covariance of the "normal" distribution """
+        """Calculate mean and inverse of covariance of the "normal" distribution"""
         assert not self.normal_distribution is None and len(self.normal_distribution) > 0, \
             "Can't calculate mean or covariance of nothing!"
         
@@ -54,9 +52,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         self._covI = np.linalg.pinv(cov)                                            # Inverse of covariance matrix
     
     def _mahalanobis_distance(self, feature_vector):
-        """
-        Calculate the Mahalanobis distance between the input and the model
-        """
+        """Calculate the Mahalanobis distance between the input and the model"""
         assert not self._covI is None and not self._mean is None, \
             "You need to load a model before computing a Mahalanobis distance"
 
@@ -148,7 +144,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
         
     def load_model_from_file(self, model_file):
-        """ Load a Balanced Distribution from file """
+        """Load a Balanced Distribution from file"""
         print("Reading model parameters from: %s" % model_file)
         with h5py.File(model_file, "r") as hf:
             self.normal_distribution        = np.array(hf["normal_distribution"])
@@ -160,7 +156,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         print("Successfully loaded Balanced Distribution with %i entries" % len(self.normal_distribution))
     
     def save_model_to_file(self, output_file = ""):
-        """ Save the model to disk """
+        """Save the model to disk"""
         print("Writing model parameters to: %s" % output_file)
         with h5py.File(output_file, "w") as hf:
             hf.create_dataset("normal_distribution",        data=self.normal_distribution, dtype=np.float64)
