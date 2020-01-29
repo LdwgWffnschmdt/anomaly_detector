@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import logging
 import h5py
 import numpy as np
 import tensorflow_probability as tfp
@@ -47,21 +48,21 @@ class AnomalyModelSVG(AnomalyModelBase):
         # Reduce features to simple list
         features_flat = self.reduce_feature_array(features)
 
-        print("Generating a Single Variate Gaussian (SVG) from %i feature vectors of length %i" % (features_flat.shape[0], features_flat.shape[1]))
+        logging.info("Generating a Single Variate Gaussian (SVG) from %i feature vectors of length %i" % (features_flat.shape[0], features_flat.shape[1]))
 
         # Get the variance
-        print("Calculating the variance")
+        logging.info("Calculating the variance")
         # self._var = tfp.stats.variance(features_flat)
         self._var = np.var(features_flat, axis=0, dtype=np.float64)
         # --> one variance per feature vector entry
 
         # Get the mean
-        print("Calculating the mean")
+        logging.info("Calculating the mean")
         self._mean = np.mean(features_flat, axis=0, dtype=np.float64)
         # --> one mean per feature vector entry
 
         # Get maximum mahalanobis distance as threshold
-        print("Calculating the threshold")
+        logging.info("Calculating the threshold")
         dists = np.array(list(map(self._mahalanobis_distance, features_flat)))
         self.threshold = np.amax(dists)
 
@@ -75,22 +76,22 @@ class AnomalyModelSVG(AnomalyModelBase):
 
     def load_model_from_file(self, model_file):
         """Load a SVG model from file"""
-        print("Reading model parameters from: %s" % model_file)
+        logging.info("Reading model parameters from: %s" % model_file)
         with h5py.File(model_file, "r") as hf:
             self._var       = np.array(hf["var"])
             self._mean      = np.array(hf["mean"])
             self.threshold  = np.array(hf["threshold"])
         assert len(self._var) == len(self._mean), "Dimensions of variance and mean do not match!"
-        print("Successfully loaded model parameters of dimension %i" % len(self._var))
+        logging.info("Successfully loaded model parameters of dimension %i" % len(self._var))
     
     def save_model_to_file(self, output_file = ""):
         """Save the model to disk"""
-        print("Writing model parameters to: %s" % output_file)
+        logging.info("Writing model parameters to: %s" % output_file)
         with h5py.File(output_file, "w") as hf:
             hf.create_dataset("var",        data=self._var, dtype=np.float64)
             hf.create_dataset("mean",       data=self._mean, dtype=np.float64)
             hf.create_dataset("threshold",  data=self.threshold, dtype=np.float64)
-        print("Successfully written model parameters to: %s" % output_file)
+        logging.info("Successfully written model parameters to: %s" % output_file)
 
 # Only for tests
 if __name__ == "__main__":
@@ -106,4 +107,4 @@ if __name__ == "__main__":
 
     # dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
 
-    # print np.amax(dists)
+    # logging.info(np.amax(dists))

@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import datetime
 import inspect
 import timeit
@@ -91,7 +92,7 @@ if __name__ == "__main__":
 
             def log(s, t):
                 """Log duration t with info string s"""
-                print "%-40s (%s): %s" % (extractor_name[0], s, str(t))
+                logging.info("%-40s (%s): %s" % (extractor_name[0], s, str(t)))
                 add_to_excel(s, t)
 
             _class = getattr(module, extractor_name[0])

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import logging
 import sys
 import time
 import signal
@@ -11,31 +12,37 @@ import h5py
 
 import cv2
 
+# Configure logging
+logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
+
 ##############
 # Feature IO #
 ##############
 
 def write_hdf5(filename, metadata_dataset, feature_dataset):
+    """Writes metadata and features to HDF5 file.
+
+    Args:
+        filename (str): filename to output
+        metadata_dataset (list): of dict metadata
+        feature_dataset (list): of feature vectors
     """
-    Writes metadata and features to HDF5 file.
-    :param filename: str, filename to output
-    :param metadata_dataset: list of dict metadata
-    :param feature_dataset: list of feature vectors
-    :return:
-    """
-    print("Writing metadata and features to: %s" % filename)
+    logging.info("Writing metadata and features to: %s" % filename)
     with h5py.File(filename, "w") as hf:
         hf.create_dataset("metadata", data=metadata_dataset)
         hf.create_dataset("features", data=feature_dataset, dtype=np.float32)
-    print("Successfully written metadata and features to: %s" % filename)
+    logging.info("Successfully written metadata and features to: %s" % filename)
 
 def read_hdf5(filename):
+    """Reads metadata and features from a HDF5 file.
+    
+    Args:
+        filename (str): filename to read
+        
+    Returns:
+        Tuple with metadata and features
     """
-    Reads metadata and features from a HDF5 file.
-    :param filename: str, filename to read
-    :return:
-    """
-    print("Reading metadata and features from: %s" % filename)
+    logging.info("Reading metadata and features from: %s" % filename)
     with h5py.File(filename, "r") as hf:
         # Parse metadata object
         metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])

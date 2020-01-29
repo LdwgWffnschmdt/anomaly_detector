@@ -1,4 +1,5 @@
 import os
+import logging
 import time
 
 import tensorflow as tf
@@ -101,9 +102,9 @@ class FeatureExtractorBase(object):
             
         if output_file == "":
             output_file = os.path.join(os.path.abspath(os.path.dirname(filenames[0])), os.path.basename(filenames[0]).split(".")[0] + "." + self.NAME + "." + output_format)
-            print("Output file set to %s" % output_file)
+            logging.info("Output file set to %s" % output_file)
             
-        print ("Loading dataset")
+        logging.info("Loading dataset")
         parsed_dataset = self.load_dataset(filenames)
         
         # Get number of examples in dataset
@@ -135,7 +136,7 @@ class FeatureExtractorBase(object):
 
             for batch in batches:
                 if h.interrupted:
-                    print "\nInterrupted!"
+                    logging.warning("Interrupted!")
                     return False
                 
                 # Extract features

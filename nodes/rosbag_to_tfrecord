@@ -4,6 +4,7 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+import logging
 import os
 import time
 import rospy
@@ -108,7 +109,7 @@ def rosbag_to_tfrecord():
             tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(bag.get_end_time() - bag.get_start_time()))
             for topic, msg, t in bag.read_messages(topics=["/tf", "/tf_static"]):
                 if h.interrupted:
-                    print "\nInterrupted!"
+                    logging.warning("Interrupted!")
                     return
                 
                 for msg_tf in msg.transforms:
@@ -146,7 +147,7 @@ def rosbag_to_tfrecord():
 
             for topic, msg, t in bag.read_messages(topics=image_topic):
                 if h.interrupted:
-                    print "\nInterrupted!"
+                    logging.warning("Interrupted!")
                     return
                 
                 total_count += 1
@@ -164,7 +165,7 @@ def rosbag_to_tfrecord():
                     # Get the label     0: Unknown, 1: No anomaly, 2: Contains an anomaly
                     image_label = get_label(cv_image, image_label)
                     if image_label == None: # [esc]
-                        print "\nInterrupted!"
+                        logging.warning("Interrupted!")
                         return
 
                     # Create a new writer if we need one

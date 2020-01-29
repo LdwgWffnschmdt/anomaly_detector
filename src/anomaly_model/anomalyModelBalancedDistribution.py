@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import logging
 import time
 import h5py
 import numpy as np
@@ -66,7 +67,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         # Reduce features to simple list
         features_flat = self.reduce_feature_array(features)[:5000]
 
-        print("Generating a Balanced Distribution from %i feature vectors of length %i" % (features_flat.shape[0], features_flat.shape[1]))
+        logging.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (features_flat.shape[0], features_flat.shape[1]))
 
         assert features_flat.shape[0] > self.initial_normal_features, \
             "Not enough initial features provided. Please decrease initial_normal_features (%i)" % self.initial_normal_features
@@ -79,14 +80,14 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
             self._calculate_mean_and_covariance()
             
-            # print(np.mean(np.array([self._mahalanobis_distance(f) for f in features_flat])))
+            # loggin.info(np.mean(np.array([self._mahalanobis_distance(f) for f in features_flat])))
 
             utils.print_progress(0, 1, prefix = "%i / %i" % (self.initial_normal_features, features_flat.shape[0]))
             
             # Loop over the remaining feature vectors
             for index, feature_vector in enumerate(features_flat[self.initial_normal_features:]):
                 if h.interrupted:
-                    print "\nInterrupted!"
+                    logging.warning("Interrupted!")
                     self.normal_distribution = None
                     return False
 
@@ -108,17 +109,17 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
             # Prune the distribution
             
-            print(np.mean(np.array([self._mahalanobis_distance(f) for f in self.normal_distribution])))
+            logging.info(np.mean(np.array([self._mahalanobis_distance(f) for f in self.normal_distribution])))
 
             prune_filter = []
             pruned = 0
-            print("Pruning Balanced Distribution")
+            logging.info("Pruning Balanced Distribution")
             utils.print_progress(0, 1, prefix = "%i / %i" % (self.initial_normal_features, features_flat.shape[0]))
             start = time.time()
 
             for index, feature_vector in enumerate(self.normal_distribution):
                 if h.interrupted:
-                    print "\nInterrupted!"
+                    logging.warning("Interrupted!")
                     self.normal_distribution = None
                     return False
 
@@ -137,7 +138,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
             self.normal_distribution = self.normal_distribution[prune]
 
-            print("Generated Balanced Distribution with %i entries" % len(self.normal_distribution))
+            logging.info("Generated Balanced Distribution with %i entries" % len(self.normal_distribution))
         
             self._calculate_mean_and_covariance()
             return True
@@ -145,7 +146,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         
     def load_model_from_file(self, model_file):
         """Load a Balanced Distribution from file"""
-        print("Reading model parameters from: %s" % model_file)
+        logging.info("Reading model parameters from: %s" % model_file)
         with h5py.File(model_file, "r") as hf:
             self.normal_distribution        = np.array(hf["normal_distribution"])
             self.initial_normal_features    = np.array(hf["initial_normal_features"])
@@ -153,18 +154,18 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
             self.threshold_classification   = np.array(hf["threshold_classification"])
             self.pruning_parameter          = np.array(hf["pruning_parameter"])
         assert 0 < self.pruning_parameter < 1, "Pruning parameter out of range (0 < η < 1)"
-        print("Successfully loaded Balanced Distribution with %i entries" % len(self.normal_distribution))
+        logging.info("Successfully loaded Balanced Distribution with %i entries" % len(self.normal_distribution))
     
     def save_model_to_file(self, output_file = ""):
         """Save the model to disk"""
-        print("Writing model parameters to: %s" % output_file)
+        logging.info("Writing model parameters to: %s" % output_file)
         with h5py.File(output_file, "w") as hf:
             hf.create_dataset("normal_distribution",        data=self.normal_distribution, dtype=np.float64)
             hf.create_dataset("initial_normal_features",    data=self.initial_normal_features, dtype=np.float64)
             hf.create_dataset("threshold_learning",         data=self.threshold_learning, dtype=np.float64)
             hf.create_dataset("threshold_classification",   data=self.threshold_classification, dtype=np.float64)
             hf.create_dataset("pruning_parameter",          data=self.pruning_parameter, dtype=np.float64)
-        print("Successfully written model parameters to: %s" % output_file)
+        logging.info("Successfully written model parameters to: %s" % output_file)
 
 # Only for tests
 if __name__ == "__main__":
@@ -181,4 +182,4 @@ if __name__ == "__main__":
 
     # dists = np.array(list(map(model.mahalanobis_distance, features_flat)))
 
-    # print np.amax(dists)
+    # logging.info(np.amax(dists))

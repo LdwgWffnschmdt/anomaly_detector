@@ -1,4 +1,5 @@
 import os
+import logging
 import h5py
 
 import feature_extractor.utils as utils
@@ -51,7 +52,7 @@ class AnomalyModelBase(object):
         
         if output_file == "":
             output_file = os.path.abspath(features_file.replace(".h5", "")) + "." + self.NAME + ".h5"
-            print("Output file set to %s" % output_file)
+            logging.info("Output file set to %s" % output_file)
         
         # Read file
         metadata, features = utils.read_hdf5(features_file)
@@ -61,7 +62,7 @@ class AnomalyModelBase(object):
         
         # Generate model
         if self.generate_model(metadata, features) == False:
-            print("Could not generate model.")
+            logging.info("Could not generate model.")
             return False
 
         # Save model
