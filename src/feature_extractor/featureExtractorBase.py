@@ -90,6 +90,21 @@ class FeatureExtractorBase(object):
         Returns:
             success (bool)
         """
+        
+        # Get all tfrecords in a folder if the file ends with *.tfrecord
+        if isinstance(filenames, basestring) and filenames.endswith("*.tfrecord"):
+            path = filenames.replace("*.tfrecord", "")
+            filenames = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(".tfrecord")]
+            if len(filenames) < 1:
+                raise ValueError("There is no *.tfrecord file in %s." % path)
+
+            if output_file == "":
+                output_dir = os.path.join(os.path.abspath(os.path.dirname(filenames[0])), "Features")
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+                output_file = os.path.join(output_dir, self.NAME + "." + output_format)
+
+
         if not isinstance(filenames, list):
             filenames = [filenames]
 
