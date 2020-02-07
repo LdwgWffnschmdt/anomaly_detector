@@ -42,20 +42,19 @@ class AnomalyModelBase(object):
         """Generate a model based on the features in features_file and save it to output_file
         
         Args:
-            features_file (str) : HDF5 file containing metadata and features (see feature_extractor for details)
+            features_file (str) : HDF5 or TFRecord file containing metadata and features (see feature_extractor for details)
             output_file (str): Output path for the model file (same path as features_file if not specified)
         """
         # Check parameters
         if features_file == "" or not os.path.exists(features_file) or not os.path.isfile(features_file):
-            rospy.logerr("Specified model file does not exist (%s)" % features_file)
-            return
+            raise ValueError("Specified model file does not exist (%s)" % features_file)
         
         if output_file == "":
             output_file = os.path.abspath(features_file.replace(".h5", "")) + "." + self.NAME + ".h5"
             logging.info("Output file set to %s" % output_file)
         
         # Read file
-        metadata, features = utils.read_hdf5(features_file)
+        metadata, features = utils.read_features_file(features_file)
 
         # Only take feature vectors of images labeled as anomaly free (label == 1)
         features = features[[m["label"] == 1 for m in metadata]]

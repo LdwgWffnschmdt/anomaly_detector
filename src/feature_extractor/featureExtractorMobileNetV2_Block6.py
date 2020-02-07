@@ -41,14 +41,14 @@ class FeatureExtractorMobileNetV2_Block6(FeatureExtractorBase):
 if __name__ == "__main__":
     extractor = FeatureExtractorMobileNetV2_Block6()
     
-    tf.keras.utils.plot_model(
-        extractor.model,
-        to_file=os.path.join(os.path.dirname(os.path.realpath(__file__)), "%s.png" % extractor.NAME),
-        show_shapes=True,
-        show_layer_names=True,
-        rankdir="TB",   # "TB" creates a vertical plot; "LR" creates a horizontal plot
-        expand_nested=True,
-        dpi=96
-    )
+    # tf.keras.utils.plot_model(
+    #     extractor.model,
+    #     to_file=os.path.join(os.path.dirname(os.path.realpath(__file__)), "%s.png" % extractor.NAME),
+    #     show_shapes=True,
+    #     show_layer_names=True,
+    #     rankdir="TB",   # "TB" creates a vertical plot; "LR" creates a horizontal plot
+    #     expand_nested=True,
+    #     dpi=96
+    # )
 
-    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.tfrecord")
+    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")

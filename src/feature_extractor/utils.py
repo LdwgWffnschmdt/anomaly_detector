@@ -19,34 +19,51 @@ logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=log
 # Feature IO #
 ##############
 
-def write_hdf5(filename, metadata_dataset, feature_dataset):
-    """Writes metadata and features to HDF5 file.
-
-    Args:
-        filename (str): filename to output
-        metadata_dataset (list): of dict metadata
-        feature_dataset (list): of feature vectors
-    """
-    logging.info("Writing metadata and features to: %s" % filename)
-    with h5py.File(filename, "w") as hf:
-        hf.create_dataset("metadata", data=metadata_dataset)
-        hf.create_dataset("features", data=feature_dataset, dtype=np.float32)
-    logging.info("Successfully written metadata and features to: %s" % filename)
-
-def read_hdf5(filename):
-    """Reads metadata and features from a HDF5 file.
+def read_features_file(filename):
+    """Reads metadata and features from a HDF5 or TFRecords file.
     
     Args:
         filename (str): filename to read
-        
+
     Returns:
         Tuple with metadata and features
     """
     logging.info("Reading metadata and features from: %s" % filename)
-    with h5py.File(filename, "r") as hf:
-        # Parse metadata object
-        metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
-        return metadata, np.array(hf["features"])
+    fn, file_extension = os.path.splitext(filename)
+    if file_extension == ".h5":
+        with h5py.File(filename, "r") as hf:
+            # Parse metadata object
+            metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
+            return metadata, np.array(hf["features"])
+    elif file_extension == ".tfrecord":
+        raw_dataset = tf.data.TFRecordDataset(filename)
+
+        # Create a dictionary describing the features.
+        feature_description = {
+            'metadata/location/translation/x'   : tf.io.FixedLenFeature([], tf.float32),
+            'metadata/location/translation/y'   : tf.io.FixedLenFeature([], tf.float32),
+            'metadata/location/translation/z'   : tf.io.FixedLenFeature([], tf.float32),
+            'metadata/location/rotation/x'      : tf.io.FixedLenFeature([], tf.float32),
+            'metadata/location/rotation/y'      : tf.io.FixedLenFeature([], tf.float32),
+            'metadata/location/rotation/z'      : tf.io.FixedLenFeature([], tf.float32),
+            'metadata/time'                     : tf.io.FixedLenFeature([], tf.float32),
+            'metadata/label'                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+            'metadata/rosbag'                   : tf.io.FixedLenFeature([], tf.string),
+            'metadata/tfrecord'                 : tf.io.FixedLenFeature([], tf.string),
+            'metadata/feature_extractor'        : tf.io.FixedLenFeature([], tf.string),
+            'feature/flat'                      : tf.io.FixedLenFeature([], tf.float32),
+            'feature/shape'                     : tf.io.FixedLenFeature([], tf.int64)
+        }
+        
+        def _parse_function(example_proto):
+            # Parse the input tf.Example proto using the dictionary above.
+            example = tf.io.parse_single_example(example_proto, feature_description)
+            image = tf.image.decode_jpeg(example["image/encoded"])
+            return self.format_image(image), example
+
+        return raw_dataset.map(_parse_function)
+    else:
+        raise ValueError("Filename has to be *.h5 or *.tfrecord")
 
 def _int64_feature(value):
     """Wrapper for inserting int64 features into Example proto."""
