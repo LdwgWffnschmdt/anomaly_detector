@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import os
 import logging
 import sys
 import time
@@ -36,7 +37,12 @@ def read_features_file(filename):
             metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
             return metadata, np.array(hf["features"])
     elif file_extension == ".tfrecord":
-        raw_dataset = tf.data.TFRecordDataset(filename)
+        raw_dataset = tf.data.TFRecordDataset(filename, compression_type="GZIP")
+        
+        # for raw_record in raw_dataset.take(1):
+        #     example = tf.train.Example()
+        #     example.ParseFromString(raw_record.numpy())
+        #     print(example)
 
         # Create a dictionary describing the features.
         feature_description = {
@@ -51,15 +57,29 @@ def read_features_file(filename):
             'metadata/rosbag'                   : tf.io.FixedLenFeature([], tf.string),
             'metadata/tfrecord'                 : tf.io.FixedLenFeature([], tf.string),
             'metadata/feature_extractor'        : tf.io.FixedLenFeature([], tf.string),
-            'feature/flat'                      : tf.io.FixedLenFeature([], tf.float32),
-            'feature/shape'                     : tf.io.FixedLenFeature([], tf.int64)
+            'feature/flat'                      : tf.io.VarLenFeature(tf.float32),  # I have no idea why VarLenFeature is necessary, but it works this way
+            'feature/shape'                     : tf.io.VarLenFeature(tf.int64)     # -- '' --
         }
-        
+    
         def _parse_function(example_proto):
             # Parse the input tf.Example proto using the dictionary above.
             example = tf.io.parse_single_example(example_proto, feature_description)
-            image = tf.image.decode_jpeg(example["image/encoded"])
-            return self.format_image(image), example
+            metadata = {
+                'location/translation/x'   : example['metadata/location/translation/x'],
+                'location/translation/y'   : example['metadata/location/translation/y'],
+                'location/translation/z'   : example['metadata/location/translation/z'],
+                'location/rotation/x'      : example['metadata/location/rotation/x'   ],
+                'location/rotation/y'      : example['metadata/location/rotation/y'   ],
+                'location/rotation/z'      : example['metadata/location/rotation/z'   ],
+                'time'                     : example['metadata/time'                  ],
+                'label'                    : example['metadata/label'                 ],
+                'rosbag'                   : example['metadata/rosbag'                ],
+                'tfrecord'                 : example['metadata/tfrecord'              ],
+                'feature_extractor'        : example['metadata/feature_extractor'     ]
+            }
+
+            feature = tf.reshape(example['feature/flat'].values, example['feature/shape'].values) # .values is necessary because of the VarLenFeature
+            return metadata, feature
 
         return raw_dataset.map(_parse_function)
     else:

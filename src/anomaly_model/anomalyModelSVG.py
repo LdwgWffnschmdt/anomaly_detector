@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import os
+
 import logging
 import h5py
 import numpy as np
@@ -66,12 +68,6 @@ class AnomalyModelSVG(AnomalyModelBase):
         dists = np.array(list(map(self._mahalanobis_distance, features_flat)))
         self.threshold = np.amax(dists)
 
-        data = features_flat[:,0]
-        fig1, ax1 = plt.subplots()
-        ax1.set_title(self._mean[0])
-        ax1.hist(data, bins=50)
-        plt.show()
-
         return True
 
     def load_model_from_file(self, model_file):
@@ -96,16 +92,35 @@ class AnomalyModelSVG(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelSVG()
-    model.generate_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.MobileNetV2_Block6.h5")
 
-    # metadata, features = utils.read_features_file("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.MobileNetV2.h5")
+    features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.tfrecord"
 
-    # model.generate_model(metadata, features)
-    # model.load_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2AnomalyModelSVG.h5")
+    # Read file
+    features = utils.read_features_file(features_file)
+    print "Loaded"
+    print sum(1 for record in features)
+    
+    # Only take feature vectors of images labeled as anomaly free (label == 1)
+    features = features.filter(lambda m,f: m["label"] == 1)
+    print sum(1 for record in features)
+
+    # Generate model
+    if model.generate_model(metadata, features) == False:
+        logging.info("Could not generate model.")
+
+    # Save model
+    model.save_model_to_file(os.path.abspath(features_file.replace(".h5", "")) + "." + model.NAME + ".h5")
+    
     
     features_flat = model.reduce_feature_array(features)
 
-    print features_flat
+    data = features_flat[:,0]
+    fig1, ax1 = plt.subplots()
+    ax1.set_title(model._mean[0])
+    ax1.hist(data, bins=50)
+    plt.show()
+
+    # print features_flat
 
     dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
 
