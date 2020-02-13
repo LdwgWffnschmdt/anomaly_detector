@@ -1,6 +1,7 @@
 import os
 import logging
 import h5py
+import cv2
 
 import feature_extractor.utils as utils
 
@@ -58,6 +59,7 @@ class AnomalyModelBase(object):
 
         # Only take feature vectors of images labeled as anomaly free (label == 1)
         features = features[[m["label"] == 1 for m in metadata]]
+        metadata = metadata[[m["label"] == 1 for m in metadata]]
         
         # Generate model
         if self.generate_model(metadata, features) == False:
@@ -77,3 +79,68 @@ class AnomalyModelBase(object):
         """
         # Create an array of only the feature vectors, eg. (25000, 1280)
         return features_vector_array.reshape(-1, features_vector_array.shape[-1])
+
+    def visualize(self, metadata, features, feature_to_color_func, feature_to_text_func=None, pause_func=None):
+        total, width, height, depth = features.shape
+
+        font                   = cv2.FONT_HERSHEY_SIMPLEX
+        fontScale              = 0.3
+        thickness              = 1
+
+        tfrecord = None
+        tfrecordCounter = 0
+
+        pause = False
+
+        for i, feature_3d in enumerate(features):
+            meta = metadata[i]
+            
+            if tfrecord != meta["tfrecord"]:
+                tfrecord = meta["tfrecord"]
+                tfrecordCounter = 0
+                image_dataset = utils.load_dataset(meta["tfrecord"]).as_numpy_iterator()
+            else:
+                tfrecordCounter += 1
+
+            image, example = next(image_dataset)
+            # if meta["label"] == 1:
+            #     continue
+
+            overlay = image.copy()
+
+            # if example["metadata/time"] != meta["time"]:
+            #     logging.error("Times somehow don't match (%f)" % (example["metadata/time"]- meta["time"]))
+
+            patch_size = (image.shape[1] / width, image.shape[0] / height)
+
+            for x in range(width):
+                for y in range(height):
+                    feature = feature_3d[y,x,:]
+                    p1 = (x * patch_size[0], y * patch_size[1])
+                    p2 = (p1[0] + patch_size[0], p1[1] + patch_size[1])
+                    cv2.rectangle(overlay, p1, p2, feature_to_color_func(feature), -1)
+
+                    if feature_to_text_func is not None:
+                        cv2.putText(overlay, str(feature_to_text_func(feature)),
+                            (p1[0] + 2, p1[1] + patch_size[1] - 2),
+                            font,
+                            fontScale,
+                            (0, 0, 255),
+                            thickness)
+                    
+                    if pause_func is not None and pause_func(feature):
+                        pause = True
+
+            alpha = 0.4  # Transparency factor.
+
+            # Following line overlays transparent overlay over the image
+            image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
+            
+            utils.image_write_label(image_new, meta["label"])
+
+            cv2.imshow("", image_new)
+            key = cv2.waitKey(0 if pause else 1)
+            if key == 27:   # [esc] => Quit
+                return None
+            elif key != -1:
+                pause = not pause
