@@ -36,56 +36,15 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def load_dataset(self, filenames):
-        """Loads a set of TFRecord files
-        Args:
-            filenames (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
-
-        Returns:
-            tf.data.MapDataset
-        """
-        if not filenames or len(filenames) < 1 or filenames[0] == "":
-            raise ValueError("Please specify at least one filename (%s)" % filenames)
-        
-        raw_dataset = tf.data.TFRecordDataset(filenames)
-
-        # Create a dictionary describing the features.
-        feature_description = {
-            "metadata/location/translation/x"   : tf.io.FixedLenFeature([], tf.float32),
-            "metadata/location/translation/y"   : tf.io.FixedLenFeature([], tf.float32),
-            "metadata/location/translation/z"   : tf.io.FixedLenFeature([], tf.float32),
-            "metadata/location/rotation/x"      : tf.io.FixedLenFeature([], tf.float32),
-            "metadata/location/rotation/y"      : tf.io.FixedLenFeature([], tf.float32),
-            "metadata/location/rotation/z"      : tf.io.FixedLenFeature([], tf.float32),
-            "metadata/time"                     : tf.io.FixedLenFeature([], tf.float32),
-            "metadata/label"                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-            "metadata/rosbag"                   : tf.io.FixedLenFeature([], tf.string),
-            "metadata/tfrecord"                 : tf.io.FixedLenFeature([], tf.string),
-            "image/height"      : tf.io.FixedLenFeature([], tf.int64),
-            "image/width"       : tf.io.FixedLenFeature([], tf.int64),
-            "image/channels"    : tf.io.FixedLenFeature([], tf.int64),
-            "image/colorspace"  : tf.io.FixedLenFeature([], tf.string),
-            "image/format"      : tf.io.FixedLenFeature([], tf.string),
-            "image/encoded"     : tf.io.FixedLenFeature([], tf.string),
-        }
-        
-        def _parse_function(example_proto):
-            # Parse the input tf.Example proto using the dictionary above.
-            example = tf.io.parse_single_example(example_proto, feature_description)
-            image = tf.image.decode_jpeg(example["image/encoded"])
-            return self.format_image(image), example
-
-        return raw_dataset.map(_parse_function)
-
-    def extract_files(self, filenames, output_format="tfrecord", output_file="", batch_size=32, compression="gzip", compression_opts=4):
+    def extract_files(self, filenames, output_format="h5", output_file="", batch_size=32, compression="lzf", compression_opts=None):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             filenames (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
-            output_format (str): Either "tfrecord" or "h5" (Default: "tfrecord")
+            output_format (str): Either "tfrecord" or "h5" (Default: "h5")
             output_file (str): Filename and path of the output file
             batch_size (str): Size of image batches fed to the extractor (Defaults: 32)
-            compression (str): Output file compression, set to None for no compression (Default: "gzip"), can be extremely slow combined with HDF5
-            compression_opts (str): Compression level, set to None for no compression (Default: 4)
+            compression (str): Output file compression, set to None for no compression (Default: "lzf"), gzip can be extremely slow combined with HDF5
+            compression_opts (str): Compression level, set to None for no compression (Default: None)
 
         Returns:
             success (bool)
@@ -120,7 +79,12 @@ class FeatureExtractorBase(object):
             logging.info("Output file set to %s" % output_file)
             
         logging.info("Loading dataset")
-        parsed_dataset = self.load_dataset(filenames)
+        parsed_dataset = utils.load_dataset(filenames)
+
+        # Format images to match network input
+        def _format_image(image, example):
+            return self.format_image(image), example
+        parsed_dataset = parsed_dataset.map(_format_image)
         
         # Get number of examples in dataset
         total = sum(1 for record in parsed_dataset)
@@ -161,24 +125,28 @@ class FeatureExtractorBase(object):
                 for index, feature_vector in enumerate(feature_batch):
                     counter += 1
                     if output_format == "tfrecord":
-                        # Add image and position to TFRecord
-                        feature_dict = {
-                            'metadata/location/translation/x'   : utils._float_feature(batch[1]["metadata/location/translation/x"][index].numpy()),
-                            'metadata/location/translation/y'   : utils._float_feature(batch[1]["metadata/location/translation/y"][index].numpy()),
-                            'metadata/location/translation/z'   : utils._float_feature(batch[1]["metadata/location/translation/z"][index].numpy()),
-                            'metadata/location/rotation/x'      : utils._float_feature(batch[1]["metadata/location/rotation/x"][index].numpy()),
-                            'metadata/location/rotation/y'      : utils._float_feature(batch[1]["metadata/location/rotation/y"][index].numpy()),
-                            'metadata/location/rotation/z'      : utils._float_feature(batch[1]["metadata/location/rotation/z"][index].numpy()),
-                            'metadata/time'                     : utils._float_feature(batch[1]["metadata/time"][index].numpy()),
-                            'metadata/label'                    : utils._int64_feature(batch[1]["metadata/label"][index].numpy()),
-                            'metadata/rosbag'                   : utils._bytes_feature(batch[1]["metadata/rosbag"][index].numpy()),
-                            'metadata/tfrecord'                 : utils._bytes_feature(batch[1]["metadata/tfrecord"][index].numpy()),
-                            'metadata/feature_extractor'        : utils._bytes_feature(self.NAME),
-                            'feature/flat'                      : utils._float_feature(list(feature_vector.numpy().reshape(-1))),
-                            'feature/shape'                     : utils._int64_feature(list(feature_vector.shape))
-                        }
-                        example = tf.train.Example(features=tf.train.Features(feature=feature_dict))
-                        tfWriter.write(example.SerializeToString())
+                        # Loop through the patches
+                        for x, fv1 in enumerate(tf.unstack(feature_vector, axis=0)):
+                            for y, fv in enumerate(tf.unstack(fv1, axis=0)):
+                                # Add metadata and feature to TFRecord
+                                feature_dict = {
+                                    'metadata/location/translation/x'   : utils._float_feature(batch[1]["metadata/location/translation/x"][index].numpy()),
+                                    'metadata/location/translation/y'   : utils._float_feature(batch[1]["metadata/location/translation/y"][index].numpy()),
+                                    'metadata/location/translation/z'   : utils._float_feature(batch[1]["metadata/location/translation/z"][index].numpy()),
+                                    'metadata/location/rotation/x'      : utils._float_feature(batch[1]["metadata/location/rotation/x"][index].numpy()),
+                                    'metadata/location/rotation/y'      : utils._float_feature(batch[1]["metadata/location/rotation/y"][index].numpy()),
+                                    'metadata/location/rotation/z'      : utils._float_feature(batch[1]["metadata/location/rotation/z"][index].numpy()),
+                                    'metadata/time'                     : utils._int64_feature(batch[1]["metadata/time"][index].numpy()),
+                                    'metadata/label'                    : utils._int64_feature(batch[1]["metadata/label"][index].numpy()),
+                                    'metadata/rosbag'                   : utils._bytes_feature(batch[1]["metadata/rosbag"][index].numpy()),
+                                    'metadata/tfrecord'                 : utils._bytes_feature(batch[1]["metadata/tfrecord"][index].numpy()),
+                                    'metadata/feature_extractor'        : utils._bytes_feature(self.NAME),
+                                    'metadata/patch/x'                  : utils._int64_feature(x),
+                                    'metadata/patch/y'                  : utils._int64_feature(y),
+                                    'feature'                           : utils._float_feature(list(fv.numpy()))
+                                }
+                                example = tf.train.Example(features=tf.train.Features(feature=feature_dict))
+                                tfWriter.write(example.SerializeToString())
                     elif output_format == "h5":
                         if feature_dataset is None:
                             feature_dataset = h5Writer.create_dataset("features",

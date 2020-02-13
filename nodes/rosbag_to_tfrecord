@@ -76,7 +76,7 @@ def rosbag_to_tfrecord():
                 utils.image_write_label(image_cp, last_label)
 
             cv2.imshow('Label image | [1]: No anomaly, [2]: Contains anomaly, [0]: Unknown', image_cp)
-            key = cv2.waitKey(0 if label == -2 else auto_duration)
+            key = cv2.waitKey(0 if label == -2 or last_label == None else auto_duration)
             
             if key == 27:   # [esc] => Quit
                 return None
@@ -191,7 +191,7 @@ def rosbag_to_tfrecord():
                         'metadata/location/rotation/x'      : utils._float_feature(euler[0]),
                         'metadata/location/rotation/y'      : utils._float_feature(euler[1]),
                         'metadata/location/rotation/z'      : utils._float_feature(euler[2]),
-                        'metadata/time'                     : utils._float_feature(t.to_sec()),
+                        'metadata/time'                     : utils._int64_feature(t.to_nsec()), # There were some serious problems saving to_sec as float...
                         'metadata/label'                    : utils._int64_feature(image_label), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
                         'metadata/rosbag'                   : utils._bytes_feature(bag_file),
                         'metadata/tfrecord'                 : utils._bytes_feature(output_file),

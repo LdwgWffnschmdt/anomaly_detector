@@ -17,6 +17,52 @@ import cv2
 logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
 
 ##############
+# Images IO  #
+##############
+
+def load_dataset(filenames):
+    """Loads a set of TFRecord files
+    Args:
+        filenames (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
+
+    Returns:
+        tf.data.MapDataset
+    """
+    if not filenames or len(filenames) < 1 or filenames[0] == "":
+        raise ValueError("Please specify at least one filename (%s)" % filenames)
+    
+    raw_dataset = tf.data.TFRecordDataset(filenames)
+
+    # Create a dictionary describing the features.
+    feature_description = {
+        "metadata/location/translation/x"   : tf.io.FixedLenFeature([], tf.float32),
+        "metadata/location/translation/y"   : tf.io.FixedLenFeature([], tf.float32),
+        "metadata/location/translation/z"   : tf.io.FixedLenFeature([], tf.float32),
+        "metadata/location/rotation/x"      : tf.io.FixedLenFeature([], tf.float32),
+        "metadata/location/rotation/y"      : tf.io.FixedLenFeature([], tf.float32),
+        "metadata/location/rotation/z"      : tf.io.FixedLenFeature([], tf.float32),
+        "metadata/time"                     : tf.io.FixedLenFeature([], tf.float32), # TODO: Change to int64 for production
+        "metadata/label"                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+        "metadata/rosbag"                   : tf.io.FixedLenFeature([], tf.string),
+        "metadata/tfrecord"                 : tf.io.FixedLenFeature([], tf.string),
+        "image/height"      : tf.io.FixedLenFeature([], tf.int64),
+        "image/width"       : tf.io.FixedLenFeature([], tf.int64),
+        "image/channels"    : tf.io.FixedLenFeature([], tf.int64),
+        "image/colorspace"  : tf.io.FixedLenFeature([], tf.string),
+        "image/format"      : tf.io.FixedLenFeature([], tf.string),
+        "image/encoded"     : tf.io.FixedLenFeature([], tf.string)
+    }
+    
+    def _parse_function(example_proto):
+        # Parse the input tf.Example proto using the dictionary above.
+        example = tf.io.parse_single_example(example_proto, feature_description)
+        image = tf.image.decode_jpeg(example["image/encoded"])
+        return image, example
+
+    return raw_dataset.map(_parse_function)
+
+
+##############
 # Feature IO #
 ##############
 
@@ -39,11 +85,6 @@ def read_features_file(filename):
     elif file_extension == ".tfrecord":
         raw_dataset = tf.data.TFRecordDataset(filename, compression_type="GZIP")
         
-        # for raw_record in raw_dataset.take(1):
-        #     example = tf.train.Example()
-        #     example.ParseFromString(raw_record.numpy())
-        #     print(example)
-
         # Create a dictionary describing the features.
         feature_description = {
             'metadata/location/translation/x'   : tf.io.FixedLenFeature([], tf.float32),
@@ -52,15 +93,16 @@ def read_features_file(filename):
             'metadata/location/rotation/x'      : tf.io.FixedLenFeature([], tf.float32),
             'metadata/location/rotation/y'      : tf.io.FixedLenFeature([], tf.float32),
             'metadata/location/rotation/z'      : tf.io.FixedLenFeature([], tf.float32),
-            'metadata/time'                     : tf.io.FixedLenFeature([], tf.float32),
+            'metadata/time'                     : tf.io.FixedLenFeature([], tf.float32), # TODO: Change to int64 for production
             'metadata/label'                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
             'metadata/rosbag'                   : tf.io.FixedLenFeature([], tf.string),
             'metadata/tfrecord'                 : tf.io.FixedLenFeature([], tf.string),
             'metadata/feature_extractor'        : tf.io.FixedLenFeature([], tf.string),
-            'feature/flat'                      : tf.io.VarLenFeature(tf.float32),  # I have no idea why VarLenFeature is necessary, but it works this way
-            'feature/shape'                     : tf.io.VarLenFeature(tf.int64)     # -- '' --
+            'metadata/patch/x'                  : tf.io.FixedLenFeature([], tf.int64),
+            'metadata/patch/y'                  : tf.io.FixedLenFeature([], tf.int64),
+            'feature'                           : tf.io.FixedLenFeature([], tf.float32)
         }
-    
+
         def _parse_function(example_proto):
             # Parse the input tf.Example proto using the dictionary above.
             example = tf.io.parse_single_example(example_proto, feature_description)
@@ -75,10 +117,12 @@ def read_features_file(filename):
                 'label'                    : example['metadata/label'                 ],
                 'rosbag'                   : example['metadata/rosbag'                ],
                 'tfrecord'                 : example['metadata/tfrecord'              ],
-                'feature_extractor'        : example['metadata/feature_extractor'     ]
+                'feature_extractor'        : example['metadata/feature_extractor'     ],
+                'patch/x'                  : example['metadata/patch/x'               ],
+                'patch/y'                  : example['metadata/patch/y'               ]
             }
 
-            feature = tf.reshape(example['feature/flat'].values, example['feature/shape'].values) # .values is necessary because of the VarLenFeature
+            feature = example['feature']
             return metadata, feature
 
         return raw_dataset.map(_parse_function)
@@ -96,6 +140,15 @@ def _float_feature(value):
     if not isinstance(value, list):
         value = [value]
     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
+# Can be used to store float64 values if necessary (http://jrmeyer.github.io/machinelearning/2019/05/29/tensorflow-dataset-estimator-api.html)
+def _float64_feature(float64_value):
+    float64_bytes = [str(float64_value).encode()]
+    bytes_list = tf.train.BytesList(value=float64_bytes)
+    bytes_list_feature = tf.train.Feature(bytes_list=bytes_list)
+    return bytes_list_feature
+    #    example['float_value'] = tf.strings.to_number(example['float_value'], out_type=tf.float64)
+
 
 def _bytes_feature(value):
     """Wrapper for inserting bytes features into Example proto."""
