@@ -64,9 +64,9 @@ class AnomalyModelSVG(AnomalyModelBase):
         # --> one mean per feature vector entry
 
         # Get maximum mahalanobis distance as threshold
-        logging.info("Calculating the threshold")
-        dists = np.array(list(map(self._mahalanobis_distance, features_flat)))
-        self.threshold = np.amax(dists)
+        # logging.info("Calculating the threshold")
+        # dists = np.array(list(map(self._mahalanobis_distance, features_flat)))
+        # self.threshold = np.amax(dists)
 
         return True
 
@@ -93,35 +93,54 @@ class AnomalyModelSVG(AnomalyModelBase):
 if __name__ == "__main__":
     model = AnomalyModelSVG()
 
-    features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.tfrecord"
+    features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.h5"
+    # features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/hard_2020-02-06-17-20-22.MobileNetV2_Block6.h5"
 
     # Read file
-    features = utils.read_features_file(features_file)
-    print "Loaded"
-    print sum(1 for record in features)
-    
-    # Only take feature vectors of images labeled as anomaly free (label == 1)
-    features = features.filter(lambda m,f: m["label"] == 1)
-    print sum(1 for record in features)
+    metadata, features = utils.read_features_file(features_file)
 
+    metadata_anomaly = metadata[[m["label"] == 2 for m in metadata]]
+    features_anomaly = features[[m["label"] == 2 for m in metadata]]
+
+    # Only take feature vectors of images labeled as anomaly free (label == 1)
+    metadata_no_anomaly = metadata[[m["label"] == 1 for m in metadata]]
+    features_no_anomaly = features[[m["label"] == 1 for m in metadata]]
+    
     # Generate model
-    if model.generate_model(metadata, features) == False:
+    if model.generate_model(metadata_no_anomaly, features_no_anomaly) == False:
         logging.info("Could not generate model.")
 
-    # Save model
-    model.save_model_to_file(os.path.abspath(features_file.replace(".h5", "")) + "." + model.NAME + ".h5")
-    
-    
     features_flat = model.reduce_feature_array(features)
-
-    data = features_flat[:,0]
-    fig1, ax1 = plt.subplots()
-    ax1.set_title(model._mean[0])
-    ax1.hist(data, bins=50)
-    plt.show()
-
-    # print features_flat
-
     dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
+    thresh = np.amax(dists)
+    print thresh
 
-    logging.info(np.amax(dists))
+    def _feature_to_color(feature):
+        b = 0
+        g = 0
+        r = model._mahalanobis_distance(feature) * (255 / thresh)
+        return (b, g, r)
+
+    model.visualize(metadata, features, _feature_to_color)
+
+    # Save model
+    # model.save_model_to_file(os.path.abspath(features_file.replace(".h5", "")) + "." + model.NAME + ".h5")
+    
+    
+    # features_flat = model.reduce_feature_array(features)
+    # features_anomaly_flat = model.reduce_feature_array(features_anomaly)
+
+    # dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
+    # dists_anomaly = np.array(list(map(model._mahalanobis_distance, features_anomaly_flat)))
+
+    # fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+
+    # ax1.set_title("No anomaly (%i)" % len(features_flat))
+    # ax1.hist(dists, bins=50)
+
+    # ax2.set_title("Anomaly (%i)" % len(features_anomaly_flat))
+    # ax2.hist(dists_anomaly, bins=50)
+
+    # fig.suptitle("Mahalanobis distances")
+
+    # plt.show()

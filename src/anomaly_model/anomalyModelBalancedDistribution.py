@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import os
 import logging
 import time
 import h5py
@@ -14,7 +15,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
     """Anomaly model formed by a Balanced Distribution of feature vectors
     Reference: https://www.mdpi.com/2076-3417/9/4/757
     """
-    def __init__(self, initial_normal_features=1000, threshold_learning=1000, threshold_classification=5, pruning_parameter=0.5):
+    def __init__(self, initial_normal_features=1000, threshold_learning=20, threshold_classification=5, pruning_parameter=0.5):
         AnomalyModelBase.__init__(self)
         self.NAME                       = "BalancedDistribution"
         
@@ -65,7 +66,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
     def generate_model(self, metadata, features):
         # Reduce features to simple list
-        features_flat = self.reduce_feature_array(features)[:5000]
+        features_flat = self.reduce_feature_array(features)
 
         logging.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (features_flat.shape[0], features_flat.shape[1]))
 
@@ -136,7 +137,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
                                      suffix = "%i vectors pruned" % pruned,
                                      time_start = start)
 
-            self.normal_distribution = self.normal_distribution[prune]
+            self.normal_distribution = self.normal_distribution[prune_filter]
 
             logging.info("Generated Balanced Distribution with %i entries" % len(self.normal_distribution))
         
@@ -154,6 +155,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
             self.threshold_classification   = np.array(hf["threshold_classification"])
             self.pruning_parameter          = np.array(hf["pruning_parameter"])
         assert 0 < self.pruning_parameter < 1, "Pruning parameter out of range (0 < η < 1)"
+        self._calculate_mean_and_covariance()    
         logging.info("Successfully loaded Balanced Distribution with %i entries" % len(self.normal_distribution))
     
     def save_model_to_file(self, output_file = ""):
@@ -170,16 +172,62 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelBalancedDistribution()
-    model.generate_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.MobileNetV2.h5")
+    model.load_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.BalancedDistribution.h5")
 
-    metadata, features = utils.read_features_file("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.MobileNetV2.h5")
+    features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.h5"
+    # features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/hard_2020-02-06-17-20-22.MobileNetV2_Block6.h5"
 
-    # model.load_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2AnomalyModelBalancedDistribution.h5")
-    # model.generate_model(metadata, features)
-    # model.save_model_to_file("/home/ludwig/ros/src/ROS-kate_bag/bags/autonomous_realsense-TFRecord/FeaturesMobileNetV2AnomalyModelBalancedDistribution.h5")
+    # Read file
+    metadata, features = utils.read_features_file(features_file)
+
+    metadata_anomaly = metadata[[m["label"] == 2 for m in metadata]]
+    features_anomaly = features[[m["label"] == 2 for m in metadata]]
+
+    # Only take feature vectors of images labeled as anomaly free (label == 1)
+    metadata_no_anomaly = metadata[[m["label"] == 1 for m in metadata]]
+    features_no_anomaly = features[[m["label"] == 1 for m in metadata]]
     
-    features_flat = model.reduce_feature_array(features)
+    # Generate model
+    # if model.generate_model(metadata_no_anomaly, features_no_anomaly) == False:
+    #     logging.info("Could not generate model.")
 
-    # dists = np.array(list(map(model.mahalanobis_distance, features_flat)))
+    # # Save model
+    # model.save_model_to_file(os.path.abspath(features_file.replace(".h5", "")) + "." + model.NAME + ".h5")
+    
+    # features_flat = model.reduce_feature_array(features)
+    # dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
+    thresh = 66#np.amax(dists)
+    # print thresh
 
-    # logging.info(np.amax(dists))
+    def _feature_to_color(feature):
+        b = 0#255 if feature in model.normal_distribution else 0
+        g = 0
+        # r = model._mahalanobis_distance(feature) * (255 / thresh)
+        r = 100 if model._mahalanobis_distance(feature) > 25 else 0
+        return (b, g, r)
+
+    def _feature_to_text(feature):
+        return round(model._mahalanobis_distance(feature), 2)
+
+    def _pause(feature):
+        return feature in model.normal_distribution
+
+    model.visualize(metadata, features, _feature_to_color, feature_to_text_func=_feature_to_text)
+    
+    # features_flat = model.reduce_feature_array(features)
+    # features_anomaly_flat = model.reduce_feature_array(features_anomaly)
+
+    # dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
+    # dists_anomaly = np.array(list(map(model._mahalanobis_distance, features_anomaly_flat)))
+
+    # fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+
+    # ax1.set_title("No anomaly (%i)" % len(features_flat))
+    # ax1.hist(dists, bins=50)
+
+    # ax2.set_title("Anomaly (%i)" % len(features_anomaly_flat))
+    # ax2.hist(dists_anomaly, bins=50)
+
+    # fig.suptitle("Mahalanobis distances")
+
+    # plt.show()
