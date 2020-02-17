@@ -1,2 +1,4 @@
 from anomalyModelSVG import AnomalyModelSVG
 from anomalyModelBalancedDistribution import AnomalyModelBalancedDistribution
+from anomalyModelSVGPos import AnomalyModelSVGPos
+from anomalyModelBalancedDistributionPos import AnomalyModelBalancedDistributionPos

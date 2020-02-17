@@ -3,9 +3,9 @@
 import os
 import logging
 import time
+
 import h5py
 import numpy as np
-import tensorflow_probability as tfp
 from scipy.spatial import distance
 
 from anomalyModelBase import AnomalyModelBase
@@ -66,7 +66,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
     def generate_model(self, metadata, features):
         # Reduce features to simple list
-        features_flat = self.reduce_feature_array(features)
+        features_flat = utils.flatten(features)
 
         logging.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (features_flat.shape[0], features_flat.shape[1]))
 
@@ -156,7 +156,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
             self.pruning_parameter          = np.array(hf["pruning_parameter"])
         assert 0 < self.pruning_parameter < 1, "Pruning parameter out of range (0 < η < 1)"
         self._calculate_mean_and_covariance()    
-        logging.info("Successfully loaded Balanced Distribution with %i entries" % len(self.normal_distribution))
+        logging.info("Successfully loaded Balanced Distribution with %i entries and %i dimensions" % (len(self.normal_distribution), self.normal_distribution[0].shape[0]))
     
     def save_model_to_file(self, output_file = ""):
         """Save the model to disk"""
@@ -171,63 +171,12 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
 # Only for tests
 if __name__ == "__main__":
-    model = AnomalyModelBalancedDistribution()
-    model.load_model_from_file("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.BalancedDistribution.h5")
+    from anomalyModelTest import AnomalyModelTest
+    test = AnomalyModelTest(AnomalyModelBalancedDistribution())
 
-    features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.h5"
-    # features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/hard_2020-02-06-17-20-22.MobileNetV2_Block6.h5"
-
-    # Read file
-    metadata, features = utils.read_features_file(features_file)
-
-    metadata_anomaly = metadata[[m["label"] == 2 for m in metadata]]
-    features_anomaly = features[[m["label"] == 2 for m in metadata]]
-
-    # Only take feature vectors of images labeled as anomaly free (label == 1)
-    metadata_no_anomaly = metadata[[m["label"] == 1 for m in metadata]]
-    features_no_anomaly = features[[m["label"] == 1 for m in metadata]]
-    
-    # Generate model
-    # if model.generate_model(metadata_no_anomaly, features_no_anomaly) == False:
-    #     logging.info("Could not generate model.")
-
-    # # Save model
-    # model.save_model_to_file(os.path.abspath(features_file.replace(".h5", "")) + "." + model.NAME + ".h5")
-    
-    # features_flat = model.reduce_feature_array(features)
-    # dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
-    thresh = 66#np.amax(dists)
-    # print thresh
-
-    def _feature_to_color(feature):
-        b = 0#255 if feature in model.normal_distribution else 0
-        g = 0
-        # r = model._mahalanobis_distance(feature) * (255 / thresh)
-        r = 100 if model._mahalanobis_distance(feature) > 25 else 0
-        return (b, g, r)
-
-    def _feature_to_text(feature):
-        return round(model._mahalanobis_distance(feature), 2)
+    test.calculateMahalobisDistances()
 
     def _pause(feature):
-        return feature in model.normal_distribution
+        return feature in test.model.normal_distribution
 
-    model.visualize(metadata, features, _feature_to_color, feature_to_text_func=_feature_to_text)
-    
-    # features_flat = model.reduce_feature_array(features)
-    # features_anomaly_flat = model.reduce_feature_array(features_anomaly)
-
-    # dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
-    # dists_anomaly = np.array(list(map(model._mahalanobis_distance, features_anomaly_flat)))
-
-    # fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
-
-    # ax1.set_title("No anomaly (%i)" % len(features_flat))
-    # ax1.hist(dists, bins=50)
-
-    # ax2.set_title("Anomaly (%i)" % len(features_anomaly_flat))
-    # ax2.hist(dists_anomaly, bins=50)
-
-    # fig.suptitle("Mahalanobis distances")
-
-    # plt.show()
+    test.visualize(pause_func=_pause)

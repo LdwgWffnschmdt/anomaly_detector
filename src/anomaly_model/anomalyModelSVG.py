@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
 
 import os
-
 import logging
+
 import h5py
 import numpy as np
-import tensorflow_probability as tfp
-from scipy.spatial import distance
+# import tensorflow_probability as tfp
+# from scipy.spatial import distance
 
 from anomalyModelBase import AnomalyModelBase
 import feature_extractor.utils as utils
-
-import matplotlib.pyplot as plt
 
 class AnomalyModelSVG(AnomalyModelBase):
     """Anomaly model formed by a Single Variate Gaussian (SVG) with model parameters Θ_SVG = (μ,σ²)
@@ -20,8 +18,8 @@ class AnomalyModelSVG(AnomalyModelBase):
     def __init__(self):
         AnomalyModelBase.__init__(self)
         self.NAME       = "SVG"
-        self._var        = None # Variance σ²
-        self._mean       = None # Mean μ
+        self._var       = None # Variance σ²
+        self._mean      = None # Mean μ
         self.threshold  = None # Threshold for classification
     
     def classify(self, feature_vector, threshold=None):
@@ -48,7 +46,7 @@ class AnomalyModelSVG(AnomalyModelBase):
 
     def generate_model(self, metadata, features):
         # Reduce features to simple list
-        features_flat = self.reduce_feature_array(features)
+        features_flat = utils.flatten(features)
 
         logging.info("Generating a Single Variate Gaussian (SVG) from %i feature vectors of length %i" % (features_flat.shape[0], features_flat.shape[1]))
 
@@ -91,56 +89,7 @@ class AnomalyModelSVG(AnomalyModelBase):
 
 # Only for tests
 if __name__ == "__main__":
-    model = AnomalyModelSVG()
+    from anomalyModelTest import AnomalyModelTest
+    test = AnomalyModelTest(AnomalyModelSVG())
 
-    features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.h5"
-    # features_file = "/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/hard_2020-02-06-17-20-22.MobileNetV2_Block6.h5"
-
-    # Read file
-    metadata, features = utils.read_features_file(features_file)
-
-    metadata_anomaly = metadata[[m["label"] == 2 for m in metadata]]
-    features_anomaly = features[[m["label"] == 2 for m in metadata]]
-
-    # Only take feature vectors of images labeled as anomaly free (label == 1)
-    metadata_no_anomaly = metadata[[m["label"] == 1 for m in metadata]]
-    features_no_anomaly = features[[m["label"] == 1 for m in metadata]]
-    
-    # Generate model
-    if model.generate_model(metadata_no_anomaly, features_no_anomaly) == False:
-        logging.info("Could not generate model.")
-
-    features_flat = model.reduce_feature_array(features)
-    dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
-    thresh = np.amax(dists)
-    print thresh
-
-    def _feature_to_color(feature):
-        b = 0
-        g = 0
-        r = model._mahalanobis_distance(feature) * (255 / thresh)
-        return (b, g, r)
-
-    model.visualize(metadata, features, _feature_to_color)
-
-    # Save model
-    # model.save_model_to_file(os.path.abspath(features_file.replace(".h5", "")) + "." + model.NAME + ".h5")
-    
-    
-    # features_flat = model.reduce_feature_array(features)
-    # features_anomaly_flat = model.reduce_feature_array(features_anomaly)
-
-    # dists = np.array(list(map(model._mahalanobis_distance, features_flat)))
-    # dists_anomaly = np.array(list(map(model._mahalanobis_distance, features_anomaly_flat)))
-
-    # fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
-
-    # ax1.set_title("No anomaly (%i)" % len(features_flat))
-    # ax1.hist(dists, bins=50)
-
-    # ax2.set_title("Anomaly (%i)" % len(features_anomaly_flat))
-    # ax2.hist(dists_anomaly, bins=50)
-
-    # fig.suptitle("Mahalanobis distances")
-
-    # plt.show()
+    test.calculateMahalobisDistances()

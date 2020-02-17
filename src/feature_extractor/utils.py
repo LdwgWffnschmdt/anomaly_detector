@@ -170,6 +170,17 @@ def load_dataset(filenames):
 # Feature IO #
 ##############
 
+def flatten(matrix):
+    """Reduce an array of feature vectors to a simple list of vectors
+    
+    Args:
+        matrix (np.array): array of shape (x1, ..., xn, z)
+
+    Returns:
+        Flattened array of shape (x1 * ... * xn, z)
+    """
+    return matrix.reshape(-1, matrix.shape[-1])
+
 def read_features_file(filename):
     """Reads metadata and features from a HDF5 or TFRecords file.
     
@@ -177,7 +188,7 @@ def read_features_file(filename):
         filename (str): filename to read
 
     Returns:
-        Tuple with metadata and features
+        Dict with Tuples containing metadata and features (all, no_anomaly and anomaly)
     """
     logging.info("Reading metadata and features from: %s" % filename)
     fn, file_extension = os.path.splitext(filename)
@@ -185,7 +196,30 @@ def read_features_file(filename):
         with h5py.File(filename, "r") as hf:
             # Parse metadata object
             metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
-            return metadata, np.array(hf["features"])
+            features = np.array(hf["features"])
+            
+            # Get feature vectors of images labeled as anomaly free (label == 1)
+            metadata_no_anomaly = metadata[[m["label"] == 1 for m in metadata]]
+            features_no_anomaly = features[[m["label"] == 1 for m in metadata]]
+            
+            # Get feature vectors of images labeled as anomalous (label == 2)
+            metadata_anomaly = metadata[[m["label"] == 2 for m in metadata]]
+            features_anomaly = features[[m["label"] == 2 for m in metadata]]
+
+            return _DictObjHolder({
+                "all": _DictObjHolder({
+                    "metadata": metadata,
+                    "features": features
+                }),
+                "no_anomaly": _DictObjHolder({
+                    "metadata": metadata_no_anomaly,
+                    "features": features_no_anomaly
+                }),
+                "anomaly": _DictObjHolder({
+                    "metadata": metadata_anomaly,
+                    "features": features_anomaly
+                })
+            })
     elif file_extension == ".tfrecord":
         raw_dataset = tf.data.TFRecordDataset(filename, compression_type="GZIP")
         
@@ -263,7 +297,7 @@ def _bytes_feature(value):
 # Output helper #
 #################
 
-def visualize(metadata, features, feature_to_color_func, feature_to_text_func=None, pause_func=None):
+def visualize(metadata, features, feature_to_color_func=None, feature_to_text_func=None, pause_func=None):
     """Visualize features on the source image
 
     Args:
@@ -344,7 +378,9 @@ def visualize(metadata, features, feature_to_color_func, feature_to_text_func=No
 
                 p1 = (x * patch_size[0], y * patch_size[1])
                 p2 = (p1[0] + patch_size[0], p1[1] + patch_size[1])
-                cv2.rectangle(overlay, p1, p2, feature_to_color_func(feature), -1)
+
+                if feature_to_color_func is not None:
+                    cv2.rectangle(overlay, p1, p2, feature_to_color_func(feature), -1)
 
                 if feature_to_text_func is not None:
                     text = str(feature_to_text_func(feature))
@@ -502,3 +538,15 @@ class GracefulInterruptHandler(object):
         self.released = True
 
         return True
+
+
+############
+#   Misc   #
+############
+
+class _DictObjHolder(object):
+    def __init__(self, dct):
+        self.dct = dct
+
+    def __getattr__(self, name):
+        return self.dct[name]

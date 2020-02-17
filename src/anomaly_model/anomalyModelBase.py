@@ -61,14 +61,11 @@ class AnomalyModelBase(object):
             logging.info("Output file set to %s" % output_file)
         
         # Read file
-        metadata, features = utils.read_features_file(features_file)
+        file_content = utils.read_features_file(features_file)
 
-        # Only take feature vectors of images labeled as anomaly free (label == 1)
-        features = features[[m["label"] == 1 for m in metadata]]
-        metadata = metadata[[m["label"] == 1 for m in metadata]]
-        
         # Generate model
-        if self.generate_model(metadata, features) == False:
+        if self.generate_model(file_content["no_anomaly"].metadata,
+                               file_content["no_anomaly"].features) == False:
             logging.info("Could not generate model.")
             return False
 
@@ -76,12 +73,3 @@ class AnomalyModelBase(object):
         self.save_model_to_file(output_file)
         
         return True
-
-    def reduce_feature_array(self, features_vector_array):
-        """Reduce an array of feature vectors of shape to a simple list
-        
-        Args:
-            features_vector_array (object[]): feature vectors array
-        """
-        # Create an array of only the feature vectors, eg. (25000, 1280)
-        return features_vector_array.reshape(-1, features_vector_array.shape[-1])
