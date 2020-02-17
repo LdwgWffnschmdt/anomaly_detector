@@ -17,13 +17,117 @@ import cv2
 logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
 
 ##############
+# Meta + Feat#
+##############
+
+def getImageTransformationMatrix(w, h):
+    """Calculate the matrix that will transform an input of
+    given width and height to relative real world coordinates
+
+    Args:
+        w (int): Width of the input
+        h (int): Height of the input
+
+    Returns:
+        A Matrix that will convert image coordinates to
+        relative real world coordinates
+    """
+    # The transformation matrix is defined by the for corners of
+    # the image and their real world coordinates relative to the camera
+    src = np.float32([[ 0, 0], [w, 0], [ 0,   h], [w,   h]])
+    dst = np.float32([[-3, 6], [3, 6], [-1, 0.7], [1, 0.7]])
+    return cv2.getPerspectiveTransform(src, dst) # The transformation matrix
+
+def getRelativeLocations(w, h):
+    """Calculates an array of shape (w, h, 2) containing the
+    respective relative real world coordinates
+
+    Args:
+        w (int): Width of the input
+        h (int): Height of the input
+
+    Returns:
+        An array of shape (w, h, 2) containing the relative
+        real world coordinates
+    """
+    P = getImageTransformationMatrix(w, h)
+    
+    relative_locations = np.zeros((w, h, 2))
+
+    for x in range(w):
+        for y in range(h):
+            point = np.array([y + 0.5, x + 0.5, 1.]) # +0.5 so we take the center of each patch
+
+            transformed_point = P.dot(point)
+            transformed_point = transformed_point / transformed_point[2] # Normalize by third component
+            relative_locations[x,y,0] = transformed_point[0]
+            relative_locations[x,y,1] = transformed_point[1]
+    
+    return relative_locations
+
+def getAbsoluteLocations(metadata, relative_locations):
+    """Transform the relative locations to absolute locations
+
+    Args:
+        metadata (dict): A metadata dict containing information
+                         about the camera location
+        relative_locations (array): An array of shape (w, h, 2) with
+                                    locations relative to the camera
+
+    Returns:
+        An array of shape (w, h, 2) containing absolute locations
+    """
+
+    camera_position = np.array([metadata["location/translation/x"],
+                                metadata["location/translation/y"]])
+
+    # Construct a 2D rotation matrix
+    _s = np.sin(metadata["location/rotation/z"] - np.pi / 2.)
+    _c = np.cos(metadata["location/rotation/z"] - np.pi / 2.)
+
+    R = np.array([[_c, -_s],
+                  [_s,  _c]])
+
+    def _to_relative(p):
+        return camera_position + R.dot(p)
+
+    return np.apply_along_axis(_to_relative, 2, relative_locations)
+
+def addLocationToFeatures(metadata, features):
+    """Calculate the real world coordinates of every patch and add
+    these to the feature vectors
+    
+    Args:
+        metadata (list): Array of metadata for the features
+        features (list): Array of features as extracted by a FeatureExtractor
+
+    Returns:
+        A new features list with the coordinates added as the
+        last two feature dimensions
+    """
+    logging.info("Adding locations as feature dimensions")
+    total, h, w, depth = features.shape
+    
+    relative_locations = getRelativeLocations(w, h)
+
+    features_with_locations = np.zeros((total, h, w, depth + 2))
+
+    for i, feature_3d in enumerate(features):
+        meta = metadata[i]
+        absolute_locations = getAbsoluteLocations(meta, relative_locations)
+        features_with_locations[i] = np.concatenate((feature_3d, absolute_locations), axis=2)
+
+    return features_with_locations
+
+##############
 # Images IO  #
 ##############
 
 def load_dataset(filenames):
     """Loads a set of TFRecord files
     Args:
-        filenames (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
+        filenames (str / str[]): TFRecord file(s) extracted
+                                 by rosbag_to_tfrecord
 
     Returns:
         tf.data.MapDataset
@@ -141,7 +245,8 @@ def _float_feature(value):
         value = [value]
     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
-# Can be used to store float64 values if necessary (http://jrmeyer.github.io/machinelearning/2019/05/29/tensorflow-dataset-estimator-api.html)
+# Can be used to store float64 values if necessary
+# (http://jrmeyer.github.io/machinelearning/2019/05/29/tensorflow-dataset-estimator-api.html)
 def _float64_feature(float64_value):
     float64_bytes = [str(float64_value).encode()]
     bytes_list = tf.train.BytesList(value=float64_bytes)
@@ -158,7 +263,8 @@ def _bytes_feature(value):
 # Output helper #
 #################
 
-# Print iterations progress (https://gist.github.com/aubricus/f91fb55dc6ba5557fbab06119420dd6a)
+# Print iterations progress
+# (https://gist.github.com/aubricus/f91fb55dc6ba5557fbab06119420dd6a)
 def print_progress(iteration, total, prefix="", suffix="", decimals=1, bar_length=40, time_start=None):
     """Call in a loop to create terminal progress bar
 
@@ -211,7 +317,8 @@ def format_duration(t):
     return output
 
 def image_write_label(image, label):
-    """Write the specified label (0: Unknown, 1: No anomaly, 2: Contains an anomaly) on an image for debug purposes
+    """Write the specified label on an image for debug purposes
+    (0: Unknown, 1: No anomaly, 2: Contains an anomaly)
     
     Args:
         image (Image)
