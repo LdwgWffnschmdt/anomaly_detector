@@ -12,7 +12,6 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
 
     def __init__(self):
         FeatureExtractorBase.__init__(self)
-        self.NAME = "MobileNetV2"
 
         self.IMG_SIZE  = 224 # All images will be resized to 224x224
         self.IMG_SHAPE = (self.IMG_SIZE, self.IMG_SIZE, 3)

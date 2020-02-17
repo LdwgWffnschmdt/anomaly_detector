@@ -17,7 +17,6 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
     """
     def __init__(self, initial_normal_features=1000, threshold_learning=20, threshold_classification=5, pruning_parameter=0.5):
         AnomalyModelBase.__init__(self)
-        self.NAME                       = "BalancedDistribution"
         
         assert 0 < pruning_parameter < 1, "Pruning parameter out of range (0 < η < 1)"
 

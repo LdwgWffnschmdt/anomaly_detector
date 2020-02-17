@@ -5,12 +5,9 @@ import feature_extractor.utils as utils
 
 class AnomalyModelBalancedDistributionPos(AnomalyModelBalancedDistribution):
     """Anomaly model formed by a Balanced Distribution of feature vectors
+    Contains the location of each patch as two additional feature vector dimensions
     Reference: https://www.mdpi.com/2076-3417/9/4/757
     """
-    def __init__(self, initial_normal_features=1000, threshold_learning=20, threshold_classification=5, pruning_parameter=0.5):
-        AnomalyModelBalancedDistribution.__init__(self, initial_normal_features, threshold_learning, threshold_classification, pruning_parameter)
-        self.NAME                       = "BalancedDistributionPos"
-
     def generate_model(self, metadata, features):
         # Add location to features
         features = utils.addLocationToFeatures(metadata, features)

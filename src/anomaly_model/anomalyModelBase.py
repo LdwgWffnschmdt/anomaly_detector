@@ -1,20 +1,12 @@
 import os
 import logging
-import h5py
-import cv2
 
-import numpy as np
-from scipy.spatial.transform import Rotation
-
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import feature_extractor.utils as utils
-from IPM import IPM, _DictObjHolder
 
 class AnomalyModelBase(object):
     
     def __init__(self):
-        self.NAME = ""          # Should be set by the implementing class
+        self.NAME = self.__class__.__name__.replace("AnomalyModel", "")
     
     def generate_model(self, metadata, features):
         """Generate a model based on the features and metadata
@@ -57,7 +49,7 @@ class AnomalyModelBase(object):
             raise ValueError("Specified model file does not exist (%s)" % features_file)
         
         if output_file == "":
-            output_file = os.path.abspath(features_file.replace(".h5", "")) + "." + self.NAME + ".h5"
+            output_file = os.path.abspath(features_file.replace(".h5", "")) + "." + self.__name__ + ".h5"
             logging.info("Output file set to %s" % output_file)
         
         # Read file

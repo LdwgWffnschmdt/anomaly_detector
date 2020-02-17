@@ -12,7 +12,7 @@ import feature_extractor.utils as utils
 class FeatureExtractorBase(object):
     
     def __init__(self):
-        self.NAME = ""              # Should be set by the implementing class
+        self.NAME = self.__class__.__name__.replace("FeatureExtractor", "")
         self.IMG_SIZE = 260
     
     def extract_batch(self, batch): # Should be implemented by child class

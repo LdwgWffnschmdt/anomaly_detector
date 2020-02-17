@@ -17,7 +17,6 @@ class AnomalyModelSVG(AnomalyModelBase):
     """
     def __init__(self):
         AnomalyModelBase.__init__(self)
-        self.NAME       = "SVG"
         self._var       = None # Variance σ²
         self._mean      = None # Mean μ
         self.threshold  = None # Threshold for classification
