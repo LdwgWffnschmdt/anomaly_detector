@@ -16,9 +16,9 @@ import cv2
 # Configure logging
 logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
 
-##############
-# Meta + Feat#
-##############
+###############
+# Meta + Feat #
+###############
 
 def getImageTransformationMatrix(w, h):
     """Calculate the matrix that will transform an input of
@@ -32,6 +32,10 @@ def getImageTransformationMatrix(w, h):
         A Matrix that will convert image coordinates to
         relative real world coordinates
     """
+    # TODO: This should probably be a Matrix defined by the camera parameters
+    # (P=K*Rt) and the camera position and orientation, not this reverse
+    # engineered hack. I was unfortunately not able to do properly so this is it.
+    
     # The transformation matrix is defined by the for corners of
     # the image and their real world coordinates relative to the camera
     src = np.float32([[ 0, 0], [w, 0], [ 0,   h], [w,   h]])
@@ -119,9 +123,9 @@ def addLocationToFeatures(metadata, features):
 
     return features_with_locations
 
-##############
-# Images IO  #
-##############
+###############
+#  Images IO  #
+###############
 
 def load_dataset(filenames):
     """Loads a set of TFRecord files
@@ -165,10 +169,9 @@ def load_dataset(filenames):
 
     return raw_dataset.map(_parse_function)
 
-
-##############
-# Feature IO #
-##############
+################
+#  Feature IO  #
+################
 
 def flatten(matrix):
     """Reduce an array of feature vectors to a simple list of vectors
@@ -287,7 +290,6 @@ def _float64_feature(float64_value):
     bytes_list_feature = tf.train.Feature(bytes_list=bytes_list)
     return bytes_list_feature
     #    example['float_value'] = tf.strings.to_number(example['float_value'], out_type=tf.float64)
-
 
 def _bytes_feature(value):
     """Wrapper for inserting bytes features into Example proto."""
@@ -504,6 +506,54 @@ def image_write_label(image, label):
         colors.get(label, 0),
         thickness)
 
+#################
+# Computer Info #
+#################
+
+import cpuinfo
+import GPUtil
+from psutil import virtual_memory
+
+def getComputerInfo():
+
+    # Get CPU info
+    cpu = cpuinfo.get_cpu_info()
+
+    result_dict = {
+        "Python version": cpu["python_version"],
+        "TensorFlow version": tf.version.VERSION,
+        "CPU Description": cpu["brand"],
+        "CPU Clock speed (advertised)": cpu["hz_advertised"],
+        "CPU Clock speed (actual)": cpu["hz_actual"],
+        "CPU Architecture": cpu["arch"]
+    }
+
+    # Get GPU info
+    gpus_tf = tf.config.experimental.list_physical_devices("GPU")
+    
+    result_dict["Number of GPUs (tf)"] = len(gpus_tf)
+
+    gpus = GPUtil.getGPUs()
+    gpus_available = GPUtil.getAvailability(gpus)
+    for i, gpu in enumerate(gpus):
+        result_dict["GPU %i" % gpu.id] = gpu.name
+        result_dict["GPU %i (driver)" % gpu.id] = gpu.driver
+        result_dict["GPU %i (memory total)" % gpu.id] = gpu.memoryTotal
+        result_dict["GPU %i (memory free)" % gpu.id] = gpu.memoryFree
+        result_dict["GPU %i (available?)" % gpu.id] = gpus_available[i]
+
+    # Get RAM info
+    mem = virtual_memory()
+
+    result_dict["RAM (total)"] = mem.total
+    result_dict["RAM (available)"] = mem.available
+
+    return result_dict
+
+#################
+#     Misc      #
+#################
+
 # https://gist.github.com/nonZero/2907502
 class GracefulInterruptHandler(object):
 
@@ -538,11 +588,6 @@ class GracefulInterruptHandler(object):
         self.released = True
 
         return True
-
-
-############
-#   Misc   #
-############
 
 class _DictObjHolder(object):
     def __init__(self, dct):

@@ -4,9 +4,6 @@ from datetime import datetime
 import inspect
 import timeit
 
-import cpuinfo
-import GPUtil
-from psutil import virtual_memory
 import xlsxwriter
 import tensorflow as tf
 
@@ -38,38 +35,43 @@ if __name__ == "__main__":
 
     add_meta("Start", datetime.now().strftime("%d.%m.%Y, %H:%M:%S"))
 
-    # Get CPU info
-    cpu = cpuinfo.get_cpu_info()
+    computer_info = utils.getComputerInfo()
 
-    add_meta("Python version", cpu["python_version"])
+    for key, value in computer_info.items():
+        add_meta(key, value)
 
-    add_meta("CPU", format=subheading_format)
-    add_meta("Description", cpu["brand"])
-    add_meta("Clock speed (advertised)", cpu["hz_advertised"])
-    add_meta("Clock speed (actual)", cpu["hz_actual"])
-    add_meta("Architecture", cpu["arch"])
+    # # Get CPU info
+    # cpu = cpuinfo.get_cpu_info()
 
-    # Get GPU info
-    add_meta("GPU", format=subheading_format)
-    gpus_tf = tf.config.experimental.list_physical_devices("GPU")
+    # add_meta("Python version", cpu["python_version"])
+
+    # add_meta("CPU", format=subheading_format)
+    # add_meta("Description", cpu["brand"])
+    # add_meta("Clock speed (advertised)", cpu["hz_advertised"])
+    # add_meta("Clock speed (actual)", cpu["hz_actual"])
+    # add_meta("Architecture", cpu["arch"])
+
+    # # Get GPU info
+    # add_meta("GPU", format=subheading_format)
+    # gpus_tf = tf.config.experimental.list_physical_devices("GPU")
     
-    add_meta("Number of GPUs (tf)", len(gpus_tf))
+    # add_meta("Number of GPUs (tf)", len(gpus_tf))
 
-    gpus = GPUtil.getGPUs()
-    gpus_available = GPUtil.getAvailability(gpus)
-    for i, gpu in enumerate(gpus):
-        add_meta("GPU:%i" % gpu.id, gpu.name)
-        add_meta("GPU:%i (driver)" % gpu.id, gpu.driver)
-        add_meta("GPU:%i (memory total)" % gpu.id, gpu.memoryTotal)
-        add_meta("GPU:%i (memory free)" % gpu.id, gpu.memoryFree)
-        add_meta("GPU:%i (available?)" % gpu.id, gpus_available[i])
+    # gpus = GPUtil.getGPUs()
+    # gpus_available = GPUtil.getAvailability(gpus)
+    # for i, gpu in enumerate(gpus):
+    #     add_meta("GPU:%i" % gpu.id, gpu.name)
+    #     add_meta("GPU:%i (driver)" % gpu.id, gpu.driver)
+    #     add_meta("GPU:%i (memory total)" % gpu.id, gpu.memoryTotal)
+    #     add_meta("GPU:%i (memory free)" % gpu.id, gpu.memoryFree)
+    #     add_meta("GPU:%i (available?)" % gpu.id, gpus_available[i])
 
-    # Get RAM info
-    add_meta("RAM", format=subheading_format)
-    mem = virtual_memory()
+    # # Get RAM info
+    # add_meta("RAM", format=subheading_format)
+    # mem = virtual_memory()
 
-    add_meta("RAM (total)", mem.total)
-    add_meta("RAM (available)", mem.available)
+    # add_meta("RAM (total)", mem.total)
+    # add_meta("RAM (available)", mem.available)
 
     # Get all the available feature extractor names
     extractor_names = inspect.getmembers(feature_extractor, inspect.isclass)
@@ -101,7 +103,7 @@ if __name__ == "__main__":
             log("Initialization", timeit.repeat(lambda: _class(), number=1, repeat=5))
 
             # Load a test dataset
-            dataset = _class().load_dataset("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.tfrecord")
+            dataset = utils.load_dataset("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.tfrecord")
 
             # Test batch extraction
             extractor = _class()
