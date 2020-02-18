@@ -1,11 +1,11 @@
 # anomaly_detector
-WORK IN PROGRESS!
+`WORK IN PROGRESS!`
 Detect anomalies in images using deep features
 
 ## Dependencies
 ```bash
 python -m virtualenv .env
-pip install -r requirements.txt^
+pip install -r requirements.txt
 ```
 
 # Data preparation
@@ -14,7 +14,7 @@ pip install -r requirements.txt^
 
 ## rosbag_to_tfrecord
 
-A small script to convert bag files to [TensorFlow TFRecords](https://www.tensorflow.org/tutorials/load_data/tfrecord). Will as of now only include an image topic with position and rotation from /tf.
+A small script to convert bag files to [TensorFlow TFRecords](https://www.tensorflow.org/tutorials/load_data/tfrecord). Will as of now only include an image topic with position and rotation from `/tf`.
 
 ## Usage
 ```bash
