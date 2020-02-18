@@ -1,0 +1,9 @@
+tensorflow
+tensorflow-hub
+pyyaml
+h5py
+py-cpuinfo
+psutil
+gputil
+XlsxWriter
+opencv-python

@@ -4,19 +4,13 @@ Detect anomalies in images using deep features
 
 ## Dependencies
 ```bash
-pip install --user --upgrade tensorflow
-pip install --user -q pyyaml h5py  # Required to save extracted features in HDF5 format
-
-# For benchmarks
-pip install --user py-cpuinfo psutil gputil XlsxWriter
+python -m virtualenv .env
+pip install -r requirements.txt^
 ```
 
 # rosbag_to_tfrecord
 
 A small script to convert bag files to [TensorFlow TFRecords](https://www.tensorflow.org/tutorials/load_data/tfrecord). Will as of now only include an image topic with position and rotation from /tf.
-
-### Install dependencies
-```pip install opencv-python```
 
 ## Usage
 ```bash
