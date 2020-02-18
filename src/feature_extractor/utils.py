@@ -160,7 +160,7 @@ def load_dataset(filenames):
     def _parse_function(example_proto):
         # Parse the input tf.Example proto using the dictionary above.
         example = tf.io.parse_single_example(example_proto, feature_description)
-        image = tf.image.decode_jpeg(example["image/encoded"])
+        image = tf.image.decode_jpeg(example["image/encoded"], channels=3)
         return image, example
 
     return raw_dataset.map(_parse_function)

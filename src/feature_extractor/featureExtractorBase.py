@@ -1,9 +1,10 @@
+""" Abstract base class for all feature extractors """
 import os
 import logging
 import time
 
 import tensorflow as tf
-import matplotlib.pyplot as plt
+import tensorflow_hub as hub
 import numpy as np
 import h5py
 
@@ -21,8 +22,7 @@ class FeatureExtractorBase(object):
     
     def format_image(self, image):  # Can be overridden by child class
         """Format an image to be compliant with extractor (NN) input"""
-        image = tf.cast(image, tf.float32)
-        image = image/255.0
+        image = tf.image.convert_image_dtype(image, dtype=tf.float32)   # Converts to float and scales to [0,1]
         image = tf.image.resize(image, (self.IMG_SIZE, self.IMG_SIZE))
         return image
 
@@ -185,3 +185,45 @@ class FeatureExtractorBase(object):
             h5Writer.close()
 
         return True
+
+    ########################
+    #      Utilities       #
+    ########################
+
+    def load_model(self, handle, signature="image_feature_vector", output_key="default"):
+        """Load a pretrained model from TensorFlow Hub
+
+        Args:
+            handle: a callable object (subject to the conventions above), or a Python string for which hub.load() returns such a callable. A string is required to save the Keras config of this Layer.
+        """
+        inputs = tf.keras.Input(shape=(self.IMG_SIZE, self.IMG_SIZE, 3))
+        layer = hub.KerasLayer(handle,
+                               trainable=False,
+                               signature=signature,
+                               output_key=output_key)(inputs)
+
+        return tf.keras.Model(inputs=inputs, outputs=layer)
+
+    def print_outputs(self, handle, signature="image_feature_vector"):
+        """ Print possible outputs and their shapes """
+        image = tf.cast(np.random.rand(1, self.IMG_SIZE, self.IMG_SIZE, 3), tf.float32)
+        model = hub.load(handle).signatures[signature]
+        out = model(image)
+        logging.info("Outputs for model at %s with signature %s" % (handle, signature))
+        for s in map(lambda y: "%-40s | %s" % (y, str(out[y].shape)), sorted(list(out), key=lambda x:out[x].shape[1])):
+            print(s)
+
+    def plot_model(self, model, dpi=96, to_file=None):
+        """ Plot a model to an image file """
+        if to_file is None:
+            to_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "Models", "%s.png" % self.NAME)
+        logging.info("Creating plot of model %s: %s" % (self.NAME, to_file))
+        tf.keras.utils.plot_model(
+            model,
+            to_file=to_file,
+            show_shapes=True,
+            show_layer_names=True,
+            rankdir="TB",   # "TB" creates a vertical plot; "LR" creates a horizontal plot
+            expand_nested=True,
+            dpi=dpi
+        )
