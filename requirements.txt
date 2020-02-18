@@ -2,8 +2,12 @@ tensorflow
 tensorflow-hub
 pyyaml
 h5py
+pydot
+graphviz
+
 py-cpuinfo
 psutil
 gputil
 XlsxWriter
+
 opencv-python
