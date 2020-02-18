@@ -1,12 +1,47 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import warnings
-warnings.filterwarnings("ignore")
-
 import logging
 import os
 import time
+import argparse
+
+parser = argparse.ArgumentParser(description="A small script to convert bag files to TensorFlow TFRecords.",
+                                 formatter_class=argparse.RawTextHelpFormatter)
+
+parser.add_argument("bag_file", type=str,
+                    help="The bag file to convert")
+
+parser.add_argument("--output_dir", metavar="OUT", dest="output_dir", type=str,
+                    help="Output directory (default: {bag_file}/TFRecord)")
+
+parser.add_argument("--image_topic", metavar="IM", dest="image_topic", type=str,
+                    default="/camera/color/image_raw",
+                    help="Image topic (default: \"/camera/color/image_raw\")")
+
+parser.add_argument("--images_per_bin", metavar="MAX", type=int,
+                    default=10000,
+                    help="Maximum number of images per TFRecord file (default: 10000)")
+
+parser.add_argument("--tf_map", metavar="TF_M", dest="tf_map", type=str,
+                    default="map",
+                    help="TF reference frame (default: map)")
+
+parser.add_argument("--tf_base_link", metavar="TF_B", dest="tf_base_link", type=str,
+                    default="base_link", # TODO: Change this to the RealSense frame
+                    help="TF camera frame (default: base_link)")
+
+parser.add_argument("--label", metavar="L", dest="label", type=int,
+                    default=0,
+                    help="-2: labeling mode (show image and wait for input) [space]: No anomaly\n"
+                         "                                                  [tab]  : Contains anomaly\n"
+                         "-1: continuous labeling mode (show image for 10ms, keep label until change)\n"
+                         " 0: Unknown (default)\n"
+                         " 1: No anomaly\n"
+                         " 2: Contains an anomaly")
+
+args = parser.parse_args()
+
 import rospy
 import rosbag
 import tensorflow
@@ -19,29 +54,20 @@ import tf2_py as tf2
 import feature_extractor.utils as utils
 
 def rosbag_to_tfrecord():
-    rospy.init_node('rosbag_to_tfrecord')
-
     ################
     #  Parameters  #
     ################
-    bag_file       = rospy.get_param("~bag_file"       , "")
-    output_dir     = rospy.get_param("~output_dir"     , "") # Defaults to {bag_file}/TFRecord
-    image_topic    = rospy.get_param("~image_topic"    , "/camera/color/image_raw")
-    images_per_bin = rospy.get_param("~images_per_bin" , 10000)
-    tf_map         = rospy.get_param("~tf_map"         , "map")
-    tf_base_link   = rospy.get_param("~tf_base_link"   , "base_link") # TODO: Change this to the RealSense frame
-
-    # -2: labeling mode (show image and wait for input) [space]: No anomaly
-    #                                                   [tab]  : Contains anomaly
-    # -1: continuous labeling mode (show image for 10ms, keep label until change)
-    #  0: Unknown
-    #  1: No anomaly
-    #  2: Contains an anomaly
-    label          = rospy.get_param("~label"          , 0)
+    bag_file       = args.bag_file      
+    output_dir     = args.output_dir    
+    image_topic    = args.image_topic   
+    images_per_bin = args.images_per_bin
+    tf_map         = args.tf_map        
+    tf_base_link   = args.tf_base_link  
+    label          = args.label
 
     # Check parameters
     if bag_file == "" or not os.path.exists(bag_file) or not os.path.isfile(bag_file):
-        rospy.logerr("Specified bag does not exist (%s)" % bag_file)
+        logging.error("Specified bag does not exist (%s)" % bag_file)
         return
 
     bag_file_name = os.path.splitext(os.path.basename(bag_file))[0]
@@ -50,22 +76,22 @@ def rosbag_to_tfrecord():
         output_dir = os.path.join(os.path.abspath(os.path.dirname(bag_file)), "TFRecord")
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        rospy.loginfo("Output directory set to %s" % output_dir)
+        logging.info("Output directory set to %s" % output_dir)
 
     if image_topic == "":
-        rospy.logerr("No image topic given. Use parameter image_topic.")
+        logging.error("No image topic given. Use parameter image_topic.")
         return
 
     if tf_map == "" or tf_base_link == "":
-        rospy.logerr("Please specify tf frame names.")
+        logging.error("Please specify tf frame names.")
         return
 
     if images_per_bin < 1:
-        rospy.logerr("images_per_bin has to be greater than 1.")
+        logging.error("images_per_bin has to be greater than 1.")
         return
 
     if -2 > label or label > 2:
-        rospy.logerr("label has to be between -2 and 2.")
+        logging.error("label has to be between -2 and 2.")
         return
 
     def get_label(image, last_label, auto_duration=10):
@@ -75,7 +101,7 @@ def rosbag_to_tfrecord():
             if label == -1 and not last_label is None:
                 utils.image_write_label(image_cp, last_label)
 
-            cv2.imshow('Label image | [1]: No anomaly, [2]: Contains anomaly, [0]: Unknown', image_cp)
+            cv2.imshow("Label image | [1]: No anomaly, [2]: Contains anomaly, [0]: Unknown", image_cp)
             key = cv2.waitKey(0 if label == -2 or last_label == None else auto_duration)
             
             if key == 27:   # [esc] => Quit
@@ -102,7 +128,7 @@ def rosbag_to_tfrecord():
     with utils.GracefulInterruptHandler() as h:
         with rosbag.Bag(bag_file, "r") as bag:
             ### Get /tf transforms
-            utils.print_progress(0, 1, prefix = 'Extracting transforms:')
+            utils.print_progress(0, 1, prefix = "Extracting transforms:")
             expected_tf_count = bag.get_message_count(["/tf", "/tf_static"])
             total_tf_count = 0
             start = time.time()
@@ -113,7 +139,7 @@ def rosbag_to_tfrecord():
                     return
                 
                 for msg_tf in msg.transforms:
-                    if topic == '/tf_static':
+                    if topic == "/tf_static":
                         tf_buffer.set_transform_static(msg_tf, "default_authority")
                     else:
                         tf_buffer.set_transform(msg_tf, "default_authority")
@@ -122,12 +148,12 @@ def rosbag_to_tfrecord():
                 # Print progress
                 utils.print_progress(total_tf_count,
                                     expected_tf_count,
-                                    prefix = 'Extracting transforms:',
-                                    suffix = '(%i / %i)' % (total_tf_count, expected_tf_count),
+                                    prefix = "Extracting transforms:",
+                                    suffix = "(%i / %i)" % (total_tf_count, expected_tf_count),
                                     time_start = start)
 
             ### Get images
-            utils.print_progress(0, 1, prefix = 'Writing TFRecord:')
+            utils.print_progress(0, 1, prefix = "Writing TFRecord:")
 
             expected_im_count = bag.get_message_count(image_topic)
             number_of_bins = expected_im_count // images_per_bin + 1
@@ -138,7 +164,7 @@ def rosbag_to_tfrecord():
             skipped_count = 0
             tfWriter = None        
 
-            colorspace = b'RGB'
+            colorspace = b"RGB"
             channels = 3
 
             image_label = None
@@ -160,7 +186,7 @@ def rosbag_to_tfrecord():
 
                     # Get the image
                     cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
-                    _, encoded = cv2.imencode('.jpeg', cv_image)
+                    _, encoded = cv2.imencode(".jpeg", cv_image)
                     
                     # Get the label     0: Unknown, 1: No anomaly, 2: Contains an anomaly
                     image_label = get_label(cv_image, image_label)
@@ -174,10 +200,10 @@ def rosbag_to_tfrecord():
                             tfWriter.close()
                         
                         if number_of_bins == 1:
-                            output_filename = '%s.tfrecord' % bag_file_name
+                            output_filename = "%s.tfrecord" % bag_file_name
                         else:
                             bin_number = total_saved_count // images_per_bin + 1
-                            output_filename = '%s.%.5d-of-%.5d.tfrecord' % (bag_file_name, bin_number, number_of_bins)
+                            output_filename = "%s.%.5d-of-%.5d.tfrecord" % (bag_file_name, bin_number, number_of_bins)
                             
                         output_file = os.path.join(output_dir, output_filename)
                         tfWriter = tensorflow.io.TFRecordWriter(output_file)
@@ -185,22 +211,22 @@ def rosbag_to_tfrecord():
 
                     # Add image and position to TFRecord
                     feature_dict = {
-                        'metadata/location/translation/x'   : utils._float_feature(translation.x),
-                        'metadata/location/translation/y'   : utils._float_feature(translation.y),
-                        'metadata/location/translation/z'   : utils._float_feature(translation.z),
-                        'metadata/location/rotation/x'      : utils._float_feature(euler[0]),
-                        'metadata/location/rotation/y'      : utils._float_feature(euler[1]),
-                        'metadata/location/rotation/z'      : utils._float_feature(euler[2]),
-                        'metadata/time'                     : utils._int64_feature(t.to_nsec()), # There were some serious problems saving to_sec as float...
-                        'metadata/label'                    : utils._int64_feature(image_label), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-                        'metadata/rosbag'                   : utils._bytes_feature(bag_file),
-                        'metadata/tfrecord'                 : utils._bytes_feature(output_file),
-                        'image/height'      : utils._int64_feature(msg.height),
-                        'image/width'       : utils._int64_feature(msg.width),
-                        'image/channels'    : utils._int64_feature(channels),
-                        'image/colorspace'  : utils._bytes_feature(colorspace),
-                        'image/format'      : utils._bytes_feature('jpeg'),
-                        'image/encoded'     : utils._bytes_feature(encoded.tobytes())
+                        "metadata/location/translation/x"   : utils._float_feature(translation.x),
+                        "metadata/location/translation/y"   : utils._float_feature(translation.y),
+                        "metadata/location/translation/z"   : utils._float_feature(translation.z),
+                        "metadata/location/rotation/x"      : utils._float_feature(euler[0]),
+                        "metadata/location/rotation/y"      : utils._float_feature(euler[1]),
+                        "metadata/location/rotation/z"      : utils._float_feature(euler[2]),
+                        "metadata/time"                     : utils._int64_feature(t.to_nsec()), # There were some serious problems saving to_sec as float...
+                        "metadata/label"                    : utils._int64_feature(image_label), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+                        "metadata/rosbag"                   : utils._bytes_feature(bag_file),
+                        "metadata/tfrecord"                 : utils._bytes_feature(output_file),
+                        "image/height"      : utils._int64_feature(msg.height),
+                        "image/width"       : utils._int64_feature(msg.width),
+                        "image/channels"    : utils._int64_feature(channels),
+                        "image/colorspace"  : utils._bytes_feature(colorspace),
+                        "image/format"      : utils._bytes_feature("jpeg"),
+                        "image/encoded"     : utils._bytes_feature(encoded.tobytes())
                     }
 
                     example = tensorflow.train.Example(features=tensorflow.train.Features(feature=feature_dict))
@@ -215,16 +241,13 @@ def rosbag_to_tfrecord():
                 # Print progress
                 utils.print_progress(total_count,
                                      expected_im_count,
-                                     prefix = 'Writing TFRecord:',
-                                     suffix = '(%i / %i, skipped %i)' % (total_saved_count, expected_im_count, skipped_count),
+                                     prefix = "Writing TFRecord:",
+                                     suffix = "(%i / %i, skipped %i)" % (total_saved_count, expected_im_count, skipped_count),
                                      time_start = start)
 
             if tfWriter:
                 tfWriter.close()
+    cv2.destroyAllWindows()
 
-if __name__ == '__main__':
-    try:
-        rosbag_to_tfrecord()
-    except rospy.ROSInterruptException: pass
-
-cv2.destroyAllWindows()
+if __name__ == "__main__":
+    rosbag_to_tfrecord()
