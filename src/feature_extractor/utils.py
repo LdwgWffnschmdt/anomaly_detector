@@ -185,7 +185,7 @@ def flatten(matrix):
     return matrix.reshape(-1, matrix.shape[-1])
 
 def read_features_file(filename):
-    """Reads metadata and features from a HDF5 or TFRecords file.
+    """Reads metadata and features from a HDF5 file.
     
     Args:
         filename (str): filename to read
@@ -194,81 +194,39 @@ def read_features_file(filename):
         Dict with Tuples containing metadata and features (all, no_anomaly and anomaly)
     """
     logging.info("Reading metadata and features from: %s" % filename)
+
+    # Check file extension
     fn, file_extension = os.path.splitext(filename)
-    if file_extension == ".h5":
-        with h5py.File(filename, "r") as hf:
-            # Parse metadata object
-            metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
-            features = np.array(hf["features"])
-            
-            # Get feature vectors of images labeled as anomaly free (label == 1)
-            metadata_no_anomaly = metadata[[m["label"] == 1 for m in metadata]]
-            features_no_anomaly = features[[m["label"] == 1 for m in metadata]]
-            
-            # Get feature vectors of images labeled as anomalous (label == 2)
-            metadata_anomaly = metadata[[m["label"] == 2 for m in metadata]]
-            features_anomaly = features[[m["label"] == 2 for m in metadata]]
+    if file_extension != ".h5":
+        raise ValueError("Filename has to be *.h5")
 
-            return _DictObjHolder({
-                "all": _DictObjHolder({
-                    "metadata": metadata,
-                    "features": features
-                }),
-                "no_anomaly": _DictObjHolder({
-                    "metadata": metadata_no_anomaly,
-                    "features": features_no_anomaly
-                }),
-                "anomaly": _DictObjHolder({
-                    "metadata": metadata_anomaly,
-                    "features": features_anomaly
-                })
-            })
-    elif file_extension == ".tfrecord":
-        raw_dataset = tf.data.TFRecordDataset(filename, compression_type="GZIP")
+    with h5py.File(filename, "r") as hf:
+        # Parse metadata object
+        metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
+        features = np.array(hf["features"])
         
-        # Create a dictionary describing the features.
-        feature_description = {
-            'metadata/location/translation/x'   : tf.io.FixedLenFeature([], tf.float32),
-            'metadata/location/translation/y'   : tf.io.FixedLenFeature([], tf.float32),
-            'metadata/location/translation/z'   : tf.io.FixedLenFeature([], tf.float32),
-            'metadata/location/rotation/x'      : tf.io.FixedLenFeature([], tf.float32),
-            'metadata/location/rotation/y'      : tf.io.FixedLenFeature([], tf.float32),
-            'metadata/location/rotation/z'      : tf.io.FixedLenFeature([], tf.float32),
-            'metadata/time'                     : tf.io.FixedLenFeature([], tf.float32), # TODO: Change to int64 for production
-            'metadata/label'                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-            'metadata/rosbag'                   : tf.io.FixedLenFeature([], tf.string),
-            'metadata/tfrecord'                 : tf.io.FixedLenFeature([], tf.string),
-            'metadata/feature_extractor'        : tf.io.FixedLenFeature([], tf.string),
-            'metadata/patch/x'                  : tf.io.FixedLenFeature([], tf.int64),
-            'metadata/patch/y'                  : tf.io.FixedLenFeature([], tf.int64),
-            'feature'                           : tf.io.FixedLenFeature([], tf.float32)
-        }
+        # Get feature vectors of images labeled as anomaly free (label == 1)
+        metadata_no_anomaly = metadata[[m["label"] == 1 for m in metadata]]
+        features_no_anomaly = features[[m["label"] == 1 for m in metadata]]
+        
+        # Get feature vectors of images labeled as anomalous (label == 2)
+        metadata_anomaly = metadata[[m["label"] == 2 for m in metadata]]
+        features_anomaly = features[[m["label"] == 2 for m in metadata]]
 
-        def _parse_function(example_proto):
-            # Parse the input tf.Example proto using the dictionary above.
-            example = tf.io.parse_single_example(example_proto, feature_description)
-            metadata = {
-                'location/translation/x'   : example['metadata/location/translation/x'],
-                'location/translation/y'   : example['metadata/location/translation/y'],
-                'location/translation/z'   : example['metadata/location/translation/z'],
-                'location/rotation/x'      : example['metadata/location/rotation/x'   ],
-                'location/rotation/y'      : example['metadata/location/rotation/y'   ],
-                'location/rotation/z'      : example['metadata/location/rotation/z'   ],
-                'time'                     : example['metadata/time'                  ],
-                'label'                    : example['metadata/label'                 ],
-                'rosbag'                   : example['metadata/rosbag'                ],
-                'tfrecord'                 : example['metadata/tfrecord'              ],
-                'feature_extractor'        : example['metadata/feature_extractor'     ],
-                'patch/x'                  : example['metadata/patch/x'               ],
-                'patch/y'                  : example['metadata/patch/y'               ]
-            }
-
-            feature = example['feature']
-            return metadata, feature
-
-        return raw_dataset.map(_parse_function)
-    else:
-        raise ValueError("Filename has to be *.h5 or *.tfrecord")
+        return _DictObjHolder({
+            "all": _DictObjHolder({
+                "metadata": metadata,
+                "features": features
+            }),
+            "no_anomaly": _DictObjHolder({
+                "metadata": metadata_no_anomaly,
+                "features": features_no_anomaly
+            }),
+            "anomaly": _DictObjHolder({
+                "metadata": metadata_anomaly,
+                "features": features_anomaly
+            })
+        })
 
 def _int64_feature(value):
     """Wrapper for inserting int64 features into Example proto."""

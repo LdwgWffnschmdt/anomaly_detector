@@ -41,7 +41,7 @@ class AnomalyModelBase(object):
         """Generate a model based on the features in features_file and save it to output_file
         
         Args:
-            features_file (str) : HDF5 or TFRecord file containing metadata and features (see feature_extractor for details)
+            features_file (str) : HDF5 file containing metadata and features (see feature_extractor for details)
             output_file (str): Output path for the model file (same path as features_file if not specified)
         """
         # Check parameters
