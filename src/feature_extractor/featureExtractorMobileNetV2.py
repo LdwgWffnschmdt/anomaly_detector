@@ -19,7 +19,10 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
         self.model.trainable = False
     
     def format_image(self, image):
-        """Resize the images to a fixed input size, and rescale the input channels to a range of [-1,1]"""
+        """Resize the images to a fixed input size, and
+        rescale the input channels to a range of [-1,1].
+        (According to https://www.tensorflow.org/tutorials/images/transfer_learning)
+        """
         image = tf.cast(image, tf.float32)
         image = (image/127.5) - 1
         image = tf.image.resize(image, (self.IMG_SIZE, self.IMG_SIZE))
