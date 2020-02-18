@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 from featureExtractorBase import FeatureExtractorBase
 
@@ -20,11 +21,12 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
     
     def format_image(self, image):
         """Resize the images to a fixed input size, and
-        rescale the input channels to a range of [-1,1].
+        rescale the input channels to a range of [-1, 1].
         (According to https://www.tensorflow.org/tutorials/images/transfer_learning)
         """
         image = tf.cast(image, tf.float32)
-        image = (image/127.5) - 1
+        #       \/ does the same #  image = (image / 127.5) - 1
+        image = preprocess_input(image) # https://github.com/keras-team/keras-applications/blob/master/keras_applications/imagenet_utils.py#L152
         image = tf.image.resize(image, (self.IMG_SIZE, self.IMG_SIZE))
         return image
 

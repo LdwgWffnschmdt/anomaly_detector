@@ -29,7 +29,7 @@ def rosbag_to_tfrecord():
     image_topic    = rospy.get_param("~image_topic"    , "/camera/color/image_raw")
     images_per_bin = rospy.get_param("~images_per_bin" , 10000)
     tf_map         = rospy.get_param("~tf_map"         , "map")
-    tf_base_link   = rospy.get_param("~tf_base_link"   , "base_link")
+    tf_base_link   = rospy.get_param("~tf_base_link"   , "base_link") # TODO: Change this to the RealSense frame
 
     # -2: labeling mode (show image and wait for input) [space]: No anomaly
     #                                                   [tab]  : Contains anomaly

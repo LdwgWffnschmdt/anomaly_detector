@@ -213,11 +213,19 @@ class FeatureExtractorBase(object):
         for s in map(lambda y: "%-40s | %s" % (y, str(out[y].shape)), sorted(list(out), key=lambda x:out[x].shape[1])):
             print(s)
 
-    def plot_model(self, model, dpi=96, to_file=None):
+    def plot_model(self, model, dpi=300, to_file=None):
         """ Plot a model to an image file """
+        # Set the default file location and name
         if to_file is None:
             to_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "Models", "%s.png" % self.NAME)
+
+        # Make sure the output directory exists
+        output_dir = os.path.dirname(to_file)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
         logging.info("Creating plot of model %s: %s" % (self.NAME, to_file))
+        
         tf.keras.utils.plot_model(
             model,
             to_file=to_file,

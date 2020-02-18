@@ -1,26 +1,24 @@
 import tensorflow as tf
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+from tensorflow.keras.applications.resnet_v2 import preprocess_input
 
 from featureExtractorBase import FeatureExtractorBase
 
-class FeatureExtractorMobileNetV2_Block6(FeatureExtractorBase):
-    """Feature extractor based on MobileNetV2 (trained on ImageNet).
-    Output layer: block_6_project_BN
-    Generates 14x14x64 feature vectors per image
+class FeatureExtractorResNet50V2(FeatureExtractorBase):
+    """Feature extractor based on ResNet50V2 (trained on ImageNet).
+    Generates 7x7x2048 feature vectors per image
     """
 
     def __init__(self):
         FeatureExtractorBase.__init__(self)
 
+        # More info on image size: https://github.com/tensorflow/models/blob/master/research/slim/nets/resnet_v2.py#L128
+        # TODO: Maybe increase image size to also increase spatial output resolution
         self.IMG_SIZE = 224 # All images will be resized to 224x224
 
-        # Create the base model from the pre-trained model MobileNet V2
-        model_full = tf.keras.applications.MobileNetV2(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
-                                                       include_top=False,
-                                                       weights="imagenet")
-        model_full.trainable = False
-
-        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer("block_6_project_BN").output)   
+        # Create the base model from the pre-trained model ResNet50V2
+        self.model = tf.keras.applications.ResNet50V2(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
+                                                      include_top=False,
+                                                      weights="imagenet")
         self.model.trainable = False
     
     def format_image(self, image):
@@ -39,6 +37,6 @@ class FeatureExtractorMobileNetV2_Block6(FeatureExtractorBase):
 
 # Only for tests
 if __name__ == "__main__":
-    extractor = FeatureExtractorMobileNetV2_Block6()
+    extractor = FeatureExtractorResNet50V2()
     extractor.plot_model(extractor.model)
-    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
+    # extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
