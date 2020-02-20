@@ -2,15 +2,20 @@
 
 from anomaly_model import AnomalyModelSVG
 import feature_extractor.utils as utils
+from common.imageLocationUtility import ImageLocationUtility
 
 class AnomalyModelSVGPos(AnomalyModelSVG):
     """Anomaly model formed by a Single Variate Gaussian (SVG) with model parameters Θ_SVG = (μ,σ²)
     Contains the location of each patch as two additional feature vector dimensions
     Reference: https://www.mdpi.com/1424-8220/16/11/1904/htm
     """
+    def __init__(self):
+        AnomalyModelSVG.__init__(self)
+        self.ilu = ImageLocationUtility()
+    
     def generate_model(self, metadata, features):
         # Add location to features
-        features = utils.add_location_to_features(metadata, features)
+        features = self.ilu.add_location_to_features(metadata, features)
         AnomalyModelSVG.generate_model(self, metadata, features)
 
 # Only for tests
