@@ -39,7 +39,7 @@ def get_image_transformation_matrix(w, h):
     # The transformation matrix is defined by the for corners of
     # the image and their real world coordinates relative to the camera
     src = np.float32([[ 0, 0], [w, 0], [ 0,   h], [w,   h]])
-    dst = np.float32([[-3, 6], [3, 6], [-0.9, 1], [0.9, 1]])
+    dst = np.float32([[-3, 6], [3, 6], [-0.9, 1], [0.9, 1]]) # Measured by hand
     return cv2.getPerspectiveTransform(src, dst) # The transformation matrix
 
 def get_inverse_image_transformation_matrix(w, h):

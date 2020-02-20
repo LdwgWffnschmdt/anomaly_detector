@@ -2,6 +2,7 @@
 import os
 import logging
 import time
+import traceback
 
 import tensorflow as tf
 import tensorflow_hub as hub
@@ -94,6 +95,7 @@ class FeatureExtractorBase(object):
 
             # IO stuff
             h5Writer = h5py.File(output_file, "w")
+            
             metadata_dataset = h5Writer.create_dataset("metadata",
                                                         shape=(total,),
                                                         dtype=h5py.string_dtype(),
@@ -101,53 +103,76 @@ class FeatureExtractorBase(object):
                                                         compression_opts=compression_opts)
             feature_dataset  = None
         
+            # Add metadata to the output file
+            h5Writer.attrs["Extractor"]                 = self.NAME
+            h5Writer.attrs["Files"]                     = filenames
+            h5Writer.attrs["Batch size"]                = batch_size
+            h5Writer.attrs["Compression"]               = compression
+            if compression_opts is not None:
+                h5Writer.attrs["Compression options"]   = compression_opts
+
+            computer_info = utils.getComputerInfo()
+            for key, value in computer_info.items():
+                h5Writer.attrs[key] = value
+            h5Writer.attrs["Start"] = time.time()
+
             # For the progress bar
             counter = 0
             start = time.time()
 
-            for batch in batches:
-                if h.interrupted:
-                    logging.warning("Interrupted!")
-                    return False
-                
-                # Extract features
-                feature_batch = self.extract_batch(batch[0])
+            try:
+                for batch in batches:
+                    if h.interrupted:
+                        logging.warning("Interrupted!")
+                        raise KeyboardInterrupt()
+                    
+                    # Extract features
+                    feature_batch = self.extract_batch(batch[0])
 
-                # Add features to list
-                for index, feature_vector in enumerate(feature_batch):
-                    counter += 1
-                    if feature_dataset is None:
-                        feature_dataset = h5Writer.create_dataset("features",
-                                                                    shape=(total,
-                                                                            feature_vector.shape[0],
-                                                                            feature_vector.shape[1],
-                                                                            feature_vector.shape[2]),
-                                                                    dtype=np.float32,
-                                                                    compression=compression,
-                                                                    compression_opts=compression_opts)
-                    feature_dataset[counter - 1] = feature_vector.numpy()
-                    metadata_dataset[counter - 1] = str({
-                        "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
-                        "location/translation/y": batch[1]["metadata/location/translation/y"][index].numpy(),
-                        "location/translation/z": batch[1]["metadata/location/translation/z"][index].numpy(),
-                        "location/rotation/x"   : batch[1]["metadata/location/rotation/x"][index].numpy(),
-                        "location/rotation/y"   : batch[1]["metadata/location/rotation/y"][index].numpy(),
-                        "location/rotation/z"   : batch[1]["metadata/location/rotation/z"][index].numpy(),
-                        "time"                  : batch[1]["metadata/time"][index].numpy(),
-                        "label"                 : batch[1]["metadata/label"][index].numpy(),
-                        "rosbag"                : batch[1]["metadata/rosbag"][index].numpy(),
-                        "tfrecord"              : batch[1]["metadata/tfrecord"][index].numpy(),
-                        "feature_extractor"     : self.NAME
-                    })
-                
-                # Print progress
-                utils.print_progress(counter,
+                    # Add features to list
+                    for index, feature_vector in enumerate(feature_batch):
+                        counter += 1
+                        if feature_dataset is None:
+                            feature_dataset = h5Writer.create_dataset("features",
+                                                                        shape=(total,
+                                                                                feature_vector.shape[0],
+                                                                                feature_vector.shape[1],
+                                                                                feature_vector.shape[2]),
+                                                                        dtype=np.float32,
+                                                                        compression=compression,
+                                                                        compression_opts=compression_opts)
+                        feature_dataset[counter - 1] = feature_vector.numpy()
+                        metadata_dataset[counter - 1] = str({
+                            "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
+                            "location/translation/y": batch[1]["metadata/location/translation/y"][index].numpy(),
+                            "location/translation/z": batch[1]["metadata/location/translation/z"][index].numpy(),
+                            "location/rotation/x"   : batch[1]["metadata/location/rotation/x"][index].numpy(),
+                            "location/rotation/y"   : batch[1]["metadata/location/rotation/y"][index].numpy(),
+                            "location/rotation/z"   : batch[1]["metadata/location/rotation/z"][index].numpy(),
+                            "time"                  : batch[1]["metadata/time"][index].numpy(),
+                            "label"                 : batch[1]["metadata/label"][index].numpy(),
+                            "rosbag"                : batch[1]["metadata/rosbag"][index].numpy(),
+                            "tfrecord"              : batch[1]["metadata/tfrecord"][index].numpy(),
+                            "feature_extractor"     : self.NAME
+                        })
+                    
+                    # Print progress
+                    utils.print_progress(counter,
                                      total,
                                      prefix = "Extracting features:",
                                      suffix = "(%i / %i)" % (counter, total),
                                      time_start = start)
-
-        h5Writer.close()
+            except:
+                h5Writer.attrs["Exception"] = traceback.format_exc()
+                return False
+            finally:
+                end = time.time()
+                h5Writer.attrs["End"] = end
+                h5Writer.attrs["Duration"] = end - start
+                h5Writer.attrs["Duration (formatted)"] = utils.format_duration(end - start)
+                h5Writer.attrs["Number of frames extracted"] = counter
+                h5Writer.attrs["Number of total frames"] = total
+                h5Writer.close()
 
         return True
 
