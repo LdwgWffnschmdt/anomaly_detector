@@ -5,16 +5,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import feature_extractor.utils as utils
+from common import ImageLocationUtility, FeatureArray
 
 class AnomalyModelTest(object):
     
     def __init__(self, model, features_file="/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.h5",
                               model_file="", add_locations_to_features=False):
         self.model = model
+        self.ilu = ImageLocationUtility()
 
         logging.info("Initializing test for anomaly model: %s" % model.NAME)
-
-        self.file_content_flat = None
 
         self.mahalanobis_no_anomaly = None
         self.mahalanobis_anomaly = None
@@ -26,14 +26,14 @@ class AnomalyModelTest(object):
             raise ValueError("Features file does not exist (%s)" % features_file)
                 
         # Read file
-        self.file_content = utils.read_features_file(features_file)
+        self.features = FeatureArray(features_file)
         
         if model_file == "":
             model_file = os.path.abspath(features_file.replace(".h5", "")) + "." + model.NAME + ".h5"
         
         # Load or generate model if it does not exist yet
         if not os.path.exists(model_file) or not os.path.isfile(model_file):
-            if model.generate_model(self.file_content.no_anomaly.metadata, self.file_content.no_anomaly.features) == False:
+            if model.generate_model(self.features.no_anomaly) == False:
                 # Save model
                 model.save_model_to_file(os.path.abspath(model_file))
             else:
@@ -44,39 +44,15 @@ class AnomalyModelTest(object):
         
         # Add location to features (AFTER model generation, otherwise they would be added twice!)
         if add_locations_to_features:
-            self.file_content.all.features        = utils.add_location_to_features(self.file_content.all.metadata,        self.file_content.all.features)
-            self.file_content.no_anomaly.features = utils.add_location_to_features(self.file_content.no_anomaly.metadata, self.file_content.no_anomaly.features)
-            self.file_content.anomaly.features    = utils.add_location_to_features(self.file_content.anomaly.metadata,    self.file_content.anomaly.features)
-
-    
-    def getFlattened(self):
-        """ Calculate the flattened version of file_content """
-        logging.info("Flattening metadata and features")
-        self.file_content_flat = utils._DictObjHolder({
-            "all": utils._DictObjHolder({
-                "metadata": utils.flatten(self.file_content.all.metadata),
-                "features": utils.flatten(self.file_content.all.features)
-            }),
-            "no_anomaly": utils._DictObjHolder({
-                "metadata": utils.flatten(self.file_content.no_anomaly.metadata),
-                "features": utils.flatten(self.file_content.no_anomaly.features)
-            }),
-            "anomaly": utils._DictObjHolder({
-                "metadata": utils.flatten(self.file_content.anomaly.metadata),
-                "features": utils.flatten(self.file_content.anomaly.features)
-            })
-        })
+            self.features.add_locations_to_features()
 
     def calculateMahalobisDistances(self):
         """ Calculate all the Mahalanobis distances """
-        if self.file_content_flat is None:
-            self.getFlattened()
-        
         logging.info("Calculating Mahalanobis distances of %i features with and %i features without anomalies" % \
-            (len(self.file_content_flat.no_anomaly.features), len(self.file_content_flat.anomaly.features)))
+            (len(self.features.no_anomaly.flatten()), len(self.features.anomaly.flatten())))
 
-        self.mahalanobis_no_anomaly = np.array(list(map(self.model._mahalanobis_distance, self.file_content_flat.no_anomaly.features))) # 75.49480115577167
-        self.mahalanobis_anomaly    = np.array(list(map(self.model._mahalanobis_distance, self.file_content_flat.anomaly.features)))   # 76.93620254133627
+        self.mahalanobis_no_anomaly = np.array(list(map(self.model._mahalanobis_distance, self.features.no_anomaly.flatten()))) # 75.49480115577167
+        self.mahalanobis_anomaly    = np.array(list(map(self.model._mahalanobis_distance, self.features.anomaly.flatten())))    # 76.93620254133627
 
         self.mahalanobis_no_anomaly_max = np.amax(self.mahalanobis_no_anomaly)
         self.mahalanobis_anomaly_max    = np.amax(self.mahalanobis_anomaly)
@@ -93,10 +69,10 @@ class AnomalyModelTest(object):
         
         fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 
-        ax1.set_title("No anomaly (%i)" % len(self.file_content_flat.no_anomaly.features))
+        ax1.set_title("No anomaly (%i)" % len(self.features.no_anomaly.flatten()))
         ax1.hist(self.mahalanobis_no_anomaly, bins=50)
 
-        ax2.set_title("Anomaly (%i)" % len(self.file_content_flat.anomaly.features))
+        ax2.set_title("Anomaly (%i)" % len(self.features.anomaly.flatten()))
         ax2.hist(self.mahalanobis_anomaly, bins=50)
 
         fig.suptitle("Mahalanobis distances")
@@ -126,7 +102,7 @@ class AnomalyModelTest(object):
         if feature_to_text_func is None:
             feature_to_text_func = _default_feature_to_text
 
-        utils.visualize(self.file_content.all.metadata, self.file_content.all.features,
+        utils.visualize(self.features,
                         feature_to_color_func=feature_to_color_func,
                         feature_to_text_func=feature_to_text_func,
                         pause_func=pause_func)

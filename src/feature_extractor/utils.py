@@ -6,7 +6,6 @@ import sys
 import time
 import signal
 
-import ast
 import tensorflow as tf
 import numpy as np
 import h5py
@@ -78,50 +77,6 @@ def flatten(matrix):
     """
     return matrix.reshape(-1, matrix.shape[-1])
 
-def read_features_file(filename):
-    """Reads metadata and features from a HDF5 file.
-    
-    Args:
-        filename (str): filename to read
-
-    Returns:
-        Dict with Tuples containing metadata and features (all, no_anomaly and anomaly)
-    """
-    logging.info("Reading metadata and features from: %s" % filename)
-
-    # Check file extension
-    fn, file_extension = os.path.splitext(filename)
-    if file_extension != ".h5":
-        raise ValueError("Filename has to be *.h5")
-
-    with h5py.File(filename, "r") as hf:
-        # Parse metadata object
-        metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
-        features = np.array(hf["features"])
-        
-        # Get feature vectors of images labeled as anomaly free (label == 1)
-        metadata_no_anomaly = metadata[[m["label"] == 1 for m in metadata]]
-        features_no_anomaly = features[[m["label"] == 1 for m in metadata]]
-        
-        # Get feature vectors of images labeled as anomalous (label == 2)
-        metadata_anomaly = metadata[[m["label"] == 2 for m in metadata]]
-        features_anomaly = features[[m["label"] == 2 for m in metadata]]
-
-        return _DictObjHolder({
-            "all": _DictObjHolder({
-                "metadata": metadata,
-                "features": features
-            }),
-            "no_anomaly": _DictObjHolder({
-                "metadata": metadata_no_anomaly,
-                "features": features_no_anomaly
-            }),
-            "anomaly": _DictObjHolder({
-                "metadata": metadata_anomaly,
-                "features": features_anomaly
-            })
-        })
-
 def _int64_feature(value):
     """Wrapper for inserting int64 features into Example proto."""
     if not isinstance(value, list):
@@ -151,18 +106,17 @@ def _bytes_feature(value):
 # Output helper #
 #################
 
-def visualize(metadata, features, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=True):
+def visualize(features, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=True):
     """Visualize features on the source image
 
     Args:
-        metadata (list): Array of metadata for the features
-        features (list): Array of features as extracted by a FeatureExtractor
+        features (FeaturesArray): Array of features as extracted by a FeatureExtractor
         feature_to_color_func (function): Function converting a feature to a color (b, g, r)
         feature_to_text_func (function): Function converting a feature to a string
         pause_func (function): Function converting a feature to a boolean that pauses the video
         show_grid (bool): Overlay real world coordinate grid
     """
-    total, height, width, depth = features.shape
+    total, height, width = features.shape
     
     ### Set up window
     cv2.namedWindow('image')
@@ -196,15 +150,13 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
     # fig.show()
     # fig.canvas.draw()
 
-    for i, feature_3d in enumerate(features):
-        meta = metadata[i]
-        
-        if tfrecord != meta["tfrecord"]:
-            if not "2020-02-06-17-17-25.tfrecord" in meta["tfrecord"]: # TODO: Remove for production
+    for i, feature_2d in enumerate(features):
+        if tfrecord != feature_2d[0,0].tfrecord:
+            if not "2020-02-06-17-17-25.tfrecord" in feature_2d[0,0].tfrecord: # TODO: Remove for production
                 continue
-            tfrecord = meta["tfrecord"]
+            tfrecord = feature_2d[0,0].tfrecord
             tfrecordCounter = 0
-            image_dataset = load_dataset(meta["tfrecord"]).as_numpy_iterator()
+            image_dataset = load_dataset(feature_2d[0,0].tfrecord).as_numpy_iterator()
         else:
             tfrecordCounter += 1
 
@@ -233,7 +185,7 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
 
         for x in range(width):
             for y in range(height):
-                feature = feature_3d[y,x,:]
+                feature = feature_2d[y,x]
 
                 # ax.plot(feature[-2], feature[-1], 'r+')
 
@@ -241,10 +193,10 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
                 p2 = (p1[0] + patch_size[0], p1[1] + patch_size[1])
                 
                 if feature_to_color_func is not None:
-                    cv2.rectangle(overlay, p1, p2, feature_to_color_func(meta, feature), -1)
+                    cv2.rectangle(overlay, p1, p2, feature_to_color_func(feature), -1)
 
                 if feature_to_text_func is not None:
-                    text = str(feature_to_text_func(meta, feature))
+                    text = str(feature_to_text_func(feature))
                     cv2.putText(overlay, text,
                         (p1[0] + 2, p1[1] + patch_size[1] - 2),
                         font,
@@ -252,11 +204,11 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
                         (0, 0, 255),
                         thickness, lineType=cv2.LINE_AA)
                 
-                if pause_func is not None and pause_func(meta, feature):
+                if pause_func is not None and pause_func(feature):
                     pause = True
         
         if show_grid:
-            relative_grid = ilu.absolute_to_relative(absolute_locations, meta)
+            relative_grid = ilu.absolute_to_relative(absolute_locations, feature_2d[0,0].camera_position, feature_2d[0,0].camera_rotation)
             image_grid = ilu.relative_to_image(relative_grid, image.shape[1], image.shape[0])
         
             for a in range(image_grid.shape[0]):
@@ -264,7 +216,7 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
                     pos = (int(image_grid[a][b][0]), int(image_grid[a][b][1]))
                     if pos[0] < 0 or pos[0] > image.shape[1] or pos[1] < 0 or pos[1] > image.shape[0]:
                         continue
-                    cv2.circle(overlay, pos, 1, (255, 255, 255), -1, lineType=cv2.LINE_AA)
+                    cv2.circle(overlay, pos, 2, (255, 255, 255), -1, lineType=cv2.LINE_AA)
                     
                     cv2.putText(overlay, "%.1f / %.1f" % (absolute_locations[a][b][0], absolute_locations[a][b][1]),
                         (pos[0] + 3, pos[1] + 2),
@@ -280,7 +232,7 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
         # Following line overlays transparent overlay over the image
         image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
         
-        image_write_label(image_new, meta["label"])
+        image_write_label(image_new, feature_2d[0,0].label)
         
         cv2.imshow("image", image_new)
         key = cv2.waitKey(0 if pause else cv2.getTrackbarPos('delay','image'))

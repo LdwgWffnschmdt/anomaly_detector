@@ -21,33 +21,33 @@ class AnomalyModelSVG(AnomalyModelBase):
         self._mean      = None # Mean μ
         self.threshold  = None # Threshold for classification
     
-    def classify(self, feature_vector, threshold=None):
+    def classify(self, feature, threshold=None):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
         and the single variate Gaussian distribution along each dimension.
         """
         if threshold is None:
             threshold = self.threshold
-        return self._mahalanobis_distance(feature_vector) > threshold
+        return self._mahalanobis_distance(feature) > threshold
     
-    def _mahalanobis_distance(self, feature_vector):
+    def _mahalanobis_distance(self, feature):
         """Calculate the Mahalanobis distance between the input and the model"""
         assert not self._var is None and not self._mean is None, \
             "You need to load a model before computing a Mahalanobis distance"
-        assert feature_vector.shape == self._var.shape == self._mean.shape, \
-            "Shapes don't match (x: %s, μ: %s, σ²: %s)" % (feature_vector.shape, self._mean.shape, self._var.shape)
+        assert feature.shape == self._var.shape == self._mean.shape, \
+            "Shapes don't match (x: %s, μ: %s, σ²: %s)" % (feature.shape, self._mean.shape, self._var.shape)
         
-        return np.sqrt(np.sum((feature_vector - self._mean) **2 / self._var))
+        return np.sqrt(np.sum((feature - self._mean) **2 / self._var))
         
         ### scipy implementation is way slower
         # if self._varI is None:
         #     self._varI = np.linalg.inv(np.diag(self._var))
-        # return distance.mahalanobis(feature_vector, self._mean, self._varI)
+        # return distance.mahalanobis(feature, self._mean, self._varI)
 
-    def generate_model(self, metadata, features):
+    def generate_model(self, features):
         # Reduce features to simple list
-        features_flat = utils.flatten(features)
+        features_flat = features.flatten()
 
-        logging.info("Generating a Single Variate Gaussian (SVG) from %i feature vectors of length %i" % (features_flat.shape[0], features_flat.shape[1]))
+        logging.info("Generating a Single Variate Gaussian (SVG) from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
 
         # Get the variance
         logging.info("Calculating the variance")

@@ -2,23 +2,30 @@ import os
 import logging
 
 import feature_extractor.utils as utils
+from common import FeatureArray
 
 class AnomalyModelBase(object):
     
     def __init__(self):
         self.NAME = self.__class__.__name__.replace("AnomalyModel", "")
     
-    def generate_model(self, metadata, features):
+    def generate_model(self, features):
         """Generate a model based on the features and metadata
         
         Args:
-            metadata (list): Array of metadata for the features
-            features (list): Array of features as extracted by a FeatureExtractor
+            features (FeaturesArray): Array of features as extracted by a FeatureExtractor
         """
         raise NotImplementedError
         
-    def classify(self, feature_vector):
-        """ Classify a single feature vector based on the loaded model """
+    def classify(self, feature):
+        """Classify a single feature based on the loaded model
+        
+        Args:
+            feature (Feature): A single feature
+
+        Returns:
+            A label
+        """
         raise NotImplementedError
     
     def load_model_from_file(self, model_file):
@@ -53,11 +60,10 @@ class AnomalyModelBase(object):
             logging.info("Output file set to %s" % output_file)
         
         # Read file
-        file_content = utils.read_features_file(features_file)
+        features = FeatureArray(features_file)
 
         # Generate model
-        if self.generate_model(file_content["no_anomaly"].metadata,
-                               file_content["no_anomaly"].features) == False:
+        if self.generate_model(features.no_anomaly) == False:
             logging.info("Could not generate model.")
             return False
 

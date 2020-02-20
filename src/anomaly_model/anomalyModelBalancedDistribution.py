@@ -31,7 +31,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         self._covI = None   # Inverse of covariance matrix
 
     
-    def classify(self, feature_vector, threshold_classification=None):
+    def classify(self, feature, threshold_classification=None):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
         and the Balanced Distribution.
         """
@@ -41,7 +41,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         if self._mean is None or self._covI is None:
             self._calculate_mean_and_covariance()
 
-        return dist > threshold_classification
+        return self._mahalanobis_distance(feature) > threshold_classification
     
     def _calculate_mean_and_covariance(self):
         """Calculate mean and inverse of covariance of the "normal" distribution"""
@@ -52,22 +52,22 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         cov = np.cov(self.normal_distribution, rowvar=False)                        # Covariance matrix
         self._covI = np.linalg.pinv(cov)                                            # Inverse of covariance matrix
     
-    def _mahalanobis_distance(self, feature_vector):
+    def _mahalanobis_distance(self, feature):
         """Calculate the Mahalanobis distance between the input and the model"""
         assert not self._covI is None and not self._mean is None, \
             "You need to load a model before computing a Mahalanobis distance"
 
-        assert feature_vector.shape[0] == self._mean.shape[0] == self._covI.shape[0] == self._covI.shape[1], \
-            "Shapes don't match (x: %s, μ: %s, Σ¯¹: %s)" % (feature_vector.shape, self._mean.shape, self._covI.shape)
+        assert feature.shape[0] == self._mean.shape[0] == self._covI.shape[0] == self._covI.shape[1], \
+            "Shapes don't match (x: %s, μ: %s, Σ¯¹: %s)" % (feature.shape, self._mean.shape, self._covI.shape)
         
-        return distance.mahalanobis(feature_vector, self._mean, self._covI)
+        return distance.mahalanobis(feature, self._mean, self._covI)
 
 
-    def generate_model(self, metadata, features):
+    def generate_model(self, features):
         # Reduce features to simple list
-        features_flat = utils.flatten(features)
+        features_flat = features.flatten
 
-        logging.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (features_flat.shape[0], features_flat.shape[1]))
+        logging.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
 
         assert features_flat.shape[0] > self.initial_normal_features, \
             "Not enough initial features provided. Please decrease initial_normal_features (%i)" % self.initial_normal_features
@@ -85,17 +85,17 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
             utils.print_progress(0, 1, prefix = "%i / %i" % (self.initial_normal_features, features_flat.shape[0]))
             
             # Loop over the remaining feature vectors
-            for index, feature_vector in enumerate(features_flat[self.initial_normal_features:]):
+            for index, feature in enumerate(features_flat[self.initial_normal_features:]):
                 if h.interrupted:
                     logging.warning("Interrupted!")
                     self.normal_distribution = None
                     return False
 
                 # Calculate the Mahalanobis distance to the "normal" distribution
-                dist = self._mahalanobis_distance(feature_vector)
+                dist = self._mahalanobis_distance(feature)
                 if dist > self.threshold_learning:
                     # Add the vector to the "normal" distribution
-                    self.normal_distribution = np.append(self.normal_distribution, [feature_vector], axis=0)
+                    self.normal_distribution = np.append(self.normal_distribution, [feature], axis=0)
 
                     # Recalculate mean and covariance
                     self._calculate_mean_and_covariance()
@@ -117,13 +117,13 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
             utils.print_progress(0, 1, prefix = "%i / %i" % (self.initial_normal_features, features_flat.shape[0]))
             start = time.time()
 
-            for index, feature_vector in enumerate(self.normal_distribution):
+            for index, feature in enumerate(self.normal_distribution):
                 if h.interrupted:
                     logging.warning("Interrupted!")
                     self.normal_distribution = None
                     return False
 
-                prune = self._mahalanobis_distance(feature_vector) < self.threshold_learning * self.pruning_parameter
+                prune = self._mahalanobis_distance(feature) < self.threshold_learning * self.pruning_parameter
                 prune_filter.append(prune)
 
                 if prune:

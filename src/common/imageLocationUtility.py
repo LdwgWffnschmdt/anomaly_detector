@@ -142,28 +142,26 @@ class ImageLocationUtility(object):
         else:
             raise ValueError("Input has to be a an array of shape (w, h, 2) or (2,)")
 
-    def relative_to_absolute(self, relative_location, metadata):
+    def relative_to_absolute(self, relative_location, camera_position, camera_rotation):
         """Transform a relative location to an absolute location
 
         Args:
-            relative_location (array): Array of shape (w, h, 2) or (2)
-                                    containing the location(s)
-                                    relative to the camera
-            metadata (dict): A metadata dict containing information
-                            about the camera location
+            relative_location (array): Array of shape (w, h, 2) or (2,)
+                                       containing the location(s)
+                                       relative to the camera
+            camera_position (array): [x, y] array with the camera location
+            camera_rotation (float): Camera rotation around z-axis
 
         Returns:
-            Array of shape (w, h, 2) or (2) containing the absolute location(s)
+            Array of shape (w, h, 2) or (2,) containing the absolute location(s)
         """
-        camera_position = np.array([metadata["location/translation/x"],
-                                    metadata["location/translation/y"]])
 
         # Construct an inverse 2D rotation matrix
-        _s = np.sin(metadata["location/rotation/z"] - np.pi / 2.)
-        _c = np.cos(metadata["location/rotation/z"] - np.pi / 2.)
+        _s = np.sin(camera_rotation - np.pi / 2.)
+        _c = np.cos( - np.pi / 2.)
 
         R = np.array([[_c, -_s],
-                    [_s,  _c]])
+                      [_s,  _c]])
 
         def _to_absolute(p):
             return camera_position + R.dot(p)
@@ -175,29 +173,27 @@ class ImageLocationUtility(object):
         else:
             raise ValueError("Input has to be a an array of shape (w, h, 2) or (2,)")
 
-    def absolute_to_relative(self, absolute_location, metadata):
+    def absolute_to_relative(self, absolute_location, camera_position, camera_rotation):
         """Transform an absolute location to a relative location
 
         Args:
-            absolute_location (array): Array of shape (w, h, 2) or (2)
-                                    containing the absolute location(s)
-            metadata (dict): A metadata dict containing information
-                            about the camera location
+            absolute_location (array): Array of shape (w, h, 2) or (2,)
+                                       containing the absolute location(s)
+            camera_position (array): [x, y] array with the camera location
+            camera_rotation (float): Camera rotation around z-axis
 
         Returns:
-            Array of shape (w, h, 2) or (2) containing the
+            Array of shape (w, h, 2) or (2,) containing the
             location(s) relative to the camera
         """
-        camera_position = np.array([metadata["location/translation/x"],
-                                    metadata["location/translation/y"]])
-
+        
         # Construct an inverse 2D rotation matrix
-        _s = np.sin(metadata["location/rotation/z"] - np.pi / 2.)
-        _c = np.cos(metadata["location/rotation/z"] - np.pi / 2.)
+        _s = np.sin(camera_rotation - np.pi / 2.)
+        _c = np.cos(camera_rotation - np.pi / 2.)
 
         # R is orthogonal --> transpose and inverse are the same
         R_inv = np.array([[_c , _s],
-                        [-_s, _c]])
+                          [-_s, _c]])
 
         def _to_relative(p):
             return R_inv.dot(p - camera_position)
@@ -208,43 +204,3 @@ class ImageLocationUtility(object):
             return _to_relative(absolute_location)
         else:
             raise ValueError("Input has to be a an array of shape (w, h, 2) or (2,)")
-
-    def get_locations_for_features(self, metadata, features):
-        """Calculate the real world coordinates of every patch
-        
-        Args:
-            metadata (list): Array of metadata for the features
-            features (list): Array of features as extracted by a FeatureExtractor
-
-        Returns:
-            Real world coordinates of every patch
-        """
-        logging.info("Calculating locations of every patch")
-        total, h, w, depth = features.shape
-        
-        image_locations = self.span_grid(w, h, offset_x=0.5, offset_y=0.5)
-        relative_locations = self.image_to_relative(image_locations)
-
-        absolute_locations = np.zeros((total, h, w, 2))
-
-        for i, feature_3d in enumerate(features):
-            meta = metadata[i]
-            absolute_locations[i] = self.relative_to_absolute(relative_locations, meta)
-
-        return absolute_locations
-
-    def add_location_to_features(self, metadata, features):
-        """Calculate the real world coordinates of every patch and add
-        these to the feature vectors
-        
-        Args:
-            metadata (list): Array of metadata for the features
-            features (list): Array of features as extracted by a FeatureExtractor
-
-        Returns:
-            A new features list with the coordinates added as the
-            last two feature dimensions
-        """
-        logging.info("Adding locations as feature dimensions")
-        absolute_locations = self.get_locations_for_features(metadata, features)
-        return np.concatenate([features, absolute_locations], axis=3)

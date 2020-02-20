@@ -9,17 +9,12 @@ class AnomalyModelBalancedDistributionPos(AnomalyModelBalancedDistribution):
     Contains the location of each patch as two additional feature vector dimensions
     Reference: https://www.mdpi.com/2076-3417/9/4/757
     """
-    def __init__(self, initial_normal_features=1000, threshold_learning=20, threshold_classification=5, pruning_parameter=0.5):
-        AnomalyModelBalancedDistribution.__init__(self, initial_normal_features=initial_normal_features,
-                                                        threshold_learning=threshold_learning,
-                                                        threshold_classification=threshold_classification,
-                                                        pruning_parameter=pruning_parameter)
-        self.ilu = ImageLocationUtility()
-
-    def generate_model(self, metadata, features):
+    
+    def generate_model(self, features):
         # Add location to features
-        features = self.ilu.add_location_to_features(metadata, features)
-        AnomalyModelBalancedDistribution.generate_model(self, metadata, features)
+        features.calculate_locations()
+        features.add_location_as_feature_dimension()
+        AnomalyModelBalancedDistribution.generate_model(self, features)
 
 # Only for tests
 if __name__ == "__main__":

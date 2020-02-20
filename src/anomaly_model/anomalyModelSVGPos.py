@@ -9,14 +9,12 @@ class AnomalyModelSVGPos(AnomalyModelSVG):
     Contains the location of each patch as two additional feature vector dimensions
     Reference: https://www.mdpi.com/1424-8220/16/11/1904/htm
     """
-    def __init__(self):
-        AnomalyModelSVG.__init__(self)
-        self.ilu = ImageLocationUtility()
     
-    def generate_model(self, metadata, features):
+    def generate_model(self, features):
         # Add location to features
-        features = self.ilu.add_location_to_features(metadata, features)
-        AnomalyModelSVG.generate_model(self, metadata, features)
+        features.calculate_locations()
+        features.add_location_as_feature_dimension()
+        AnomalyModelSVG.generate_model(self, features)
 
 # Only for tests
 if __name__ == "__main__":
