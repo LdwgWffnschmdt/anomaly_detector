@@ -2,6 +2,8 @@ import os
 import logging
 
 import numpy as np
+import matplotlib.pyplot as plt
+
 import feature_extractor.utils as utils
 
 class AnomalyModelTest(object):
@@ -42,9 +44,9 @@ class AnomalyModelTest(object):
         
         # Add location to features (AFTER model generation, otherwise they would be added twice!)
         if add_locations_to_features:
-            self.file_content.all.features        = utils.addLocationToFeatures(self.file_content.all.metadata,        self.file_content.all.features)
-            self.file_content.no_anomaly.features = utils.addLocationToFeatures(self.file_content.no_anomaly.metadata, self.file_content.no_anomaly.features)
-            self.file_content.anomaly.features    = utils.addLocationToFeatures(self.file_content.anomaly.metadata,    self.file_content.anomaly.features)
+            self.file_content.all.features        = utils.add_location_to_features(self.file_content.all.metadata,        self.file_content.all.features)
+            self.file_content.no_anomaly.features = utils.add_location_to_features(self.file_content.no_anomaly.metadata, self.file_content.no_anomaly.features)
+            self.file_content.anomaly.features    = utils.add_location_to_features(self.file_content.anomaly.metadata,    self.file_content.anomaly.features)
 
     
     def getFlattened(self):
@@ -91,10 +93,10 @@ class AnomalyModelTest(object):
         
         fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 
-        ax1.set_title("No anomaly (%i)" % len(features_no_anomaly_flat))
+        ax1.set_title("No anomaly (%i)" % len(self.file_content_flat.no_anomaly.features))
         ax1.hist(self.mahalanobis_no_anomaly, bins=50)
 
-        ax2.set_title("Anomaly (%i)" % len(features_anomaly_flat))
+        ax2.set_title("Anomaly (%i)" % len(self.file_content_flat.anomaly.features))
         ax2.hist(self.mahalanobis_anomaly, bins=50)
 
         fig.suptitle("Mahalanobis distances")

@@ -10,7 +10,7 @@ class AnomalyModelSVGPos(AnomalyModelSVG):
     """
     def generate_model(self, metadata, features):
         # Add location to features
-        features = utils.addLocationToFeatures(metadata, features)
+        features = utils.add_location_to_features(metadata, features)
         AnomalyModelSVG.generate_model(self, metadata, features)
 
 # Only for tests

@@ -20,13 +20,13 @@ logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=log
 # Meta + Feat #
 ###############
 
-def getImageTransformationMatrix(w, h):
+def get_image_transformation_matrix(w, h):
     """Calculate the matrix that will transform an input of
     given width and height to relative real world coordinates
 
     Args:
-        w (int): Width of the input
-        h (int): Height of the input
+        w (int): Width of the image
+        h (int): Height of the image
 
     Returns:
         A Matrix that will convert image coordinates to
@@ -39,65 +39,167 @@ def getImageTransformationMatrix(w, h):
     # The transformation matrix is defined by the for corners of
     # the image and their real world coordinates relative to the camera
     src = np.float32([[ 0, 0], [w, 0], [ 0,   h], [w,   h]])
-    dst = np.float32([[-3, 6], [3, 6], [-1, 0.7], [1, 0.7]])
+    dst = np.float32([[-3, 6], [3, 6], [-0.9, 1], [0.9, 1]])
     return cv2.getPerspectiveTransform(src, dst) # The transformation matrix
 
-def getRelativeLocations(w, h):
-    """Calculates an array of shape (w, h, 2) containing the
-    respective relative real world coordinates
+def get_inverse_image_transformation_matrix(w, h):
+    """Calculate the inverse matrix that will transform an input of
+    given relative real world coordinates to image points
 
     Args:
-        w (int): Width of the input
-        h (int): Height of the input
+        w (int): Width of the image
+        h (int): Height of the image
 
     Returns:
-        An array of shape (w, h, 2) containing the relative
-        real world coordinates
+        A Matrix that will convert relative real world coordinates
+        to image coordinates
     """
-    P = getImageTransformationMatrix(w, h)
-    
-    relative_locations = np.zeros((w, h, 2))
+    return np.linalg.pinv(get_image_transformation_matrix(w, h))
 
-    for x in range(w):
-        for y in range(h):
-            point = np.array([y + 0.5, x + 0.5, 1.]) # +0.5 so we take the center of each patch
-
-            transformed_point = P.dot(point)
-            transformed_point = transformed_point / transformed_point[2] # Normalize by third component
-            relative_locations[x,y,0] = transformed_point[0]
-            relative_locations[x,y,1] = transformed_point[1]
-    
-    return relative_locations
-
-def getAbsoluteLocations(metadata, relative_locations):
-    """Transform the relative locations to absolute locations
+def span_grid(w, h, step=1, offset_x=0, offset_y=0):
+    """Creates a numpy array of shape (w / step, h / step, 2)
 
     Args:
+        w (int): Width of the grid
+        h (int): Height of the grid
+        step (float): Step size
+        offset_x (float): Offset in x direction
+        offset_y (float): Offset in y direction
+    
+    Returns:
+        Numpy array of shape (w / step, h / step, 2)
+    """
+    x = np.arange(offset_x, w + offset_x, step)
+    y = np.arange(offset_y, h + offset_y, step)
+    return np.stack(np.meshgrid(x, y), axis=2)
+
+def image_to_relative(image_coordinate, image_width=None, image_height=None):
+    """Transform an image coordinate to a location relative to the camera
+
+    Args:
+        image_coordinate (array): Array of shape (w, h, 2) or (2)
+                                  containing the image coordinate(s)
+        image_width (int): Needs to be specified when input is a single coordinate
+        image_height (int): Needs to be specified when input is a single coordinate
+
+    Returns:
+        Array of shape (w, h, 2) or (2) containing the relative location(s)
+    """
+    
+    if len(image_coordinate.shape) == 3:
+        image_width = image_coordinate.shape[0]
+        image_height = image_coordinate.shape[1]
+
+    # Get transformation matrix (3x3)
+    P = get_image_transformation_matrix(image_width, image_height)
+
+    def _to_relative(p):
+        p = np.hstack([p, 1])           # Add one dimension so it matches P (3x3)
+        p_trans = P.dot(p)
+        p_trans = p_trans / p_trans[2]  # Normalize by third dimension
+        return p_trans[:-1]             # Return only the first two dimensions
+
+    if len(image_coordinate.shape) == 3:
+        return np.apply_along_axis(_to_relative, 2, image_coordinate)
+    elif image_coordinate.shape == (2,):
+        return _to_relative(image_coordinate)
+    else:
+        raise ValueError("Input has to be a an array of shape (w, h, 2) or (2,)")
+
+def relative_to_image(relative_location, inverseTransformationMatrix):
+    """Transform a location relative to the camera to an image coordinate
+
+    Args:
+        relative_location (array): Array of shape (w, h, 2) or (2)
+                                   containing the location(s)
+                                   relative to the camera
+        inverseTransformationMatrix (array): Inverse transformation matrix
+
+    Returns:
+        Array of shape (w, h, 2) or (2) containing the image coordinate(s)
+    """
+    
+    def _to_image(p):
+        p = np.hstack([p, 1])           # Add one dimension so it matches P (3x3)
+        p_trans = inverseTransformationMatrix.dot(p)
+        p_trans = p_trans / p_trans[2]  # Normalize by third dimension
+        return p_trans[:-1]             # Return only the first two dimensions
+
+    if len(relative_location.shape) == 3:
+        return np.apply_along_axis(_to_image, 2, relative_location)
+    elif relative_location.shape == (2,):
+        return _to_image(relative_location)
+    else:
+        raise ValueError("Input has to be a an array of shape (w, h, 2) or (2,)")
+
+def relative_to_absolute(relative_location, metadata):
+    """Transform a relative location to an absolute location
+
+    Args:
+        relative_location (array): Array of shape (w, h, 2) or (2)
+                                   containing the location(s)
+                                   relative to the camera
         metadata (dict): A metadata dict containing information
                          about the camera location
-        relative_locations (array): An array of shape (w, h, 2) with
-                                    locations relative to the camera
 
     Returns:
-        An array of shape (w, h, 2) containing absolute locations
+        Array of shape (w, h, 2) or (2) containing the absolute location(s)
     """
-
     camera_position = np.array([metadata["location/translation/x"],
                                 metadata["location/translation/y"]])
 
-    # Construct a 2D rotation matrix
+    # Construct an inverse 2D rotation matrix
     _s = np.sin(metadata["location/rotation/z"] - np.pi / 2.)
     _c = np.cos(metadata["location/rotation/z"] - np.pi / 2.)
 
     R = np.array([[_c, -_s],
                   [_s,  _c]])
 
-    def _to_relative(p):
+    def _to_absolute(p):
         return camera_position + R.dot(p)
 
-    return np.apply_along_axis(_to_relative, 2, relative_locations)
+    if len(relative_location.shape) == 3:
+        return np.apply_along_axis(_to_absolute, 2, relative_location)
+    elif relative_location.shape == (2,):
+        return _to_absolute(relative_location)
+    else:
+        raise ValueError("Input has to be a an array of shape (w, h, 2) or (2,)")
 
-def addLocationToFeatures(metadata, features):
+def absolute_to_relative(absolute_location, metadata):
+    """Transform an absolute location to a relative location
+
+    Args:
+        absolute_location (array): Array of shape (w, h, 2) or (2)
+                                   containing the absolute location(s)
+        metadata (dict): A metadata dict containing information
+                         about the camera location
+
+    Returns:
+        Array of shape (w, h, 2) or (2) containing the
+        location(s) relative to the camera
+    """
+    camera_position = np.array([metadata["location/translation/x"],
+                                metadata["location/translation/y"]])
+
+    # Construct an inverse 2D rotation matrix
+    _s = np.sin(metadata["location/rotation/z"] - np.pi / 2.)
+    _c = np.cos(metadata["location/rotation/z"] - np.pi / 2.)
+
+    # R is orthogonal --> transpose and inverse are the same
+    R_inv = np.array([[_c , _s],
+                      [-_s, _c]])
+
+    def _to_relative(p):
+        return R_inv.dot(p - camera_position)
+
+    if len(absolute_location.shape) == 3:
+        return np.apply_along_axis(_to_relative, 2, absolute_location)
+    elif absolute_location.shape == (2,):
+        return _to_relative(absolute_location)
+    else:
+        raise ValueError("Input has to be a an array of shape (w, h, 2) or (2,)")
+
+def add_location_to_features(metadata, features):
     """Calculate the real world coordinates of every patch and add
     these to the feature vectors
     
@@ -112,13 +214,14 @@ def addLocationToFeatures(metadata, features):
     logging.info("Adding locations as feature dimensions")
     total, h, w, depth = features.shape
     
-    relative_locations = getRelativeLocations(w, h)
+    image_locations = span_grid(w, h, offset_x=0.5, offset_y=0.5)
+    relative_locations = image_to_relative(image_locations)
 
     features_with_locations = np.zeros((total, h, w, depth + 2))
 
     for i, feature_3d in enumerate(features):
         meta = metadata[i]
-        absolute_locations = getAbsoluteLocations(meta, relative_locations)
+        absolute_locations = relative_to_absolute(relative_locations, meta)
         features_with_locations[i] = np.concatenate((feature_3d, absolute_locations), axis=2)
 
     return features_with_locations
@@ -257,7 +360,7 @@ def _bytes_feature(value):
 # Output helper #
 #################
 
-def visualize(metadata, features, feature_to_color_func=None, feature_to_text_func=None, pause_func=None):
+def visualize(metadata, features, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=True):
     """Visualize features on the source image
 
     Args:
@@ -266,9 +369,11 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
         feature_to_color_func (function): Function converting a feature to a color (b, g, r)
         feature_to_text_func (function): Function converting a feature to a string
         pause_func (function): Function converting a feature to a boolean that pauses the video
+        show_grid (bool): Overlay real world coordinate grid
     """
     total, height, width, depth = features.shape
     
+    ### Set up window
     cv2.namedWindow('image')
 
     def nothing(x):
@@ -281,6 +386,11 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
     font      = cv2.FONT_HERSHEY_SIMPLEX
     fontScale = 0.25
     thickness = 1
+
+    ### Calculate grid overlay
+    absolute_locations = span_grid(60, 60, 1, -30, -30)
+    P_inv = get_inverse_image_transformation_matrix(640, 480)
+
 
     tfrecord = None
     tfrecordCounter = 0
@@ -304,11 +414,12 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
                 continue
             tfrecord = meta["tfrecord"]
             tfrecordCounter = 0
-            image_dataset = utils.load_dataset(meta["tfrecord"]).as_numpy_iterator()
+            image_dataset = load_dataset(meta["tfrecord"]).as_numpy_iterator()
         else:
             tfrecordCounter += 1
 
         image, example = next(image_dataset)
+
         # if meta["label"] == 1:
         #     continue
 
@@ -338,7 +449,7 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
 
                 p1 = (x * patch_size[0], y * patch_size[1])
                 p2 = (p1[0] + patch_size[0], p1[1] + patch_size[1])
-
+                
                 if feature_to_color_func is not None:
                     cv2.rectangle(overlay, p1, p2, feature_to_color_func(feature), -1)
 
@@ -349,11 +460,29 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
                         font,
                         fontScale,
                         (0, 0, 255),
-                        thickness)
+                        thickness, lineType=cv2.LINE_AA)
                 
                 if pause_func is not None and pause_func(feature):
                     pause = True
         
+        if show_grid:
+            relative_grid = absolute_to_relative(absolute_locations, meta)
+            image_grid = relative_to_image(relative_grid, P_inv)
+        
+            for a in range(image_grid.shape[0]):
+                for b in range(image_grid.shape[1]):
+                    pos = (int(image_grid[a][b][0]), int(image_grid[a][b][1]))
+                    if pos[0] < 0 or pos[0] > image.shape[1] or pos[1] < 0 or pos[1] > image.shape[0]:
+                        continue
+                    cv2.circle(overlay, pos, 1, (255, 255, 255), -1, lineType=cv2.LINE_AA)
+                    
+                    cv2.putText(overlay, "%.1f / %.1f" % (absolute_locations[a][b][0], absolute_locations[a][b][1]),
+                        (pos[0] + 3, pos[1] + 2),
+                        font,
+                        fontScale,
+                        (255, 255, 255),
+                        thickness, lineType=cv2.LINE_AA)
+
         # fig.canvas.draw()
         
         alpha = cv2.getTrackbarPos('overlay','image') / 100.0  # Transparency factor.
@@ -361,7 +490,7 @@ def visualize(metadata, features, feature_to_color_func=None, feature_to_text_fu
         # Following line overlays transparent overlay over the image
         image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
         
-        utils.image_write_label(image_new, meta["label"])
+        image_write_label(image_new, meta["label"])
         
         cv2.imshow("image", image_new)
         key = cv2.waitKey(0 if pause else cv2.getTrackbarPos('delay','image'))
@@ -455,14 +584,14 @@ def image_write_label(image, label):
         font,
         fontScale,
         (255,255,255),
-        thickness)
+        thickness, lineType=cv2.LINE_AA)
     
     cv2.putText(image, text.get(label, 0),
         (bottomLeftCornerOfText[0] + 50, bottomLeftCornerOfText[1]),
         font,
         fontScale,
         colors.get(label, 0),
-        thickness)
+        thickness, lineType=cv2.LINE_AA)
 
 #################
 # Computer Info #

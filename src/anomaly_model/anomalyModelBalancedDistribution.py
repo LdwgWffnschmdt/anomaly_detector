@@ -171,11 +171,18 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     from anomalyModelTest import AnomalyModelTest
-    test = AnomalyModelTest(AnomalyModelBalancedDistribution())
+    model = AnomalyModelBalancedDistribution()
+    test = AnomalyModelTest(model)
 
-    test.calculateMahalobisDistances()
+    # test.calculateMahalobisDistances()
+    def _feature_to_color(feature):
+        b = 100 if feature in model.normal_distribution else 0
+        g = 0
+        r = model._mahalanobis_distance(feature) * (255 / 60)
+        #r = 100 if self.model._mahalanobis_distance(feature) > threshold else 0
+        return (b, g, r)
 
     def _pause(feature):
         return feature in test.model.normal_distribution
 
-    test.visualize(pause_func=_pause)
+    test.visualize(threshold=60, feature_to_color_func=_feature_to_color)

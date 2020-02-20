@@ -91,4 +91,6 @@ if __name__ == "__main__":
     from anomalyModelTest import AnomalyModelTest
     test = AnomalyModelTest(AnomalyModelSVG())
 
-    test.calculateMahalobisDistances()
+    # test.calculateMahalobisDistances()
+    # test.showMahalanobisDistribution()
+    test.visualize(10)#26.525405)
