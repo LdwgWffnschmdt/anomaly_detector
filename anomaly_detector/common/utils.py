@@ -11,7 +11,7 @@ import numpy as np
 import h5py
 import cv2
 
-from common.imageLocationUtility import ImageLocationUtility
+from imageLocationUtility import ImageLocationUtility
 
 # Configure logging
 logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)

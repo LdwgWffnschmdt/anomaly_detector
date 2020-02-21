@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from anomaly_model import AnomalyModelBalancedDistribution
-import feature_extractor.utils as utils
+import common.utils as utils
 from common.imageLocationUtility import ImageLocationUtility
 
 class AnomalyModelBalancedDistributionPos(AnomalyModelBalancedDistribution):

@@ -1,0 +1,12 @@
+Metadata-Version: 1.2
+Name: anomaly-detector
+Version: 0.0.1
+Summary: Detect anomalies in images using deep features
+Home-page: https://github.com/LdwgWffnschmdt/anomaly_detector
+Author: Ludwig Waffenschmidt
+Author-email: ludwig.waffenschmidt@outlook.com
+Maintainer: Ludwig Waffenschmidt
+Maintainer-email: ludwig.waffenschmidt@outlook.com
+License: MIT
+Description: UNKNOWN
+Platform: UNKNOWN

@@ -1,8 +1,8 @@
 import os
 import logging
 
-import feature_extractor.utils as utils
 from common import FeatureArray
+import common.utils as utils
 
 class AnomalyModelBase(object):
     

@@ -9,7 +9,7 @@ import numpy as np
 from scipy.spatial import distance
 
 from anomalyModelBase import AnomalyModelBase
-import feature_extractor.utils as utils
+import common.utils as utils
 
 class AnomalyModelBalancedDistribution(AnomalyModelBase):
     """Anomaly model formed by a Balanced Distribution of feature vectors

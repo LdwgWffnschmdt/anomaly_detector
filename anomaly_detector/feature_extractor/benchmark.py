@@ -8,7 +8,7 @@ import xlsxwriter
 import tensorflow as tf
 
 import feature_extractor
-import feature_extractor.utils as utils
+import common.utils as utils
 
 # Only for tests
 if __name__ == "__main__":

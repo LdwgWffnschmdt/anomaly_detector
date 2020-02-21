@@ -4,3 +4,4 @@ from featureExtractorEfficientNetB0         import FeatureExtractorEfficientNetB
 from featureExtractorEfficientNetB0_Block10 import FeatureExtractorEfficientNetB0_Block10
 from featureExtractorEfficientNetB6         import FeatureExtractorEfficientNetB6
 from featureExtractorEfficientNetB6_Block10 import FeatureExtractorEfficientNetB6_Block10
+from featureExtractorResNet50               import FeatureExtractorResNet50V2

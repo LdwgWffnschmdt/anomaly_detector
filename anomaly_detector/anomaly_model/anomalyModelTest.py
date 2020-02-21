@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import matplotlib.pyplot as plt
 
-import feature_extractor.utils as utils
+import common.utils as utils
 from common import ImageLocationUtility, FeatureArray
 
 class AnomalyModelTest(object):

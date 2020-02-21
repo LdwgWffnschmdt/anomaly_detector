@@ -51,7 +51,7 @@ import tf
 import tf2_ros
 import tf2_py as tf2
 
-import feature_extractor.utils as utils
+import common.utils as utils
 
 def rosbag_to_tfrecord():
     ################

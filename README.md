@@ -2,10 +2,12 @@
 `WORK IN PROGRESS!`
 Detect anomalies in images using deep features
 
-## Dependencies
+## Install
 ```bash
 python -m virtualenv .env
 pip install -r requirements.txt
+
+pip install -e .    # Install the current directory as pip package but keep it editable (-e)
 ```
 
 # Data preparation

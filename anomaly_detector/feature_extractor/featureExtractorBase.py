@@ -9,7 +9,7 @@ import tensorflow_hub as hub
 import numpy as np
 import h5py
 
-import feature_extractor.utils as utils
+import common.utils as utils
 
 class FeatureExtractorBase(object):
     

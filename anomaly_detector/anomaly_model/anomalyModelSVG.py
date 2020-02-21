@@ -9,7 +9,7 @@ import numpy as np
 # from scipy.spatial import distance
 
 from anomalyModelBase import AnomalyModelBase
-import feature_extractor.utils as utils
+import common.utils as utils
 
 class AnomalyModelSVG(AnomalyModelBase):
     """Anomaly model formed by a Single Variate Gaussian (SVG) with model parameters Θ_SVG = (μ,σ²)

@@ -7,7 +7,7 @@ import h5py
 import numpy as np
 
 from anomalyModelBase import AnomalyModelBase
-import feature_extractor.utils as utils
+import common.utils as utils
 
 class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     """ Base for anomaly models that create one model per spatial bin (grid cell) """
