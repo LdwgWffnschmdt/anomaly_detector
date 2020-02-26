@@ -106,7 +106,7 @@ def _bytes_feature(value):
 # Output helper #
 #################
 
-def visualize(features, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=True):
+def visualize(features, threshold, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False):
     """Visualize features on the source image
 
     Args:
@@ -123,10 +123,14 @@ def visualize(features, feature_to_color_func=None, feature_to_text_func=None, p
 
     def nothing(x):
         pass
-
+    
     # create trackbars
-    cv2.createTrackbar('delay',   'image', 1 , 1000, nothing)
-    cv2.createTrackbar('overlay', 'image', 40, 100 , nothing)
+    cv2.createTrackbar('threshold',   'image', int(threshold) , int(threshold) * 3, nothing)
+    cv2.createTrackbar('show_thresh', 'image', 1 , 1, nothing)
+    cv2.createTrackbar('show_grid',   'image', int(show_grid) , 1, nothing)
+    cv2.createTrackbar('show_values', 'image', 0 , 1, nothing)
+    cv2.createTrackbar('delay',       'image', 1 , 1000, nothing)
+    cv2.createTrackbar('overlay',     'image', 40, 100 , nothing)
 
     font      = cv2.FONT_HERSHEY_SIMPLEX
     fontScale = 0.25
@@ -152,8 +156,8 @@ def visualize(features, feature_to_color_func=None, feature_to_text_func=None, p
 
     for i, feature_2d in enumerate(features):
         if tfrecord != feature_2d[0,0].tfrecord:
-            if not "2020-02-06-17-17-25.tfrecord" in feature_2d[0,0].tfrecord: # TODO: Remove for production
-                continue
+            # if not "2020-02-06-17-17-25.tfrecord" in feature_2d[0,0].tfrecord: # TODO: Remove for production
+            #     continue
             tfrecord = feature_2d[0,0].tfrecord
             tfrecordCounter = 0
             image_dataset = load_dataset(feature_2d[0,0].tfrecord).as_numpy_iterator()
@@ -183,6 +187,11 @@ def visualize(features, feature_to_color_func=None, feature_to_text_func=None, p
         #                                                                meta["location/rotation/y"],
         #                                                                meta["location/rotation/z"])
 
+        threshold = cv2.getTrackbarPos('threshold', 'image')
+        show_grid = bool(cv2.getTrackbarPos('show_grid', 'image'))
+        show_values = bool(cv2.getTrackbarPos('show_values', 'image'))
+        show_thresh = bool(cv2.getTrackbarPos('show_thresh', 'image'))
+
         for x in range(width):
             for y in range(height):
                 feature = feature_2d[y,x]
@@ -193,10 +202,10 @@ def visualize(features, feature_to_color_func=None, feature_to_text_func=None, p
                 p2 = (p1[0] + patch_size[0], p1[1] + patch_size[1])
                 
                 if feature_to_color_func is not None:
-                    cv2.rectangle(overlay, p1, p2, feature_to_color_func(feature), -1)
+                    cv2.rectangle(overlay, p1, p2, feature_to_color_func(feature, threshold, show_thresh), -1)
 
-                if feature_to_text_func is not None:
-                    text = str(feature_to_text_func(feature))
+                if feature_to_text_func is not None and show_values:
+                    text = str(feature_to_text_func(feature, threshold))
                     cv2.putText(overlay, text,
                         (p1[0] + 2, p1[1] + patch_size[1] - 2),
                         font,
@@ -204,7 +213,7 @@ def visualize(features, feature_to_color_func=None, feature_to_text_func=None, p
                         (0, 0, 255),
                         thickness, lineType=cv2.LINE_AA)
                 
-                if pause_func is not None and pause_func(feature):
+                if pause_func is not None and pause_func(feature, threshold):
                     pause = True
         
         if show_grid:
@@ -266,7 +275,7 @@ def print_progress(iteration, total, prefix="", suffix="", decimals=1, bar_lengt
     if time_start:
         elapsed = time.time() - time_start
         fps = iteration / elapsed
-        eta = (total - iteration) / fps
+        eta = 0 if fps == 0 else (total - iteration) / fps
         t = "[Elapsed: %s, ETA: %s, FPS: %.2f]" % (format_duration(elapsed), format_duration(eta), fps)
 
     sys.stdout.write("\r%-25s |%s| %5s%s %-40s%-30s" % (prefix, bar, percents, "%", suffix, t)),
