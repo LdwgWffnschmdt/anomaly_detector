@@ -34,15 +34,22 @@ class Feature(np.ndarray):
         # (call FeatureArray.calculate_locations)
         self.location = None
     
-    time              = property(lambda self: self.metadata["time"])
-    label             = property(lambda self: self.metadata["label"])
-    rosbag            = property(lambda self: self.metadata["rosbag"])
-    tfrecord          = property(lambda self: self.metadata["tfrecord"])
-    feature_extractor = property(lambda self: self.metadata["feature_extractor"])
+    def __get_property__(self, key):
+        return None if self.metadata is None or key in self.metadata.keys() else self.metadata[key]
 
-    camera_position   = property(lambda self: np.array([self.metadata["location/translation/x"],
-                                                        self.metadata["location/translation/y"]]))
-    camera_rotation   = property(lambda self: self.metadata["location/rotation/z"])
+    time              = property(__get_property__("time"))
+    label             = property(__get_property__("label"))
+    rosbag            = property(__get_property__("rosbag"))
+    tfrecord          = property(__get_property__("tfrecord"))
+    feature_extractor = property(__get_property__("feature_extractor"))
+
+    camera_position   = property(lambda self: None if self.metadata is None else
+                                                np.array([self.metadata["location/translation/x"],
+                                                          self.metadata["location/translation/y"]]))
+    camera_rotation   = property(__get_property__("location/rotation/z"))
+
+    def cast(self, dtype):
+        return np.array(self, dtype=dtype)
 
 if __name__ == "__main__":
     meta = {"time": 232, "test": 24}
