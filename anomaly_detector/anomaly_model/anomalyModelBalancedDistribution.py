@@ -25,7 +25,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         self.threshold_classification   = threshold_classification  # See reference algorithm variable β
         self.pruning_parameter          = pruning_parameter         # See reference algorithm variable η
 
-        self.normal_distribution        = None          # Array containing all the "normal" samples
+        self.balanced_distribution        = None          # Array containing all the "normal" samples
 
         self._mean = None   # Mean
         self._covI = None   # Inverse of covariance matrix
@@ -45,11 +45,11 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
     
     def _calculate_mean_and_covariance(self):
         """Calculate mean and inverse of covariance of the "normal" distribution"""
-        assert not self.normal_distribution is None and len(self.normal_distribution) > 0, \
+        assert not self.balanced_distribution is None and len(self.balanced_distribution) > 0, \
             "Can't calculate mean or covariance of nothing!"
         
-        self._mean = np.mean(self.normal_distribution, axis=0, dtype=np.float64)    # Mean
-        cov = np.cov(self.normal_distribution, rowvar=False)                        # Covariance matrix
+        self._mean = np.mean(self.balanced_distribution, axis=0, dtype=np.float64)    # Mean
+        cov = np.cov(self.balanced_distribution, rowvar=False)                        # Covariance matrix
         self._covI = np.linalg.pinv(cov)                                            # Inverse of covariance matrix
     
     def _mahalanobis_distance(self, feature):
@@ -64,8 +64,10 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
 
     def generate_model(self, features):
+        AnomalyModelBase.generate_model(self, features) # Call base
+
         # Reduce features to simple list
-        features_flat = features.flatten
+        features_flat = features.flatten()
 
         logging.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
 
@@ -74,7 +76,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
         with utils.GracefulInterruptHandler() as h:
             # Create initial set of "normal" vectors
-            self.normal_distribution = features_flat[:self.initial_normal_features]
+            self.balanced_distribution = features_flat[:self.initial_normal_features]
 
             start = time.time()
 
@@ -88,14 +90,14 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
             for index, feature in enumerate(features_flat[self.initial_normal_features:]):
                 if h.interrupted:
                     logging.warning("Interrupted!")
-                    self.normal_distribution = None
+                    self.balanced_distribution = None
                     return False
 
                 # Calculate the Mahalanobis distance to the "normal" distribution
                 dist = self._mahalanobis_distance(feature)
                 if dist > self.threshold_learning:
                     # Add the vector to the "normal" distribution
-                    self.normal_distribution = np.append(self.normal_distribution, [feature], axis=0)
+                    self.balanced_distribution = np.append(self.balanced_distribution, [feature], axis=0)
 
                     # Recalculate mean and covariance
                     self._calculate_mean_and_covariance()
@@ -104,12 +106,12 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
                 utils.print_progress(index + self.initial_normal_features + 1,
                                      features_flat.shape[0],
                                      prefix = "%i / %i" % (index + self.initial_normal_features + 1, features_flat.shape[0]),
-                                     suffix = "%i vectors in Balanced Distribution" % len(self.normal_distribution),
+                                     suffix = "%i vectors in Balanced Distribution" % len(self.balanced_distribution),
                                      time_start = start)
 
             # Prune the distribution
             
-            logging.info(np.mean(np.array([self._mahalanobis_distance(f) for f in self.normal_distribution])))
+            logging.info(np.mean(np.array([self._mahalanobis_distance(f) for f in self.balanced_distribution])))
 
             prune_filter = []
             pruned = 0
@@ -117,10 +119,10 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
             utils.print_progress(0, 1, prefix = "%i / %i" % (self.initial_normal_features, features_flat.shape[0]))
             start = time.time()
 
-            for index, feature in enumerate(self.normal_distribution):
+            for index, feature in enumerate(self.balanced_distribution):
                 if h.interrupted:
                     logging.warning("Interrupted!")
-                    self.normal_distribution = None
+                    self.balanced_distribution = None
                     return False
 
                 prune = self._mahalanobis_distance(feature) < self.threshold_learning * self.pruning_parameter
@@ -131,42 +133,37 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
                 # Print progress
                 utils.print_progress(index + 1,
-                                     len(self.normal_distribution),
-                                     prefix = "%i / %i" % (index + 1, len(self.normal_distribution)),
+                                     len(self.balanced_distribution),
+                                     prefix = "%i / %i" % (index + 1, len(self.balanced_distribution)),
                                      suffix = "%i vectors pruned" % pruned,
                                      time_start = start)
 
-            self.normal_distribution = self.normal_distribution[prune_filter]
+            self.balanced_distribution = self.balanced_distribution[prune_filter]
 
-            logging.info("Generated Balanced Distribution with %i entries" % len(self.normal_distribution))
+            logging.info("Generated Balanced Distribution with %i entries" % len(self.balanced_distribution))
         
             self._calculate_mean_and_covariance()
             return True
 
         
-    def load_model_from_file(self, model_file):
+    def __load_model_from_file__(self, h5file):
         """Load a Balanced Distribution from file"""
-        logging.info("Reading model parameters from: %s" % model_file)
-        with h5py.File(model_file, "r") as hf:
-            self.normal_distribution        = np.array(hf["normal_distribution"])
-            self.initial_normal_features    = np.array(hf["initial_normal_features"])
-            self.threshold_learning         = np.array(hf["threshold_learning"])
-            self.threshold_classification   = np.array(hf["threshold_classification"])
-            self.pruning_parameter          = np.array(hf["pruning_parameter"])
+        self.balanced_distribution        = np.array(h5file["balanced_distribution"])
+        self.initial_normal_features    = h5file.attrs["initial_normal_features"]
+        self.threshold_learning         = h5file.attrs["threshold_learning"]
+        self.threshold_classification   = h5file.attrs["threshold_classification"]
+        self.pruning_parameter          = h5file.attrs["pruning_parameter"]
         assert 0 < self.pruning_parameter < 1, "Pruning parameter out of range (0 < η < 1)"
-        self._calculate_mean_and_covariance()    
-        logging.info("Successfully loaded Balanced Distribution with %i entries and %i dimensions" % (len(self.normal_distribution), self.normal_distribution[0].shape[0]))
+        self._calculate_mean_and_covariance()
+        logging.info("Successfully loaded Balanced Distribution with %i entries and %i dimensions" % (len(self.balanced_distribution), self.balanced_distribution[0].shape[0]))
     
-    def save_model_to_file(self, output_file = ""):
+    def save_model_to_file(self, h5file):
         """Save the model to disk"""
-        logging.info("Writing model parameters to: %s" % output_file)
-        with h5py.File(output_file, "w") as hf:
-            hf.create_dataset("normal_distribution",        data=self.normal_distribution, dtype=np.float64)
-            hf.create_dataset("initial_normal_features",    data=self.initial_normal_features, dtype=np.float64)
-            hf.create_dataset("threshold_learning",         data=self.threshold_learning, dtype=np.float64)
-            hf.create_dataset("threshold_classification",   data=self.threshold_classification, dtype=np.float64)
-            hf.create_dataset("pruning_parameter",          data=self.pruning_parameter, dtype=np.float64)
-        logging.info("Successfully written model parameters to: %s" % output_file)
+        h5ffile.create_dataset("balanced_distribution",        data=self.balanced_distribution, dtype=np.float64)
+        h5ffile.attrs["initial_normal_features"]    = self.initial_normal_features
+        h5ffile.attrs["threshold_learning"]         = self.threshold_learning
+        h5ffile.attrs["threshold_classification"]   = self.threshold_classification
+        h5ffile.attrs["pruning_parameter"]          = self.pruning_parameter
 
 # Only for tests
 if __name__ == "__main__":
@@ -176,13 +173,13 @@ if __name__ == "__main__":
 
     # test.calculateMahalobisDistances()
     def _feature_to_color(feature):
-        b = 100 if feature in model.normal_distribution else 0
+        b = 100 if feature in model.balanced_distribution else 0
         g = 0
         r = model._mahalanobis_distance(feature) * (255 / 60)
         #r = 100 if self.model._mahalanobis_distance(feature) > threshold else 0
         return (b, g, r)
 
     def _pause(feature):
-        return feature in test.model.normal_distribution
+        return feature in test.model.balanced_distribution
 
     test.visualize(threshold=60, feature_to_color_func=_feature_to_color)

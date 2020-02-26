@@ -29,18 +29,22 @@ class AnomalyModelTest(object):
         self.features = FeatureArray(features_file)
         
         if model_file == "":
-            model_file = os.path.abspath(features_file.replace(".h5", "")) + "." + model.NAME + ".h5"
+            output_dir = os.path.join(os.path.abspath(os.path.dirname(features_file)), model.NAME)
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            model_file = os.path.join(output_dir, os.path.basename(features_file))
+        
         
         # Load or generate model if it does not exist yet
         if not os.path.exists(model_file) or not os.path.isfile(model_file):
-            if model.generate_model(self.features.no_anomaly) == False:
+            if model.generate_model(self.features.no_anomaly) == True:
                 # Save model
-                model.save_model_to_file(os.path.abspath(model_file))
+                model.save_to_file(os.path.abspath(model_file))
             else:
                 logging.error("Could not generate model.")
-                return
+                return None
         else:
-            model.load_model_from_file(model_file)
+            model.load_from_file(model_file)
         
         # Add location to features (AFTER model generation, otherwise they would be added twice!)
         if add_locations_to_features:
@@ -54,8 +58,10 @@ class AnomalyModelTest(object):
         self.mahalanobis_no_anomaly = np.array(list(map(self.model._mahalanobis_distance, self.features.no_anomaly.flatten()))) # 75.49480115577167
         self.mahalanobis_anomaly    = np.array(list(map(self.model._mahalanobis_distance, self.features.anomaly.flatten())))    # 76.93620254133627
 
-        self.mahalanobis_no_anomaly_max = np.amax(self.mahalanobis_no_anomaly)
-        self.mahalanobis_anomaly_max    = np.amax(self.mahalanobis_anomaly)
+        print self.mahalanobis_anomaly
+
+        self.mahalanobis_no_anomaly_max = np.nanmax(self.mahalanobis_no_anomaly)
+        self.mahalanobis_anomaly_max    = np.nanmax(self.mahalanobis_anomaly)
         self.mahalanobis_max = max(self.mahalanobis_no_anomaly_max, self.mahalanobis_anomaly_max)
 
         logging.info("Maximum Mahalanobis distance (no anomaly): %f" % self.mahalanobis_no_anomaly_max)
@@ -81,28 +87,32 @@ class AnomalyModelTest(object):
 
     def visualize(self, threshold=None, feature_to_color_func=None, feature_to_text_func=None, pause_func=None):
         """ Visualize the result of a anomaly model """
-        def _default_feature_to_color(feature):
-            b = 0#100 if feature in self.model.normal_distribution else 0
-            g = 0
-            #r = self.model._mahalanobis_distance(feature) * (255 / threshold)
-            r = 100 if self.model._mahalanobis_distance(feature) > threshold else 0
-            return (b, g, r)
-
-        def _default_feature_to_text(feature):
-            return round(self.model._mahalanobis_distance(feature), 2)
-
         if threshold is None:
             if self.mahalanobis_max is None:
                 self.calculateMahalobisDistances()
             threshold = self.mahalanobis_max * 0.9
         
+        def _default_feature_to_color(feature, t, show_thresh):
+            b = 0#100 if feature in self.model.normal_distribution else 0
+            g = 0
+            if show_thresh:
+                r = 100 if self.model._mahalanobis_distance(feature) > t else 0
+            elif t == 0:
+                r = 0
+            else:
+                r = min(255, int(self.model._mahalanobis_distance(feature) * (255 / t)))
+            return (b, g, r)
+
+        def _default_feature_to_text(feature, t):
+            return round(self.model._mahalanobis_distance(feature), 2)
+
         if feature_to_color_func is None:
             feature_to_color_func = _default_feature_to_color
 
         if feature_to_text_func is None:
             feature_to_text_func = _default_feature_to_text
 
-        utils.visualize(self.features,
+        utils.visualize(self.features, threshold,
                         feature_to_color_func=feature_to_color_func,
                         feature_to_text_func=feature_to_text_func,
                         pause_func=pause_func)

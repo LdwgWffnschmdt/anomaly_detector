@@ -3,7 +3,6 @@
 import os
 import logging
 
-import h5py
 import numpy as np
 # import tensorflow_probability as tfp
 # from scipy.spatial import distance
@@ -36,6 +35,10 @@ class AnomalyModelSVG(AnomalyModelBase):
         assert feature.shape == self._var.shape == self._mean.shape, \
             "Shapes don't match (x: %s, μ: %s, σ²: %s)" % (feature.shape, self._mean.shape, self._var.shape)
         
+        # TODO: This is a hack for collapsed SVGs. Should normally not happen
+        if not self._var.any(): # var contains only zeros
+            return (feature == self._mean).all()
+
         return np.sqrt(np.sum((feature - self._mean) **2 / self._var))
         
         ### scipy implementation is way slower
@@ -44,47 +47,49 @@ class AnomalyModelSVG(AnomalyModelBase):
         # return distance.mahalanobis(feature, self._mean, self._varI)
 
     def generate_model(self, features):
+        AnomalyModelBase.generate_model(self, features) # Call base
+        
         # Reduce features to simple list
         features_flat = features.flatten()
 
-        logging.info("Generating a Single Variate Gaussian (SVG) from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
+        logging.info("Generating SVG from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
+
+        if features_flat.shape[0] == 1:
+            logging.warn("Trying to generate SVG from a single value.")
 
         # Get the variance
         logging.info("Calculating the variance")
-        # self._var = tfp.stats.variance(features_flat)
-        self._var = np.var(features_flat, axis=0, dtype=np.float64)
-        # --> one variance per feature vector entry
+        # np.var(FeatureArray) results in a FeatureArray with only one Feature
+        # whose values represent the variance values. So we need to take that
+        # one Feature using .item() to be able to use and store it.
+        self._var = np.var(features_flat).item()
+        # --> one variance per feature dimension
 
         # Get the mean
         logging.info("Calculating the mean")
-        self._mean = np.mean(features_flat, axis=0, dtype=np.float64)
-        # --> one mean per feature vector entry
+        self._mean = np.mean(features_flat, axis=0).item() # See variance
+        # --> one mean per feature dimension
 
         # Get maximum mahalanobis distance as threshold
-        # logging.info("Calculating the threshold")
-        # dists = np.array(list(map(self._mahalanobis_distance, features_flat)))
-        # self.threshold = np.amax(dists)
+        logging.info("Calculating the threshold")
+        dists = np.array(list(map(self._mahalanobis_distance, features_flat)))
+        self.threshold = np.amax(dists)
 
         return True
 
-    def load_model_from_file(self, model_file):
+    def __load_model_from_file__(self, h5file):
         """Load a SVG model from file"""
-        logging.info("Reading model parameters from: %s" % model_file)
-        with h5py.File(model_file, "r") as hf:
-            self._var       = np.array(hf["var"])
-            self._mean      = np.array(hf["mean"])
-            self.threshold  = np.array(hf["threshold"])
+        self._var       = np.array(h5file["var"])
+        self._mean      = np.array(h5file["mean"])
+        self.threshold  = h5file.attrs["threshold"]
         assert len(self._var) == len(self._mean), "Dimensions of variance and mean do not match!"
-        logging.info("Successfully loaded model parameters of dimension %i" % len(self._var))
+        logging.info("Successfully loaded SVG parameters of dimension %i" % len(self._var))
     
-    def save_model_to_file(self, output_file = ""):
+    def __save_model_to_file__(self, h5file):
         """Save the model to disk"""
-        logging.info("Writing model parameters to: %s" % output_file)
-        with h5py.File(output_file, "w") as hf:
-            hf.create_dataset("var",        data=self._var, dtype=np.float64)
-            hf.create_dataset("mean",       data=self._mean, dtype=np.float64)
-            hf.create_dataset("threshold",  data=self.threshold, dtype=np.float64)
-        logging.info("Successfully written model parameters to: %s" % output_file)
+        h5file.create_dataset("var",        data=self._var)
+        h5file.create_dataset("mean",       data=self._mean)
+        h5file.attrs["threshold"] = self.threshold
 
 # Only for tests
 if __name__ == "__main__":
