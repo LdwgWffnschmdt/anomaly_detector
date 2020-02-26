@@ -166,6 +166,12 @@ class FeatureExtractorBase(object):
                 h5Writer.attrs["Exception"] = traceback.format_exc()
                 return False
             finally:
+                utils.print_progress(counter,
+                                    total,
+                                    prefix = "Cancelled:",
+                                    suffix = "(%i / %i)" % (counter, total),
+                                    time_start = start)
+
                 end = time.time()
                 h5Writer.attrs["End"] = end
                 h5Writer.attrs["Duration"] = end - start
