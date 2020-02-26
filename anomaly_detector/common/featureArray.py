@@ -62,8 +62,8 @@ class FeatureArray(np.ndarray):
         self.attrs = getattr(obj, "attrs", None)
         self.filename = getattr(obj, "filename", None)
 
-    def __get_property__(self, key):
-        return None if self.attrs is None or key in self.attrs.keys() else self.attrs[key]
+    def __get_property__(key):
+        return lambda self: None if self.attrs is None or key in self.attrs.keys() else self.attrs[key]
 
     extractor  = property(__get_property__("Extractor"))
     files      = property(__get_property__("Files"))

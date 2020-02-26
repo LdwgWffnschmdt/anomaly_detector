@@ -34,8 +34,8 @@ class Feature(np.ndarray):
         # (call FeatureArray.calculate_locations)
         self.location = None
     
-    def __get_property__(self, key):
-        return None if self.metadata is None or key in self.metadata.keys() else self.metadata[key]
+    def __get_property__(key):
+        return lambda self: None if self.metadata is None or key in self.metadata.keys() else self.metadata[key]
 
     time              = property(__get_property__("time"))
     label             = property(__get_property__("label"))
