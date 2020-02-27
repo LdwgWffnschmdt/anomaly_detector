@@ -3,6 +3,7 @@ import os
 import logging
 import time
 import traceback
+from glob import glob
 
 import tensorflow as tf
 import tensorflow_hub as hub
@@ -37,10 +38,10 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, filenames, output_file="", batch_size=32, compression="lzf", compression_opts=None):
+    def extract_files(self, files, output_file="", batch_size=32, compression="lzf", compression_opts=None):
         """Loads a set of files, extracts the features and saves them to file
         Args:
-            filenames (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
+            files (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
             output_file (str): Filename and path of the output file
             batch_size (str): Size of image batches fed to the extractor (Defaults: 32)
             compression (str): Output file compression, set to None for no compression (Default: "lzf"), gzip can be extremely slow combined with HDF5
@@ -50,33 +51,28 @@ class FeatureExtractorBase(object):
             success (bool)
         """
         
-        # Get all tfrecords in a folder if the file ends with *.tfrecord
-        if isinstance(filenames, basestring) and filenames.endswith("*.tfrecord"):
-            path = filenames.replace("*.tfrecord", "")
-            filenames = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(".tfrecord")]
-            if len(filenames) < 1:
-                raise ValueError("There is no *.tfrecord file in %s." % path)
-
-            if output_file == "":
-                output_dir = os.path.join(os.path.abspath(os.path.dirname(filenames[0])), "Features")
-                if not os.path.exists(output_dir):
-                    os.makedirs(output_dir)
-                output_file = os.path.join(output_dir, self.NAME + ".h5")
-
-
-        if not isinstance(filenames, list):
-            filenames = [filenames]
+        if isinstance(files, basestring):
+            files = [files]
+            
+        # Expand wildcards
+        files_expanded = []
+        for s in files:
+            files_expanded += glob(s)
+        files = list(set(files_expanded)) # Remove duplicates
 
         # Check parameters
-        if not filenames or len(filenames) < 1 or filenames[0] == "":
-            raise ValueError("Please specify at least one filename (%s)" % filenames)
-        
-        if output_file == "":
-            output_file = os.path.join(os.path.abspath(os.path.dirname(filenames[0])), os.path.basename(filenames[0]).split(".")[0] + "." + self.NAME + ".h5")
-            logging.info("Output file set to %s" % output_file)
+        if not files or len(files) < 1 or files[0] == "":
+            raise ValueError("Please specify at least one filename (%s)" % files)
             
+        if output_file == "":
+            output_dir = os.path.join(os.path.abspath(os.path.dirname(files[0])), "Features")
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            output_file = os.path.join(output_dir, self.NAME + ".h5")
+            logging.info("Output file set to %s" % output_file)
+
         logging.info("Loading dataset")
-        parsed_dataset = utils.load_dataset(filenames)
+        parsed_dataset = utils.load_tfrecords(files)
 
         # Format images to match network input
         def _format_image(image, example):
@@ -105,7 +101,7 @@ class FeatureExtractorBase(object):
         
             # Add metadata to the output file
             h5Writer.attrs["Extractor"]                 = self.NAME
-            h5Writer.attrs["Files"]                     = filenames
+            h5Writer.attrs["Files"]                     = files
             h5Writer.attrs["Batch size"]                = batch_size
             h5Writer.attrs["Compression"]               = compression
             if compression_opts is not None:

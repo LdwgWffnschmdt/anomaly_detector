@@ -119,38 +119,36 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
                                            suffix = "%i / %i" % (0, total))
             
             i = 0
-            # try:
-            for u in range(shape[0]):
-                for v in range(shape[1]):
-                    i += 1
+            try:
+                for u in range(shape[0]):
+                    for v in range(shape[1]):
+                        i += 1
 
-                    if h.interrupted:
-                        logging.warning("Interrupted!")
-                        raise KeyboardInterrupt()
-                    
-                    # Filter by bin
-                    bin_features_flat = features_flat[feature_indices[u, v]]
-                    
-                    if len(bin_features_flat) > 0:
-                        # Create a new model
-                        model = self.CREATE_ANOMALY_MODEL_FUNC() # Instantiate a new model
-                        model.generate_model(bin_features_flat)  # The model only gets flattened features
-                        self.models[u, v] = model                # Store the model
-                    
-                    # Print progress
-                    utils.print_progress(i, total,
-                                            prefix = "Generating models:",
-                                            suffix = "%i / %i" % (i, total),
-                                            time_start = start)
-            # except:
-            #     traceback.print_exc()
-            #     return False
-            # finally:
-            #     utils.print_progress(i,
-            #                          total,
-            #                          prefix = "Cancelled:",
-            #                          suffix = "(%i / %i)" % (i, total),
-            #                          time_start = start)
+                        if h.interrupted:
+                            logging.warning("Interrupted!")
+                            raise KeyboardInterrupt()
+                        
+                        # Filter by bin
+                        bin_features_flat = features_flat[feature_indices[u, v]]
+                        
+                        if len(bin_features_flat) > 0:
+                            # Create a new model
+                            model = self.CREATE_ANOMALY_MODEL_FUNC() # Instantiate a new model
+                            model.generate_model(bin_features_flat)  # The model only gets flattened features
+                            self.models[u, v] = model                # Store the model
+                        
+                        # Print progress
+                        utils.print_progress(i, total,
+                                                prefix = "Generating models:",
+                                                suffix = "%i / %i" % (i, total),
+                                                time_start = start)
+            except:
+                utils.print_progress(i, total,
+                                        prefix = "Error:",
+                                        suffix = "%i / %i" % (i, total),
+                                        time_start = start)
+                traceback.print_exc()
+                return False
         return True
     
     def get_bin(self, feature):
@@ -193,9 +191,6 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
                 self.models[u, v].__load_model_from_file__(g)
 
         h5file.visititems(_add_model)
-
-        # assert len(self._var) == len(self._mean), "Dimensions of variance and mean do not match!"
-        # logging.info("Successfully loaded SVG parameters of dimension %i" % len(self._var))
     
     def __save_model_to_file__(self, h5file):
         """Save the model to disk"""
@@ -225,4 +220,4 @@ if __name__ == "__main__":
 
     # test.calculateMahalobisDistances()
 
-    test.visualize()
+    test.visualize(37)

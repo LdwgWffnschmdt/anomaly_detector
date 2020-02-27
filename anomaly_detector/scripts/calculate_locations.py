@@ -14,6 +14,7 @@ args = parser.parse_args()
 import os
 import time
 import logging
+from glob import glob
 
 import common.utils as utils
 from common import FeatureArray
@@ -28,12 +29,11 @@ def calculate_locations():
     if not files or len(files) < 1 or files[0] == "":
         raise ValueError("Please specify at least one filename (%s)" % files)
     
-    # Get all bags in a folder if the file ends with *.h5
-    if len(files) == 1 and files[0].endswith("*.h5"):
-        path = files[0].replace("*.h5", "")
-        files = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(".h5")]
-        if len(files) < 1:
-            raise ValueError("There is no *.h5 file in %s." % path)
+    # Expand wildcards
+    files_expanded = []
+    for s in files:
+        files_expanded += glob(s)
+    files = list(set(files_expanded)) # Remove duplicates
 
     for features_file in files:
         # Check parameters
@@ -41,7 +41,7 @@ def calculate_locations():
             logging.error("Specified feature file does not exist (%s)" % features_file)
             return
 
-        logging.info("Calculating features for %s" % features_file)
+        logging.info("Calculating locations for %s" % features_file)
         
         # Load the file
         features = FeatureArray(features_file)

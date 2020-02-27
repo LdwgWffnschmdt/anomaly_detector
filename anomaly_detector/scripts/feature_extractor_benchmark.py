@@ -85,7 +85,7 @@ def feature_extractor_benchmark():
             log("Initialization", timeit.repeat(lambda: _class(), number=1, repeat=5))
 
             # Load a test dataset
-            dataset = utils.load_dataset("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.tfrecord")
+            dataset = utils.load_tfrecords("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.tfrecord")
 
             # Test batch extraction
             extractor = _class()
