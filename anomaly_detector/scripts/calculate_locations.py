@@ -1,18 +1,19 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging
-import os
-import time
 import argparse
 
-parser = argparse.ArgumentParser(description="A small script to add patch locations to feature files",
+parser = argparse.ArgumentParser(description="A small script to add patch locations to feature files.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
 parser.add_argument("files", metavar="F", type=str, nargs='+',
                     help="The feature file(s). Supports \"path/to/*.h5\"")
 
 args = parser.parse_args()
+
+import os
+import time
+import logging
 
 import common.utils as utils
 from common import FeatureArray

@@ -6,7 +6,7 @@ from catkin_pkg.python_setup import generate_distutils_setup
 setup_args = generate_distutils_setup(
     name='anomaly_detector',
     version='0.0.1',
-    packages=['feature_extractor', 'anomaly_model', 'common'],
+    packages=['feature_extractor', 'anomaly_model', 'common', 'scripts'],
     package_dir={'': 'anomaly_detector'}
 )
 

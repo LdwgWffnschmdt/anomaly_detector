@@ -1,3 +1,16 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import argparse
+
+parser = argparse.ArgumentParser(description="Benchmark the specified feature extractors.",
+                                 formatter_class=argparse.RawTextHelpFormatter)
+
+parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', type=str,
+                    help="Extractor name. Leave empty for all extractors (default: \"\")")
+
+args = parser.parse_args()
+
 import os
 import logging
 from datetime import datetime
@@ -10,8 +23,7 @@ import tensorflow as tf
 import feature_extractor
 import common.utils as utils
 
-# Only for tests
-if __name__ == "__main__":
+def feature_extractor_benchmark():
     BATCH_SIZE = 32
     
     # Create a workbook and add a worksheet for meta data.
@@ -40,48 +52,18 @@ if __name__ == "__main__":
     for key, value in computer_info.items():
         add_meta(key, value)
 
-    # # Get CPU info
-    # cpu = cpuinfo.get_cpu_info()
-
-    # add_meta("Python version", cpu["python_version"])
-
-    # add_meta("CPU", format=subheading_format)
-    # add_meta("Description", cpu["brand"])
-    # add_meta("Clock speed (advertised)", cpu["hz_advertised"])
-    # add_meta("Clock speed (actual)", cpu["hz_actual"])
-    # add_meta("Architecture", cpu["arch"])
-
-    # # Get GPU info
-    # add_meta("GPU", format=subheading_format)
-    # gpus_tf = tf.config.experimental.list_physical_devices("GPU")
-    
-    # add_meta("Number of GPUs (tf)", len(gpus_tf))
-
-    # gpus = GPUtil.getGPUs()
-    # gpus_available = GPUtil.getAvailability(gpus)
-    # for i, gpu in enumerate(gpus):
-    #     add_meta("GPU:%i" % gpu.id, gpu.name)
-    #     add_meta("GPU:%i (driver)" % gpu.id, gpu.driver)
-    #     add_meta("GPU:%i (memory total)" % gpu.id, gpu.memoryTotal)
-    #     add_meta("GPU:%i (memory free)" % gpu.id, gpu.memoryFree)
-    #     add_meta("GPU:%i (available?)" % gpu.id, gpus_available[i])
-
-    # # Get RAM info
-    # add_meta("RAM", format=subheading_format)
-    # mem = virtual_memory()
-
-    # add_meta("RAM (total)", mem.total)
-    # add_meta("RAM (available)", mem.available)
-
     # Get all the available feature extractor names
-    extractor_names = inspect.getmembers(feature_extractor, inspect.isclass)
+    extractor_names = map(lambda e: e[0], inspect.getmembers(feature_extractor, inspect.isclass))
+
+    if args.extractor is None:
+        args.extractor = extractor_names
 
     # Get an instance of each class
     module = __import__("feature_extractor")
     
     try:
-        for extractor_name in extractor_names:
-            worksheet = workbook.add_worksheet(extractor_name[0].replace("FeatureExtractor", ""))
+        for extractor_name in args.extractor:
+            worksheet = workbook.add_worksheet(extractor_name.replace("FeatureExtractor", ""))
             worksheet.set_column(0, 20, 20)
 
             col = 0
@@ -94,10 +76,10 @@ if __name__ == "__main__":
 
             def log(s, t):
                 """Log duration t with info string s"""
-                logging.info("%-40s (%s): %s" % (extractor_name[0], s, str(t)))
+                logging.info("%-40s (%s): %s" % (extractor_name, s, str(t)))
                 add_to_excel(s, t)
 
-            _class = getattr(module, extractor_name[0])
+            _class = getattr(module, extractor_name)
 
             # Test extractor initialization
             log("Initialization", timeit.repeat(lambda: _class(), number=1, repeat=5))
@@ -116,3 +98,6 @@ if __name__ == "__main__":
             log("Extract single", timeit.repeat(lambda: extractor.extract(single[0]), number=1, repeat=10))
     finally:
         workbook.close()
+
+if __name__ == "__main__":
+    feature_extractor_benchmark()

@@ -1,3 +1,4 @@
 anomaly_model
 common
 feature_extractor
+scripts

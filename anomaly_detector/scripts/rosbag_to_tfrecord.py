@@ -1,12 +1,9 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging
-import os
-import time
 import argparse
 
-parser = argparse.ArgumentParser(description="A small script to convert bag files to TensorFlow TFRecords.",
+parser = argparse.ArgumentParser(description="Convert bag files to TensorFlow TFRecords.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
 parser.add_argument("bag_files", metavar="F", type=str, nargs='+',
@@ -42,6 +39,10 @@ parser.add_argument("--label", metavar="L", dest="label", type=int,
 
 args = parser.parse_args()
 
+import os
+import time
+import logging
+
 import rospy
 import rosbag
 import tensorflow
@@ -57,7 +58,7 @@ def rosbag_to_tfrecord():
     ################
     #  Parameters  #
     ################
-    bag_files       = args.bag_files
+    bag_files      = args.bag_files
     output_dir     = args.output_dir
     image_topic    = args.image_topic
     images_per_bin = args.images_per_bin
