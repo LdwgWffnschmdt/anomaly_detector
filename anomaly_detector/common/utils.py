@@ -20,7 +20,7 @@ logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=log
 #  Images IO  #
 ###############
 
-def load_dataset(filenames):
+def load_tfrecords(filenames):
     """Loads a set of TFRecord files
     Args:
         filenames (str / str[]): TFRecord file(s) extracted
@@ -62,46 +62,6 @@ def load_dataset(filenames):
 
     return raw_dataset.map(_parse_function)
 
-################
-#  Feature IO  #
-################
-
-def flatten(matrix):
-    """Reduce an array of feature vectors to a simple list of vectors
-    
-    Args:
-        matrix (np.array): array of shape (x1, ..., xn, z)
-
-    Returns:
-        Flattened array of shape (x1 * ... * xn, z)
-    """
-    return matrix.reshape(-1, matrix.shape[-1])
-
-def _int64_feature(value):
-    """Wrapper for inserting int64 features into Example proto."""
-    if not isinstance(value, list):
-        value = [value]
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
-
-def _float_feature(value):
-    """Wrapper for inserting float features into Example proto."""
-    if not isinstance(value, list):
-        value = [value]
-    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
-
-# Can be used to store float64 values if necessary
-# (http://jrmeyer.github.io/machinelearning/2019/05/29/tensorflow-dataset-estimator-api.html)
-def _float64_feature(float64_value):
-    float64_bytes = [str(float64_value).encode()]
-    bytes_list = tf.train.BytesList(value=float64_bytes)
-    bytes_list_feature = tf.train.Feature(bytes_list=bytes_list)
-    return bytes_list_feature
-    #    example['float_value'] = tf.strings.to_number(example['float_value'], out_type=tf.float64)
-
-def _bytes_feature(value):
-    """Wrapper for inserting bytes features into Example proto."""
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
-
 #################
 # Output helper #
 #################
@@ -116,59 +76,13 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
         pause_func (function): Function converting a feature to a boolean that pauses the video
         show_grid (bool): Overlay real world coordinate grid
     """
+    image, example, feature_2d = (None, None, None)
     total, height, width = features.shape
     
     ### Set up window
     cv2.namedWindow('image')
 
-    def nothing(x):
-        pass
-    
-    # create trackbars
-    cv2.createTrackbar('threshold',   'image', int(threshold) , int(threshold) * 3, nothing)
-    cv2.createTrackbar('show_thresh', 'image', 1 , 1, nothing)
-    cv2.createTrackbar('show_grid',   'image', int(show_grid) , 1, nothing)
-    cv2.createTrackbar('show_values', 'image', 0 , 1, nothing)
-    cv2.createTrackbar('delay',       'image', 1 , 1000, nothing)
-    cv2.createTrackbar('overlay',     'image', 40, 100 , nothing)
-
-    font      = cv2.FONT_HERSHEY_SIMPLEX
-    fontScale = 0.25
-    thickness = 1
-
-    ### Calculate grid overlay
-    ilu = ImageLocationUtility()
-    absolute_locations = ilu.span_grid(60, 60, 1, -30, -30)
-
-    tfrecord = None
-    tfrecordCounter = 0
-
-    pause = False
-
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111)
-    # ax.set_xlim([-10,10])
-    # ax.set_ylim([-10,10])
-    # plt.ion()
-
-    # fig.show()
-    # fig.canvas.draw()
-
-    for i, feature_2d in enumerate(features):
-        if tfrecord != feature_2d[0,0].tfrecord:
-            # if not "2020-02-06-17-17-25.tfrecord" in feature_2d[0,0].tfrecord: # TODO: Remove for production
-            #     continue
-            tfrecord = feature_2d[0,0].tfrecord
-            tfrecordCounter = 0
-            image_dataset = load_dataset(feature_2d[0,0].tfrecord).as_numpy_iterator()
-        else:
-            tfrecordCounter += 1
-
-        image, example = next(image_dataset)
-
-        # if meta["label"] == 1:
-        #     continue
-
+    def __draw__(x=None):
         overlay = image.copy()
 
         # if example["metadata/time"] != meta["time"]:
@@ -242,8 +156,55 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
         image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
         
         image_write_label(image_new, feature_2d[0,0].label)
-        
         cv2.imshow("image", image_new)
+    
+    # create trackbars
+    cv2.createTrackbar('threshold',   'image', int(threshold) , int(threshold) * 3, __draw__)
+    cv2.createTrackbar('show_thresh', 'image', 1 ,              1,                  __draw__)
+    cv2.createTrackbar('show_grid',   'image', int(show_grid) , 1,                  __draw__)
+    cv2.createTrackbar('show_values', 'image', 0 ,              1,                  __draw__)
+    cv2.createTrackbar('delay',       'image', 1 ,              1000,               __draw__)
+    cv2.createTrackbar('overlay',     'image', 40,              100 ,               __draw__)
+
+    font      = cv2.FONT_HERSHEY_SIMPLEX
+    fontScale = 0.25
+    thickness = 1
+
+    ### Calculate grid overlay
+    ilu = ImageLocationUtility()
+    absolute_locations = ilu.span_grid(60, 60, 1, -30, -30)
+
+    tfrecord = None
+    tfrecordCounter = 0
+
+    pause = False
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111)
+    # ax.set_xlim([-10,10])
+    # ax.set_ylim([-10,10])
+    # plt.ion()
+
+    # fig.show()
+    # fig.canvas.draw()
+
+    for i, feature_2d in enumerate(features):
+        if tfrecord != feature_2d[0,0].tfrecord:
+            if not "2020-02-06-17-17-25.tfrecord" in feature_2d[0,0].tfrecord: # TODO: Remove for production
+                continue
+            tfrecord = feature_2d[0,0].tfrecord
+            tfrecordCounter = 0
+            image_dataset = load_tfrecords(feature_2d[0,0].tfrecord).as_numpy_iterator()
+        else:
+            tfrecordCounter += 1
+
+        image, example = next(image_dataset)
+
+        # if meta["label"] == 1:
+        #     continue
+
+        __draw__()
+        
         key = cv2.waitKey(0 if pause else cv2.getTrackbarPos('delay','image'))
         if key == 27:   # [esc] => Quit
             return None

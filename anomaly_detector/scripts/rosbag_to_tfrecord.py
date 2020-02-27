@@ -42,6 +42,7 @@ args = parser.parse_args()
 import os
 import time
 import logging
+from glob import glob
 
 import rospy
 import rosbag
@@ -53,6 +54,31 @@ import tf2_ros
 import tf2_py as tf2
 
 import common.utils as utils
+
+def _int64_feature(value):
+    """Wrapper for inserting int64 features into Example proto."""
+    if not isinstance(value, list):
+        value = [value]
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
+
+def _float_feature(value):
+    """Wrapper for inserting float features into Example proto."""
+    if not isinstance(value, list):
+        value = [value]
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
+# Can be used to store float64 values if necessary
+# (http://jrmeyer.github.io/machinelearning/2019/05/29/tensorflow-dataset-estimator-api.html)
+def _float64_feature(float64_value):
+    float64_bytes = [str(float64_value).encode()]
+    bytes_list = tf.train.BytesList(value=float64_bytes)
+    bytes_list_feature = tf.train.Feature(bytes_list=bytes_list)
+    return bytes_list_feature
+    #    example['float_value'] = tf.strings.to_number(example['float_value'], out_type=tf.float64)
+
+def _bytes_feature(value):
+    """Wrapper for inserting bytes features into Example proto."""
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 def rosbag_to_tfrecord():
     ################
@@ -70,12 +96,11 @@ def rosbag_to_tfrecord():
     if not bag_files or len(bag_files) < 1 or bag_files[0] == "":
         raise ValueError("Please specify at least one filename (%s)" % bag_files)
     
-    # Get all bags in a folder if the file ends with *.bag
-    if len(bag_files) == 1 and bag_files[0].endswith("*.bag"):
-        path = bag_files[0].replace("*.bag", "")
-        bag_files = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(".bag")]
-        if len(bag_files) < 1:
-            raise ValueError("There is no *.bag file in %s." % path)
+    # Expand wildcards
+    bag_files_expanded = []
+    for s in files:
+        bag_files_expanded += glob(s)
+    bag_files = list(set(bag_files_expanded)) # Remove duplicates
 
     if output_dir is None or output_dir == "" or not os.path.exists(output_dir) or not os.path.isdir(output_dir):
         output_dir = os.path.join(os.path.abspath(os.path.dirname(bag_files[0])), "TFRecord")
@@ -226,22 +251,22 @@ def rosbag_to_tfrecord():
 
                         # Add image and position to TFRecord
                         feature_dict = {
-                            "metadata/location/translation/x"   : utils._float_feature(translation.x),
-                            "metadata/location/translation/y"   : utils._float_feature(translation.y),
-                            "metadata/location/translation/z"   : utils._float_feature(translation.z),
-                            "metadata/location/rotation/x"      : utils._float_feature(euler[0]),
-                            "metadata/location/rotation/y"      : utils._float_feature(euler[1]),
-                            "metadata/location/rotation/z"      : utils._float_feature(euler[2]),
-                            "metadata/time"                     : utils._int64_feature(t.to_nsec()), # There were some serious problems saving to_sec as float...
-                            "metadata/label"                    : utils._int64_feature(image_label), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-                            "metadata/rosbag"                   : utils._bytes_feature(bag_file),
-                            "metadata/tfrecord"                 : utils._bytes_feature(output_file),
-                            "image/height"      : utils._int64_feature(msg.height),
-                            "image/width"       : utils._int64_feature(msg.width),
-                            "image/channels"    : utils._int64_feature(channels),
-                            "image/colorspace"  : utils._bytes_feature(colorspace),
-                            "image/format"      : utils._bytes_feature("jpeg"),
-                            "image/encoded"     : utils._bytes_feature(encoded.tobytes())
+                            "metadata/location/translation/x"   : _float_feature(translation.x),
+                            "metadata/location/translation/y"   : _float_feature(translation.y),
+                            "metadata/location/translation/z"   : _float_feature(translation.z),
+                            "metadata/location/rotation/x"      : _float_feature(euler[0]),
+                            "metadata/location/rotation/y"      : _float_feature(euler[1]),
+                            "metadata/location/rotation/z"      : _float_feature(euler[2]),
+                            "metadata/time"                     : _int64_feature(t.to_nsec()), # There were some serious problems saving to_sec as float...
+                            "metadata/label"                    : _int64_feature(image_label), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+                            "metadata/rosbag"                   : _bytes_feature(bag_file),
+                            "metadata/tfrecord"                 : _bytes_feature(output_file),
+                            "image/height"      : _int64_feature(msg.height),
+                            "image/width"       : _int64_feature(msg.width),
+                            "image/channels"    : _int64_feature(channels),
+                            "image/colorspace"  : _bytes_feature(colorspace),
+                            "image/format"      : _bytes_feature("jpeg"),
+                            "image/encoded"     : _bytes_feature(encoded.tobytes())
                         }
 
                         example = tensorflow.train.Example(features=tensorflow.train.Features(feature=feature_dict))
