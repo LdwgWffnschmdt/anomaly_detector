@@ -10,20 +10,20 @@ class AnomalyModelBalancedDistributionPos(AnomalyModelBalancedDistribution):
     Reference: https://www.mdpi.com/2076-3417/9/4/757
     """
     
-    def generate_model(self, features):
+    def __generate_model__(self, features):
         # Add location to features
         features.calculate_locations()
         features.add_location_as_feature_dimension()
-        AnomalyModelBalancedDistribution.generate_model(self, features)
+        AnomalyModelBalancedDistribution.__generate_model__(self, features)
 
 # Only for tests
 if __name__ == "__main__":
-    from anomalyModelTest import AnomalyModelTest
-    test = AnomalyModelTest(AnomalyModelBalancedDistributionPos(), add_locations_to_features=True)
+    model = AnomalyModelBalancedDistributionPos()
+    model.load_or_generate()
 
-    test.calculateMahalobisDistances()
+    model.calculate_mahalobis_distances()
 
     # def _pause(feature):
     #     return feature in test.model.normal_distribution
 
-    # test.visualize(pause_func=_pause)
+    # model.visualize(pause_func=_pause)

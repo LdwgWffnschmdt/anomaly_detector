@@ -8,13 +8,14 @@ import traceback
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from anomalyModelBase import AnomalyModelBase
 import common.utils as utils
 
 class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     """ Base for anomaly models that create one model per spatial bin (grid cell) """
-    def __init__(self, create_anomaly_model_func, cell_size=1.0):
+    def __init__(self, create_anomaly_model_func, cell_size=0.2):
         """ Create a new spatial bin anomaly model
 
         Args:
@@ -26,7 +27,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         self.CREATE_ANOMALY_MODEL_FUNC = create_anomaly_model_func
         
         m = create_anomaly_model_func()
-        self.NAME = "SpatialBin%s%.2f" % (m.__class__.__name__.replace("AnomalyModel", ""), cell_size)
+        self.NAME = "SpatialBin/%s/%.2f" % (m.__class__.__name__.replace("AnomalyModel", ""), cell_size)
     
     def classify(self, metadata, feature_vector, threshold=None):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
@@ -56,9 +57,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         
         return model._mahalanobis_distance(feature)
 
-    def generate_model(self, features):
-        AnomalyModelBase.generate_model(self, features) # Call base
-
+    def __generate_model__(self, features):
         # Get location for features
         features.calculate_locations()
         
@@ -95,19 +94,18 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         shape = (len(self.bins[0]) + 1, len(self.bins[1]) + 1)
 
         logging.info("Extent of features: (%i, %i)/(%i, %i)." % (x_min, y_min, x_max, y_max))
-        logging.info("Results in %i bins in x and %i bins in y direction (with cell size %f)" % (len(self.bins[0]), len(self.bins[1]), self.CELL_SIZE))
+        logging.info("Results in %i bins in x and %i bins in y direction (with cell size %.2f)" % (len(self.bins[0]), len(self.bins[1]), self.CELL_SIZE))
 
         logging.info("Calculating corresponding bin for every feature")
-        feature_indices = np.empty(shape=shape + (len(features_flat),), dtype=np.bool)
+        self.feature_indices = np.empty(shape=shape, dtype=object)
+        self.feature_indices_count = np.zeros(shape=shape, dtype=np.uint32)
         # Get the corresponding bin for every feature
-        for i, f in enumerate(features_flat):
+        for i, f in enumerate(tqdm(features_flat, desc="Calculating bins")):
             self.get_bin(f)
-            feature_indices[f.bin][i] = True
-
-        feature_indices_count = np.sum(feature_indices, axis=2)
-        
-        plt.imshow(feature_indices_count, vmin=1)
-        plt.show()
+            if self.feature_indices[f.bin] is None:
+                self.feature_indices[f.bin] = list()
+            self.feature_indices[f.bin].append(i)
+            self.feature_indices_count[f.bin] += 1
         
         # Empty grid that will contain the model for each bin
         self.models = np.empty(shape=shape, dtype=object)
@@ -128,14 +126,15 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
                             logging.warning("Interrupted!")
                             raise KeyboardInterrupt()
                         
-                        # Filter by bin
-                        bin_features_flat = features_flat[feature_indices[u, v]]
-                        
-                        if len(bin_features_flat) > 0:
-                            # Create a new model
-                            model = self.CREATE_ANOMALY_MODEL_FUNC() # Instantiate a new model
-                            model.generate_model(bin_features_flat)  # The model only gets flattened features
-                            self.models[u, v] = model                # Store the model
+                        if self.feature_indices[u, v] is not None:
+                            # Filter by bin
+                            bin_features_flat = features_flat[self.feature_indices[u, v]]
+                            
+                            if len(bin_features_flat) > 0:
+                                # Create a new model
+                                model = self.CREATE_ANOMALY_MODEL_FUNC() # Instantiate a new model
+                                model.__generate_model__(bin_features_flat)  # The model only gets flattened features
+                                self.models[u, v] = model                # Store the model
                         
                         # Print progress
                         utils.print_progress(i, total,
@@ -177,9 +176,16 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
 
     def __load_model_from_file__(self, h5file):
         """Load a SVG model from file"""
+        if not "bins_x" in h5file.keys() or \
+           not "bins_y" in h5file.keys() or \
+           not "feature_indices_count" in h5file.keys() or \
+           not "Cell size" in h5file.attrs.keys():
+            return False
+        
         self.CELL_SIZE = h5file.attrs["Cell size"]
-        # h5file.attrs["Num models"] = len(self.models.flatten())
+        
         self.bins = (np.array(h5file["bins_x"]), np.array(h5file["bins_y"]))
+        self.feature_indices_count = np.array(h5file["feature_indices_count"])
         
         self.models = np.empty(shape=(len(self.bins[0]) + 1, len(self.bins[1]) + 1), dtype=object)
 
@@ -191,14 +197,16 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
                 self.models[u, v].__load_model_from_file__(g)
 
         h5file.visititems(_add_model)
+        return True
     
     def __save_model_to_file__(self, h5file):
         """Save the model to disk"""
         h5file.attrs["Cell size"] = self.CELL_SIZE
-        h5file.attrs["Num models"] = len(self.models.flatten())
+        h5file.attrs["Num models"] = sum(x is not None for x in self.models.flatten())
         h5file.attrs["Models shape"] = self.models.shape
         h5file.create_dataset("bins_x", data=self.bins[0])
         h5file.create_dataset("bins_y", data=self.bins[1])
+        h5file.create_dataset("feature_indices_count", data=self.feature_indices_count)
         
         for u in range(self.models.shape[0]):
             for v in range(self.models.shape[1]):
@@ -208,16 +216,22 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
                     g.attrs["u"] = u
                     g.attrs["v"] = v
                     model.__save_model_to_file__(g)
-
+        return True
+    	
+    def show_spatial_histogram(self):
+        """ Show the spatial histogram of features (like a map) """
+        plt.imshow(self.feature_indices_count, vmin=1)
+        plt.show()
+        
 # Only for tests
 if __name__ == "__main__":
     from anomalyModelSVG import AnomalyModelSVG
-    from anomalyModelTest import AnomalyModelTest
     
     model = AnomalyModelSpatialBinsBase(AnomalyModelSVG)
-    
-    test = AnomalyModelTest(model)
+    if model.load_or_generate(load_features=True):
+        model.show_spatial_histogram()
 
-    # test.calculateMahalobisDistances()
+        model.calculate_mahalobis_distances()
+        model.show_mahalanobis_distribution()
 
-    test.visualize(37)
+        model.visualize()

@@ -6,6 +6,7 @@ import time
 
 import h5py
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.spatial import distance
 
 from anomalyModelBase import AnomalyModelBase
@@ -17,6 +18,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
     """
     def __init__(self, initial_normal_features=1000, threshold_learning=20, threshold_classification=5, pruning_parameter=0.5):
         AnomalyModelBase.__init__(self)
+        self.NAME += "/%i/%i/%i" % (initial_normal_features, threshold_learning, pruning_parameter)
         
         assert 0 < pruning_parameter < 1, "Pruning parameter out of range (0 < η < 1)"
 
@@ -48,9 +50,9 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         assert not self.balanced_distribution is None and len(self.balanced_distribution) > 0, \
             "Can't calculate mean or covariance of nothing!"
         
-        self._mean = np.mean(self.balanced_distribution, axis=0, dtype=np.float64)    # Mean
-        cov = np.cov(self.balanced_distribution, rowvar=False)                        # Covariance matrix
-        self._covI = np.linalg.pinv(cov)                                            # Inverse of covariance matrix
+        self._mean = np.mean(self.balanced_distribution, axis=0, dtype=np.float64).item()    # Mean
+        cov = np.cov(self.balanced_distribution, rowvar=False).item()                        # Covariance matrix
+        self._covI = np.linalg.pinv(cov)                                                     # Inverse of covariance matrix
     
     def _mahalanobis_distance(self, feature):
         """Calculate the Mahalanobis distance between the input and the model"""
@@ -62,10 +64,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         
         return distance.mahalanobis(feature, self._mean, self._covI)
 
-
-    def generate_model(self, features):
-        AnomalyModelBase.generate_model(self, features) # Call base
-
+    def __generate_model__(self, features):
         # Reduce features to simple list
         features_flat = features.flatten()
 
@@ -148,7 +147,14 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         
     def __load_model_from_file__(self, h5file):
         """Load a Balanced Distribution from file"""
-        self.balanced_distribution        = np.array(h5file["balanced_distribution"])
+        if not "balanced_distribution" in h5file.keys() or \
+           not "initial_normal_features" in h5file.attrs.keys() or \
+           not "threshold_learning" in h5file.attrs.keys() or \
+           not "threshold_classification" in h5file.attrs.keys() or \
+           not "pruning_parameter" in h5file.attrs.keys():
+            return False
+        
+        self.balanced_distribution      = np.array(h5file["balanced_distribution"])
         self.initial_normal_features    = h5file.attrs["initial_normal_features"]
         self.threshold_learning         = h5file.attrs["threshold_learning"]
         self.threshold_classification   = h5file.attrs["threshold_classification"]
@@ -156,6 +162,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         assert 0 < self.pruning_parameter < 1, "Pruning parameter out of range (0 < η < 1)"
         self._calculate_mean_and_covariance()
         logging.info("Successfully loaded Balanced Distribution with %i entries and %i dimensions" % (len(self.balanced_distribution), self.balanced_distribution[0].shape[0]))
+        return True
     
     def save_model_to_file(self, h5file):
         """Save the model to disk"""
@@ -164,14 +171,14 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         h5ffile.attrs["threshold_learning"]         = self.threshold_learning
         h5ffile.attrs["threshold_classification"]   = self.threshold_classification
         h5ffile.attrs["pruning_parameter"]          = self.pruning_parameter
+        return True
 
 # Only for tests
 if __name__ == "__main__":
-    from anomalyModelTest import AnomalyModelTest
     model = AnomalyModelBalancedDistribution()
-    test = AnomalyModelTest(model)
+    model.load_or_generate()
 
-    # test.calculateMahalobisDistances()
+    # test.calculate_mahalobis_distances()
     def _feature_to_color(feature):
         b = 100 if feature in model.balanced_distribution else 0
         g = 0
@@ -182,4 +189,4 @@ if __name__ == "__main__":
     def _pause(feature):
         return feature in test.model.balanced_distribution
 
-    test.visualize(threshold=60, feature_to_color_func=_feature_to_color)
+    model.visualize(threshold=60, feature_to_color_func=_feature_to_color)

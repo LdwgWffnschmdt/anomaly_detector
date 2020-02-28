@@ -3,6 +3,8 @@ import time
 import logging
 
 import h5py
+import matplotlib.pyplot as plt
+import numpy as np
 
 from common import FeatureArray
 import common.utils as utils
@@ -11,14 +13,18 @@ class AnomalyModelBase(object):
     
     def __init__(self):
         self.NAME = self.__class__.__name__.replace("AnomalyModel", "")
+        self.features = None
     
-    def generate_model(self, features):
+    def __generate_model__(self, features):
         """Generate a model based on the features and metadata
         
         Args:
-            features (FeaturesArray): Array of features as extracted by a FeatureExtractor
+            features (FeatureArray): Array of features as extracted by a FeatureExtractor
+
+        Returns:
+            h5py.group that will be saved to the features file
         """
-        self.features = features
+        raise NotImplementedError()
         
     def classify(self, feature):
         """Classify a single feature based on the loaded model
@@ -29,99 +35,218 @@ class AnomalyModelBase(object):
         Returns:
             A label
         """
-        raise NotImplementedError
+        raise NotImplementedError()
     
     def __save_model_to_file__(self, h5file):
         """ Internal method that should be implemented by subclasses and save the
         necessary information to the file so that the model can be reloaded later
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def __load_model_from_file__(self, h5file):
         """ Internal method that should be implemented by subclasses and load the
         necessary information from the file
         """
-        raise NotImplementedError
+        raise NotImplementedError()
     
     ########################
     # Common functionality #
     ########################
 
-    def generate_model_from_file(self, features_file, output_file = ""):
-        """Generate a model based on the features in features_file and save it to output_file
+    def load_or_generate(self, features="/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.h5",
+                               load_features=False, load_mahalanobis_distances=False):
+        """Load a model from file or generate it based on the features
         
         Args:
-            features_file (str) : HDF5 file containing metadata and features (see feature_extractor for details)
-            output_file (str): Output path for the model file (same path as features_file if not specified)
+            features (str, FeatureArray) : HDF5 file containing metadata and features (see feature_extractor for details)
         """
-        # Check parameters
-        if features_file == "" or not os.path.exists(features_file) or not os.path.isfile(features_file):
-            raise ValueError("Specified model file does not exist (%s)" % features_file)
-        
-        # Read file
-        features = FeatureArray(features_file)
 
-        if output_file == "":
-            output_dir = os.path.join(os.path.abspath(os.path.dirname(features_file)), self.NAME)
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-            output_file = os.path.join(output_dir, os.path.basename(features_file))
-            logging.info("Output file set to %s" % output_file)
+        # Load features if necessary
+        if isinstance(features, basestring):
+            if features == "" or not os.path.exists(features) or not os.path.isfile(features):
+                raise ValueError("Specified file does not exist (%s)" % features)
+            
+            # Try loading
+            loaded = self.load_from_file(features, load_features=load_features, load_mahalanobis_distances=load_mahalanobis_distances)
+            if loaded:
+                return True
+
+            # Read file
+            features = FeatureArray(features)
+        elif isinstance(features, FeatureArray):
+            # Try loading
+            loaded = self.load_from_file(features.filename, load_features=load_features, load_mahalanobis_distances=load_mahalanobis_distances)
+            if loaded:
+                return True
+        else:
+            raise ValueError("features must be a path to a file or a FeatureArray.")
         
+        self.features = features
+
+        start = time.time()
+
         # Generate model
-        if self.generate_model(features.no_anomaly) == False:
+        if self.__generate_model__(features.no_anomaly) == False:
             logging.info("Could not generate model.")
             return False
 
-        # Save model
-        self.save_model_to_file(output_file)
-        
-        return True
-        
-    def save_to_file(self, output_file):
-        """Save the model to output_file
-        
-        Args:
-            output_file (str): Output path for the model file
-        """
-        
-        logging.info("Writing model to: %s" % output_file)
-        with h5py.File(output_file, "w") as hf:
+        end = time.time()
+
+        logging.info("Writing model to: %s" % features.filename)
+        with h5py.File(features.filename, "a") as hf:
+            g = hf.get(self.NAME)
+
+            if g is not None:
+                del hf[self.NAME]
+            
+            g = hf.create_group(self.NAME)
+
             # Add metadata to the output file
-            hf.attrs["Anomaly model name"]        = self.NAME
-            if self.features is None:
-                logging.warn("You are saving a model seems to have been loaded"
-                             "from file and is not freshly generated from features")
-                hf.attrs["No features loaded"]   = True
-            else:
-                hf.attrs["Number of features used"]   = len(self.features.flatten())
-                hf.attrs["Features shape"]            = self.features.shape
-                hf.attrs["Features file"]             = self.features.filename
-                hf.attrs["Feature extractor"]         = self.features.extractor
-                hf.attrs["Feature batch size"]        = self.features.batch_size
-                hf.attrs["Original files"]            = self.features.files
+            g.attrs["Number of features used"]   = len(self.features.flatten())
 
             computer_info = utils.getComputerInfo()
             for key, value in computer_info.items():
-                hf.attrs[key] = value
+                g.attrs[key] = value
 
-            hf.attrs["Created"] = time.time()
+            g.attrs["Start"] = start
+            g.attrs["End"] = end
+            g.attrs["Duration"] = end - start
+            g.attrs["Duration (formatted)"] = utils.format_duration(end - start)
 
-            self.__save_model_to_file__(hf)
-        logging.info("Successfully written model to: %s" % output_file)
+            self.__save_model_to_file__(g)
+        logging.info("Successfully written model to: %s" % features.filename)
 
+        if load_mahalanobis_distances:
+            self.calculate_mahalobis_distances()
 
-    def load_from_file(self, model_file, load_features=False):
+        return True
+
+    def load_from_file(self, model_file, load_features=False, load_mahalanobis_distances=False):
         """ Load a model from file """
         logging.info("Reading model from: %s" % model_file)
         with h5py.File(model_file, "r") as hf:
-            if hf.attrs["Anomaly model name"] != self.NAME:
-                logging.warn("The model you are trying to load does not seem to have"
-                             "been created by this anomaly detector (%s vs %s)" % (hf.attrs["Anomaly model name"], self.NAME))
+            g = hf.get(self.NAME)
+            
+            if g is None:
+                return False
+
             if load_features:
-                features_file = hf.attrs["Features file"]
-                if os.path.exists(features_file):
-                    self.features = FeaturesArray(features_file)
-                else:
-                    raise ValueError("Can't find features file (%s)" % features_file)
-            self.__load_model_from_file__(hf)
+                self.features = FeatureArray(model_file)
+
+            if load_mahalanobis_distances:
+                self.load_mahalanobis_distances()
+                
+            return self.__load_model_from_file__(g)
+    
+    def calculate_mahalobis_distances(self):
+        """ Calculate all the Mahalanobis distances """
+        if self.features is None:
+            raise ValueError("No features loaded.")
+        
+        # Try loading
+        if self.load_mahalanobis_distances():
+            return True
+
+        logging.info("Calculating Mahalanobis distances of %i features with and %i features without anomalies" % \
+            (len(self.features.no_anomaly.flatten()), len(self.features.anomaly.flatten())))
+
+        self.mahalanobis_no_anomaly = np.array(list(map(self._mahalanobis_distance, self.features.no_anomaly.flatten()))) # 75.49480115577167
+        self.mahalanobis_anomaly    = np.array(list(map(self._mahalanobis_distance, self.features.anomaly.flatten())))    # 76.93620254133627
+
+        self.mahalanobis_no_anomaly_max = np.nanmax(self.mahalanobis_no_anomaly)
+        self.mahalanobis_anomaly_max    = np.nanmax(self.mahalanobis_anomaly)
+        self.mahalanobis_max = max(self.mahalanobis_no_anomaly_max, self.mahalanobis_anomaly_max)
+
+        logging.info("Maximum Mahalanobis distance (no anomaly): %f" % self.mahalanobis_no_anomaly_max)
+        logging.info("Maximum Mahalanobis distance (anomaly)   : %f" % self.mahalanobis_anomaly_max)
+        
+        self.save_mahalanobis_distances()
+
+    def load_mahalanobis_distances(self):
+        """ Load the mahalanobis distances from file """
+        with h5py.File(self.features.filename, "r") as hf:
+            g = hf.get(self.NAME)
+            
+            if g is None:
+                return False
+            
+            if not "mahalanobis_no_anomaly" in g.keys():
+                return False
+
+            self.mahalanobis_no_anomaly = np.array(g["mahalanobis_no_anomaly"])
+            self.mahalanobis_anomaly    = np.array(g["mahalanobis_anomaly"])
+            
+            self.mahalanobis_no_anomaly_max = g["mahalanobis_no_anomaly"].attrs["max"]
+            self.mahalanobis_anomaly_max    = g["mahalanobis_anomaly"].attrs["max"]
+            self.mahalanobis_max = max(self.mahalanobis_no_anomaly_max, self.mahalanobis_anomaly_max)
+
+            logging.info("Maximum Mahalanobis distance (no anomaly): %f" % self.mahalanobis_no_anomaly_max)
+            logging.info("Maximum Mahalanobis distance (anomaly)   : %f" % self.mahalanobis_anomaly_max)
+            return True
+
+    def save_mahalanobis_distances(self):
+        """ Save the mahalanobis distances from file """
+        with h5py.File(self.features.filename, "r+") as hf:
+            g = hf.get(self.NAME)
+
+            if g is None:
+                g = hf.create_group(self.NAME)
+            
+            no_anomaly = g.create_dataset("mahalanobis_no_anomaly",  data=self.mahalanobis_no_anomaly)
+            anomaly    = g.create_dataset("mahalanobis_anomaly",     data=self.mahalanobis_anomaly)
+            
+            no_anomaly.attrs["max"] = self.mahalanobis_no_anomaly_max
+            anomaly.attrs["max"]    = self.mahalanobis_anomaly_max
+
+            logging.info("Saved Mahalanobis distances to file")
+            return True
+
+    def show_mahalanobis_distribution(self):
+        """ Plot the distribution of all Mahalanobis distances """
+        logging.info("Showing Mahalanobis distance distribution")
+        if self.mahalanobis_no_anomaly is None:
+            self.calculate_mahalobis_distances()
+        
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+
+        ax1.set_title("No anomaly (%i)" % len(self.features.no_anomaly.flatten()))
+        ax1.hist(self.mahalanobis_no_anomaly, bins=50)
+
+        ax2.set_title("Anomaly (%i)" % len(self.features.anomaly.flatten()))
+        ax2.hist(self.mahalanobis_anomaly, bins=50)
+
+        fig.suptitle("Mahalanobis distances")
+
+        plt.show()
+
+    def visualize(self, threshold=None, feature_to_color_func=None, feature_to_text_func=None, pause_func=None):
+        """ Visualize the result of a anomaly model """
+        if threshold is None:
+            if self.mahalanobis_max is None:
+                self.calculate_mahalobis_distances()
+            threshold = self.mahalanobis_max * 0.9
+        
+        def _default_feature_to_color(feature, t, show_thresh):
+            b = 0#100 if feature in self.normal_distribution else 0
+            g = 0
+            if show_thresh:
+                r = 100 if self._mahalanobis_distance(feature) > t else 0
+            elif t == 0:
+                r = 0
+            else:
+                r = min(255, int(self._mahalanobis_distance(feature) * (255 / t)))
+            return (b, g, r)
+
+        def _default_feature_to_text(feature, t):
+            return round(self._mahalanobis_distance(feature), 2)
+
+        if feature_to_color_func is None:
+            feature_to_color_func = _default_feature_to_color
+
+        if feature_to_text_func is None:
+            feature_to_text_func = _default_feature_to_text
+
+        utils.visualize(self.features, threshold,
+                        feature_to_color_func=feature_to_color_func,
+                        feature_to_text_func=feature_to_text_func,
+                        pause_func=pause_func)
