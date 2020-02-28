@@ -70,7 +70,7 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
     """Visualize features on the source image
 
     Args:
-        features (FeaturesArray): Array of features as extracted by a FeatureExtractor
+        features (FeatureArray): Array of features as extracted by a FeatureExtractor
         feature_to_color_func (function): Function converting a feature to a color (b, g, r)
         feature_to_text_func (function): Function converting a feature to a string
         pause_func (function): Function converting a feature to a boolean that pauses the video

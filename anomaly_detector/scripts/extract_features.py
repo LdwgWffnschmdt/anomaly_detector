@@ -17,20 +17,20 @@ parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', t
 
 args = parser.parse_args()
 
-logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
-
-if not args.list and len(args.files) == 0:
-    logging.error("No input file specified.")
-    return
-
 import os
 import time
 import logging
 
-import inspect
-import feature_extractor as feature_extractor
+logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
 
 def extract_features():
+    if not args.list and len(args.files) == 0:
+        logging.error("No input file specified.")
+        return
+
+    import inspect
+    import feature_extractor as feature_extractor
+
     # Get all the available feature extractor names
     extractor_names = map(lambda e: e[0], inspect.getmembers(feature_extractor, inspect.isclass))
 
