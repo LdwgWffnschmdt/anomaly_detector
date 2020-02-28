@@ -5,6 +5,7 @@ Detect anomalies in images using deep features
 ## Install
 ```bash
 python -m virtualenv .env
+source .env/bin/
 pip install -r requirements.txt
 
 pip install -e .    # Install the current directory as pip package but keep it editable (-e)
