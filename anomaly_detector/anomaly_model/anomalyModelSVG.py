@@ -54,15 +54,12 @@ class AnomalyModelSVG(AnomalyModelBase):
 
         # Get the variance
         logging.info("Calculating the variance")
-        # np.var(FeatureArray) results in a FeatureArray with only one Feature
-        # whose values represent the variance values. So we need to take that
-        # one Feature using .item() to be able to use and store it.
-        self._var = np.var(features_flat).item()
+        self._var = features_flat.var()
         # --> one variance per feature dimension
 
         # Get the mean
         logging.info("Calculating the mean")
-        self._mean = np.mean(features_flat, axis=0).item() # See variance
+        self._mean = features_flat.mean()
         # --> one mean per feature dimension
 
         return True
@@ -79,8 +76,8 @@ class AnomalyModelSVG(AnomalyModelBase):
     
     def __save_model_to_file__(self, h5file):
         """Save the model to disk"""
-        h5file.create_dataset("var",        data=self._var)
-        h5file.create_dataset("mean",       data=self._mean)
+        h5file.create_dataset("var",  data=self._var)
+        h5file.create_dataset("mean", data=self._mean)
         return True
 
 # Only for tests

@@ -73,6 +73,21 @@ class FeatureArray(np.ndarray):
     no_anomaly = property(lambda self: self[[f[0,0].label == 1 for f in self]])
     anomaly    = property(lambda self: self[[f[0,0].label == 2 for f in self]])
     
+    def __get_array_flat__(self):
+        flat = self.flatten()
+        return np.concatenate(flat).reshape(flat.shape + flat[0].shape)
+
+    array_flat = property(__get_array_flat__)
+
+    def var(self):
+        return np.var(self.array_flat, axis=0, dtype=np.float64)
+
+    def cov(self):
+        return np.cov(self.array_flat, rowvar=False, dtype=np.float64)
+
+    def mean(self):
+        return np.mean(self.array_flat, axis=0, dtype=np.float64)
+
     def save_locations_to_file(self, filename=None):
         """ Save the locations of every patch to filename """
 

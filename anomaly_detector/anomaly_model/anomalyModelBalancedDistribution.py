@@ -50,9 +50,9 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         assert not self.balanced_distribution is None and len(self.balanced_distribution) > 0, \
             "Can't calculate mean or covariance of nothing!"
         
-        self._mean = np.mean(self.balanced_distribution, axis=0, dtype=np.float64).item()    # Mean
-        cov = np.cov(self.balanced_distribution, rowvar=False).item()                        # Covariance matrix
-        self._covI = np.linalg.pinv(cov)                                                     # Inverse of covariance matrix
+        self._mean = self.balanced_distribution.mean()  # Mean
+        cov = self.balanced_distribution.cov()          # Covariance matrix
+        self._covI = np.linalg.pinv(cov)                # Inverse of covariance matrix
     
     def _mahalanobis_distance(self, feature):
         """Calculate the Mahalanobis distance between the input and the model"""
