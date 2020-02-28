@@ -208,14 +208,13 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         h5file.create_dataset("bins_y", data=self.bins[1])
         h5file.create_dataset("feature_indices_count", data=self.feature_indices_count)
         
-        for u in range(self.models.shape[0]):
-            for v in range(self.models.shape[1]):
-                model = self.get_model((u, v))
-                if model is not None:
-                    g = h5file.create_group("%i/%i" % (u, v))
-                    g.attrs["u"] = u
-                    g.attrs["v"] = v
-                    model.__save_model_to_file__(g)
+        for u, v in tqdm(np.ndindex(self.models.shape), desc="Saving models"):
+            model = self.get_model((u, v))
+            if model is not None:
+                g = h5file.create_group("%i/%i" % (u, v))
+                g.attrs["u"] = u
+                g.attrs["v"] = v
+                model.__save_model_to_file__(g)
         return True
     	
     def show_spatial_histogram(self):
