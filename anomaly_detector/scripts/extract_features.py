@@ -49,7 +49,7 @@ def extract_features():
             logging.info("Instantiating %s" % extractor_name)
 
             # Get an instance
-            extractor = getattr(module, extractor_name[0])()
+            extractor = getattr(module, extractor_name)()
 
             extractor.extract_files(args.files)
     finally:
