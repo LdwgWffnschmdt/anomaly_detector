@@ -42,7 +42,7 @@ def load_tfrecords(filenames):
         "metadata/location/rotation/x"      : tf.io.FixedLenFeature([], tf.float32),
         "metadata/location/rotation/y"      : tf.io.FixedLenFeature([], tf.float32),
         "metadata/location/rotation/z"      : tf.io.FixedLenFeature([], tf.float32),
-        "metadata/time"                     : tf.io.FixedLenFeature([], tf.float32), # TODO: Change to int64 for production
+        "metadata/time"                     : tf.io.FixedLenFeature([], tf.int64),
         "metadata/label"                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
         "metadata/rosbag"                   : tf.io.FixedLenFeature([], tf.string),
         "metadata/tfrecord"                 : tf.io.FixedLenFeature([], tf.string),
