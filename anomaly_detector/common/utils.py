@@ -10,6 +10,7 @@ import tensorflow as tf
 import numpy as np
 import h5py
 import cv2
+import matplotlib.pyplot as plt
 
 from imageLocationUtility import ImageLocationUtility
 
@@ -42,7 +43,7 @@ def load_tfrecords(filenames):
         "metadata/location/rotation/x"      : tf.io.FixedLenFeature([], tf.float32),
         "metadata/location/rotation/y"      : tf.io.FixedLenFeature([], tf.float32),
         "metadata/location/rotation/z"      : tf.io.FixedLenFeature([], tf.float32),
-        "metadata/time"                     : tf.io.FixedLenFeature([], tf.int64),
+        "metadata/time"                     : tf.io.FixedLenFeature([], tf.float32), # TODO: Change to int64
         "metadata/label"                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
         "metadata/rosbag"                   : tf.io.FixedLenFeature([], tf.string),
         "metadata/tfrecord"                 : tf.io.FixedLenFeature([], tf.string),
@@ -66,7 +67,7 @@ def load_tfrecords(filenames):
 # Output helper #
 #################
 
-def visualize(features, threshold, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False):
+def visualize(features, threshold, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False, show_map=True):
     """Visualize features on the source image
 
     Args:
@@ -82,6 +83,16 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
     ### Set up window
     cv2.namedWindow('image')
 
+    x_min, y_min, x_max, y_max = features.get_extent()
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_xlim([x_min, x_max])
+    ax.set_ylim([y_min, y_max])
+
+    plt.ion()
+    fig.show()
+
     def __draw__(x=None):
         overlay = image.copy()
 
@@ -90,10 +101,6 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
 
         patch_size = (image.shape[1] / width, image.shape[0] / height)
         
-        # ax.clear()
-        # ax.plot(meta["location/translation/x"], 
-        #         meta["location/translation/y"], 'bo')
-
         # print "%.2f / %.2f / %.2f       |       %.2f / %.2f / %.2f" % (meta["location/translation/x"],
         #                                                                meta["location/translation/y"],
         #                                                                meta["location/translation/z"],
@@ -103,14 +110,35 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
 
         threshold = cv2.getTrackbarPos('threshold', 'image')
         show_grid = bool(cv2.getTrackbarPos('show_grid', 'image'))
+        show_map  = bool(cv2.getTrackbarPos('show_map', 'image'))
         show_values = bool(cv2.getTrackbarPos('show_values', 'image'))
         show_thresh = bool(cv2.getTrackbarPos('show_thresh', 'image'))
+
+        if show_map:
+            ax.clear()
+            ax.set_xlim([x_min, x_max])
+            ax.set_ylim([y_min, y_max])
+
+            ax.fill([feature_2d[0 ,  0].location[0],
+                     feature_2d[-1,  0].location[0],
+                     feature_2d[-1, -1].location[0],
+                     feature_2d[0 , -1].location[0]],
+                    [feature_2d[0 ,  0].location[1],
+                     feature_2d[-1,  0].location[1],
+                     feature_2d[-1, -1].location[1],
+                     feature_2d[0 , -1].location[1]])
+
+            # ax.plot(feature_2d[0 ,  0].location[0], feature_2d[0 ,  0].location[1], 'r+', markersize=2, linewidth=2)
+            # ax.plot(feature_2d[-1,  0].location[0], feature_2d[-1,  0].location[1], 'r+', markersize=2, linewidth=2)
+            # ax.plot(feature_2d[0 , -1].location[0], feature_2d[0 , -1].location[1], 'r+', markersize=2, linewidth=2)
+            # ax.plot(feature_2d[-1, -1].location[0], feature_2d[-1, -1].location[1], 'r+', markersize=2, linewidth=2)
+            # # ax.plot(meta["location/translation/x"], 
+            #         meta["location/translation/y"], 'bo')
+            fig.canvas.draw()
 
         for x in range(width):
             for y in range(height):
                 feature = feature_2d[y,x]
-
-                # ax.plot(feature[-2], feature[-1], 'r+')
 
                 p1 = (x * patch_size[0], y * patch_size[1])
                 p2 = (p1[0] + patch_size[0], p1[1] + patch_size[1])
@@ -148,8 +176,6 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
                         (255, 255, 255),
                         thickness, lineType=cv2.LINE_AA)
 
-        # fig.canvas.draw()
-        
         alpha = cv2.getTrackbarPos('overlay','image') / 100.0  # Transparency factor.
 
         # Following line overlays transparent overlay over the image
@@ -162,6 +188,7 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
     cv2.createTrackbar('threshold',   'image', int(threshold) , int(threshold) * 3, __draw__)
     cv2.createTrackbar('show_thresh', 'image', 1 ,              1,                  __draw__)
     cv2.createTrackbar('show_grid',   'image', int(show_grid) , 1,                  __draw__)
+    cv2.createTrackbar('show_map',    'image', int(show_map)  , 1,                  __draw__)
     cv2.createTrackbar('show_values', 'image', 0 ,              1,                  __draw__)
     cv2.createTrackbar('delay',       'image', 1 ,              1000,               __draw__)
     cv2.createTrackbar('overlay',     'image', 40,              100 ,               __draw__)
@@ -178,15 +205,6 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
     tfrecordCounter = 0
 
     pause = False
-
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111)
-    # ax.set_xlim([-10,10])
-    # ax.set_ylim([-10,10])
-    # plt.ion()
-
-    # fig.show()
-    # fig.canvas.draw()
 
     for i, feature_2d in enumerate(features):
         if tfrecord != feature_2d[0,0].tfrecord:
