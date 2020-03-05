@@ -158,7 +158,7 @@ class ImageLocationUtility(object):
 
         # Construct an inverse 2D rotation matrix
         _s = np.sin(camera_rotation - np.pi / 2.)
-        _c = np.cos( - np.pi / 2.)
+        _c = np.cos(camera_rotation - np.pi / 2.)
 
         R = np.array([[_c, -_s],
                       [_s,  _c]])
