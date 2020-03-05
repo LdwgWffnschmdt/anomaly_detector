@@ -72,7 +72,8 @@ class AnomalyModelBase(object):
                 return True
 
             # Read file
-            features = FeatureArray(features)
+            if not isinstance(self.features, FeatureArray):
+                features = FeatureArray(features)
         elif isinstance(features, FeatureArray):
             # Try loading
             loaded = self.load_from_file(features.filename, load_features=load_features, load_mahalanobis_distances=load_mahalanobis_distances)
@@ -86,14 +87,14 @@ class AnomalyModelBase(object):
         start = time.time()
 
         # Generate model
-        if self.__generate_model__(features.no_anomaly) == False:
+        if self.__generate_model__(self.features.no_anomaly) == False:
             logging.info("Could not generate model.")
             return False
 
         end = time.time()
 
-        logging.info("Writing model to: %s" % features.filename)
-        with h5py.File(features.filename, "a") as hf:
+        logging.info("Writing model to: %s" % self.features.filename)
+        with h5py.File(self.features.filename, "a") as hf:
             g = hf.get(self.NAME)
 
             if g is not None:
@@ -114,7 +115,7 @@ class AnomalyModelBase(object):
             g.attrs["Duration (formatted)"] = utils.format_duration(end - start)
 
             self.__save_model_to_file__(g)
-        logging.info("Successfully written model to: %s" % features.filename)
+        logging.info("Successfully written model to: %s" % self.features.filename)
 
         if load_mahalanobis_distances:
             self.calculate_mahalobis_distances()
