@@ -53,7 +53,7 @@ class AnomalyModelBase(object):
     # Common functionality #
     ########################
 
-    def load_or_generate(self, features="/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2.h5",
+    def load_or_generate(self, features="/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.h5",
                                load_features=False, load_mahalanobis_distances=False):
         """Load a model from file or generate it based on the features
         
@@ -222,7 +222,7 @@ class AnomalyModelBase(object):
     def visualize(self, threshold=None, feature_to_color_func=None, feature_to_text_func=None, pause_func=None):
         """ Visualize the result of a anomaly model """
         if threshold is None:
-            if self.mahalanobis_max is None:
+            if not hasattr(self, "mahalanobis_max") or self.mahalanobis_max is None:
                 self.calculate_mahalobis_distances()
             threshold = self.mahalanobis_max * 0.9
         

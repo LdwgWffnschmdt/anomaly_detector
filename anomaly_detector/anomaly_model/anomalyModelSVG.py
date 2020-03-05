@@ -71,7 +71,6 @@ class AnomalyModelSVG(AnomalyModelBase):
         self._var       = np.array(h5file["var"])
         self._mean      = np.array(h5file["mean"])
         assert len(self._var) == len(self._mean), "Dimensions of variance and mean do not match!"
-        logging.info("Successfully loaded SVG parameters of dimension %i" % len(self._var))
         return True
     
     def __save_model_to_file__(self, h5file):
@@ -83,8 +82,7 @@ class AnomalyModelSVG(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelSVG()
-    model.load_or_generate()
-
-    model.calculate_mahalobis_distances()
-    model.show_mahalanobis_distribution()
-    model.visualize(10)#26.525405)
+    if model.load_or_generate(load_features=True):
+        # model.calculate_mahalobis_distances()
+        # model.show_mahalanobis_distribution()
+        model.visualize()

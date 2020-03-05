@@ -161,7 +161,6 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         self.pruning_parameter          = h5file.attrs["pruning_parameter"]
         assert 0 < self.pruning_parameter < 1, "Pruning parameter out of range (0 < η < 1)"
         self._calculate_mean_and_covariance()
-        logging.info("Successfully loaded Balanced Distribution with %i entries and %i dimensions" % (len(self.balanced_distribution), self.balanced_distribution[0].shape[0]))
         return True
     
     def save_model_to_file(self, h5file):
