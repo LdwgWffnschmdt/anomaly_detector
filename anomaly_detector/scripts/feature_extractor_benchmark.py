@@ -6,6 +6,9 @@ import argparse
 parser = argparse.ArgumentParser(description="Benchmark the specified feature extractors.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
+parser.add_argument("tfrecord", metavar="F", dest="tfrecord", type=str,
+                    help="TFRecord file to use for benchmarks")
+
 parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', type=str,
                     help="Extractor name. Leave empty for all extractors (default: \"\")")
 
@@ -85,7 +88,7 @@ def feature_extractor_benchmark():
             log("Initialization", timeit.repeat(lambda: _class(), number=1, repeat=5))
 
             # Load a test dataset
-            dataset = utils.load_tfrecords("/home/ludwig/ros/src/ROS-kate_bag/bags/TFRecord/autonomous_realsense.tfrecord")
+            dataset = utils.load_tfrecords(args.tfrecord)
 
             # Test batch extraction
             extractor = _class()
