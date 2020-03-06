@@ -5,6 +5,8 @@ import ast
 
 import numpy as np
 import h5py
+from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 import utils
 from feature import Feature
@@ -31,26 +33,38 @@ class FeatureArray(np.ndarray):
         fn, file_extension = os.path.splitext(filename)
         if file_extension != ".h5":
             raise ValueError("Filename has to be *.h5")
+        
+        start = time.time()
 
         with h5py.File(filename, "r") as hf:
             attrs = dict(hf.attrs)
 
+            print("Open:\t\t%.3f" % (time.time() - start))
+
             # Parse metadata object
+            start = time.time()
             metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
+            print("Metadata:\t%.3f" % (time.time() - start))
+
+            start = time.time()
             features_raw = np.array(hf["features"])
-            locations = np.array(hf["locations"]) if "locations" in hf.keys() else None
+            print("Features:\t%.3f" % (time.time() - start))
+    
+            start = time.time()
+            locations = hf.get("locations")
+            if locations is not None:
+                locations = np.array(locations)
+            print("Locations:\t%.3f" % (time.time() - start))
             
             total, h, w, depth = features_raw.shape
 
             features = np.empty(shape=(total, h, w), dtype=Feature)
             
-            for i in range(total):
+            for i, y, x in tqdm(np.ndindex(features.shape), desc="Loading features", total=np.prod(features.shape)):
                 meta = metadata[i]
-                for y in range(h):
-                    for x in range(w):
-                        features[i, y, x] = Feature(features_raw[i, y, x], meta, x, y, w, h)
-                        if locations is not None:
-                            features[i, y, x].location = locations[i, y, x]
+                features[i, y, x] = Feature(features_raw[i, y, x], meta, x, y, w, h)
+                if locations is not None:
+                    features[i, y, x].location = locations[i, y, x]
         
         obj = np.asarray(features).view(cls)
         obj.attrs = attrs
@@ -61,6 +75,12 @@ class FeatureArray(np.ndarray):
         if obj is None: return
         self.attrs = getattr(obj, "attrs", None)
         self.filename = getattr(obj, "filename", None)
+
+        self.__extent__ = None
+
+        # Dict with cell size as key
+        # - cell size
+        self.__rasterizations__ = {}
 
     def __get_property__(key):
         return lambda self: None if self.attrs is None or not key in self.attrs.keys() else self.attrs[key]
@@ -73,9 +93,138 @@ class FeatureArray(np.ndarray):
     no_anomaly = property(lambda self: self[[f[0,0].label == 1 for f in self]])
     anomaly    = property(lambda self: self[[f[0,0].label == 2 for f in self]])
     
+    def bin(self, bin, cell_size):
+        """ Get a view of only the features that are in a specific bin
+
+        Args:
+            bin (Tuple): (u, v) Tuple with the bin coordinates
+            cell_size (float): 
+        """
+        # Check if cell size is calculated
+        if not cell_size in self.__rasterizations__.keys():
+            self.calculate_rasterization(cell_size)
+        
+        if self.__rasterizations__[cell_size]["feature_indices"][bin] is None:
+            return []
+
+        return self.flatten()[self.__rasterizations__[cell_size]["feature_indices"][bin]]
+
+    def get_spatial_histogram(self, cell_size):
+        if not cell_size in self.__rasterizations__.keys():
+            # Try loading from file
+            with h5py.File(self.filename, "r") as hf:
+                g = hf.get("rasterizations/%.2f" % cell_size)
+                if g is not None:
+                    self.__rasterizations__[cell_size] = {}
+                    self.__rasterizations__[cell_size]["feature_indices_count"] = np.array(hf["rasterizations/%.2f" % cell_size])
+        
+        # Check if cell size is calculated
+        if not cell_size in self.__rasterizations__.keys():
+            self.calculate_rasterization(cell_size)
+
+        return self.__rasterizations__[cell_size]["feature_indices_count"]
+
+    def show_spatial_histogram(self, cell_size):
+        """ Show the spatial histogram of features (like a map) """
+        plt.imshow(self.get_spatial_histogram(cell_size), vmin=1)
+        plt.show()
+
+    def calculate_rasterization(self, cell_size):
+        # Check if cell size is already calculated
+        if cell_size in self.__rasterizations__.keys() and "feature_indices" in self.__rasterizations__[cell_size]:
+            return self.__rasterizations__[cell_size]["feature_indices"].shape
+        
+        self.__rasterizations__[cell_size] = {}
+        
+        # Get extent
+        extent = self.get_extent(cell_size)
+        x_min, y_min, x_max, y_max = extent
+        
+        shape = (int(np.ceil((x_max - x_min) / cell_size)),
+                 int(np.ceil((y_max - y_min) / cell_size)))
+
+        logging.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
+
+        logging.info("Calculating corresponding bin for every feature")
+        self.__rasterizations__[cell_size]["feature_indices"] = np.empty(shape=shape, dtype=object)
+        self.__rasterizations__[cell_size]["feature_indices_count"] = np.zeros(shape=shape, dtype=np.uint32)
+        # Get the corresponding bin for every feature
+        for i, f in enumerate(tqdm(self.flatten(), desc="Calculating bins")):
+            bin = f.get_bin(cell_size, extent)
+
+            if self.__rasterizations__[cell_size]["feature_indices"][bin] is None:
+                self.__rasterizations__[cell_size]["feature_indices"][bin] = list()
+            self.__rasterizations__[cell_size]["feature_indices"][bin].append(i)
+            self.__rasterizations__[cell_size]["feature_indices_count"][bin] += 1
+        
+        # Save to file
+        try:
+            with h5py.File(self.filename, "r+") as hf:
+                hf["rasterizations/%.2f" % cell_size] = self.__rasterizations__[cell_size]["feature_indices_count"]
+        except:
+            pass
+
+        return shape
+
+    def get_extent(self, cell_size=None):
+        """Calculates the extent of the features
+        
+        Args:
+            cell_size (float): Round to cell size (increases bounds to fit next cell size)
+        
+        Returns:
+            Tuple (x_min, y_min, x_max, y_max)
+        """
+        
+        if self.__extent__ is None:
+            # Try loading from file
+            with h5py.File(self.filename, "r") as hf:
+                if "Extent" in hf.attrs.keys():
+                    self.__extent__ = hf.attrs["Extent"]
+
+        # Get the extent
+        if self.__extent__ is None:
+            x_min = self[0,0,0].location[0]
+            y_min = self[0,0,0].location[1]
+            x_max = self[0,0,0].location[0]
+            y_max = self[0,0,0].location[1]
+
+            for f in tqdm(self.flatten(), desc="Calculating extent"):
+                if f.location[0] > x_max:
+                    x_max = f.location[0]
+                if f.location[0] < x_min:
+                    x_min = f.location[0]
+
+                if f.location[1] > y_max:
+                    y_max = f.location[1]
+                if f.location[1] < y_min:
+                    y_min = f.location[1]
+            self.__extent__ = (x_min, y_min, x_max, y_max)
+            
+            # Save to file
+            with h5py.File(self.filename, "r+") as hf:
+                hf.attrs["Extent"] = self.__extent__
+            
+            logging.info("Extent of features: (%i, %i)/(%i, %i)." % (x_min, y_min, x_max, y_max))
+        else:
+            x_min, y_min, x_max, y_max = self.__extent__
+        
+
+        # Increase the extent to fit the cell size
+        if cell_size is not None:
+            x_min -= x_min % cell_size
+            y_min -= y_min % cell_size
+            x_max += cell_size - (x_max % cell_size)
+            y_max += cell_size - (y_max % cell_size)
+        
+        return (x_min, y_min, x_max, y_max)
+
     def __get_array_flat__(self):
+        if hasattr(self, "__array_flat__"):
+            return self.__array_flat__
         flat = self.flatten()
-        return np.concatenate(flat).reshape(flat.shape + flat[0].shape)
+        self.__array_flat__ = np.concatenate(flat).reshape(flat.shape + flat[0].shape)
+        return self.__array_flat__
 
     array_flat = property(__get_array_flat__)
 
@@ -124,30 +273,9 @@ class FeatureArray(np.ndarray):
         image_locations = ilu.span_grid(w, h, offset_x=0.5, offset_y=0.5)
         relative_locations = ilu.image_to_relative(image_locations)
 
-        with utils.GracefulInterruptHandler() as g:
-            start = time.time()
-            utils.print_progress(0, total * h * w, prefix="Calculating locations:",
-                                           suffix = "%i / %i" % (0, total * h * w))
-            
-            c = 0
-            for i in range(total):
-                for y in range(h):
-                    for x in range(w):
-                        c += 1
-                        
-                        if g.interrupted:
-                            logging.warning("Interrupted!")
-                            raise KeyboardInterrupt()
-                        
-                        feature = self[i, y, x]
-                        feature.location = ilu.relative_to_absolute(relative_locations[x,y], feature.camera_position, feature.camera_rotation)
-
-                # Print progress
-                utils.print_progress(c,
-                                     total * h * w,
-                                     prefix = "Calculating locations:",
-                                     suffix = "%i / %i" % (c, total * h * w),
-                                     time_start = start)
+        for i, y, x in tqdm(np.ndindex(self.shape), desc="Calculating locations", total=np.prod(self.shape)):
+            feature = self[i, y, x]
+            feature.location = ilu.relative_to_absolute(relative_locations[x, y], feature.camera_position, feature.camera_rotation)
 
     def add_location_as_feature_dimension(self):
         """Act as if the location of a feature would be two additional feature dimensions"""

@@ -33,6 +33,8 @@ class Feature(np.ndarray):
         # Will eventually be array [x, y]
         # (call FeatureArray.calculate_locations)
         self.location = None
+
+        self.__bins__ = {}
     
     def __get_property__(key):
         return lambda self: None if self.metadata is None or not key in self.metadata.keys() else self.metadata[key]
@@ -47,6 +49,27 @@ class Feature(np.ndarray):
                                                 np.array([self.metadata["location/translation/x"],
                                                           self.metadata["location/translation/y"]]))
     camera_rotation   = property(__get_property__("location/rotation/z"))
+
+    def get_bin(self, cell_size, extent=None):
+        """Gets the indices for the bin the given feature belongs to
+
+        Args:
+            cell_size (float): Round to cell size (increases bounds to fit next cell size)
+        
+        Returns:
+            Tuple containing the bin indices (u, v)
+        """
+        assert self.location is not None, "Feature locations need to be computed before computing bins"
+
+        if cell_size in self.__bins__.keys():
+            return self.__bins__[cell_size]
+        else:
+            if extent is None:
+                raise ValueError("Extent needs to be specified for calculating the bin.")
+            x_min, y_min, x_max, y_max = extent 
+            self.__bins__[cell_size] = (int((self.location[0] - x_min) / cell_size),
+                                        int((self.location[1] - y_min) / cell_size))
+            return self.__bins__[cell_size]
 
     def cast(self, dtype):
         return np.array(self, dtype=dtype)
