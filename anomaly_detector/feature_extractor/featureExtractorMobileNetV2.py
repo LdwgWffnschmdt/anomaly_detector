@@ -37,4 +37,5 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
 if __name__ == "__main__":
     extractor = FeatureExtractorMobileNetV2()
     extractor.plot_model(extractor.model)
-    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
+    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/FieldSAFE/TFRecord/2016-10-25-11-41-21_example.tfrecord")
+    # extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")

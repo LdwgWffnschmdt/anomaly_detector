@@ -2,7 +2,7 @@ from featureExtractorBase import FeatureExtractorBase
 
 class FeatureExtractorEfficientNetB6(FeatureExtractorBase):
     """Feature extractor based on EfficientNetB6 (trained on ImageNet).
-    Generates 7x7x1280 feature vectors per image
+    Generates 1x1x2304 feature vectors per image
     """
 
     def __init__(self):
@@ -20,4 +20,5 @@ class FeatureExtractorEfficientNetB6(FeatureExtractorBase):
 if __name__ == "__main__":
     extractor = FeatureExtractorEfficientNetB6()
     extractor.plot_model(extractor.model, 600)
-    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
+    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/FieldSAFE/TFRecord/2016-10-25-11-41-21_example.tfrecord")
+    # extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
