@@ -47,18 +47,18 @@ class AnomalyModelSVG(AnomalyModelBase):
         # Reduce features to simple list
         features_flat = features.flatten()
 
-        logging.info("Generating SVG from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
+        # logging.info("Generating SVG from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
 
-        if features_flat.shape[0] == 1:
-            logging.warn("Trying to generate SVG from a single value.")
+        # if features_flat.shape[0] == 1:
+        #     logging.warn("Trying to generate SVG from a single value.")
 
         # Get the variance
-        logging.info("Calculating the variance")
+        # logging.info("Calculating the variance")
         self._var = features_flat.var()
         # --> one variance per feature dimension
 
         # Get the mean
-        logging.info("Calculating the mean")
+        # logging.info("Calculating the mean")
         self._mean = features_flat.mean()
         # --> one mean per feature dimension
 

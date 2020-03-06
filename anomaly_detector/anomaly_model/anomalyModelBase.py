@@ -5,6 +5,7 @@ import logging
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
 
 from common import FeatureArray
 import common.utils as utils
@@ -151,8 +152,8 @@ class AnomalyModelBase(object):
         logging.info("Calculating Mahalanobis distances of %i features with and %i features without anomalies" % \
             (len(self.features.no_anomaly.flatten()), len(self.features.anomaly.flatten())))
 
-        self.mahalanobis_no_anomaly = np.array(list(map(self._mahalanobis_distance, self.features.no_anomaly.flatten()))) # 75.49480115577167
-        self.mahalanobis_anomaly    = np.array(list(map(self._mahalanobis_distance, self.features.anomaly.flatten())))    # 76.93620254133627
+        self.mahalanobis_no_anomaly = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.no_anomaly.flatten(), desc="No anomaly  ")))) # 75.49480115577167
+        self.mahalanobis_anomaly    = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.anomaly.flatten(), desc="With anomaly"))))    # 76.93620254133627
 
         self.mahalanobis_no_anomaly_max = np.nanmax(self.mahalanobis_no_anomaly)
         self.mahalanobis_anomaly_max    = np.nanmax(self.mahalanobis_anomaly)
