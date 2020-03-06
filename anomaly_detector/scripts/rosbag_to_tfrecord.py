@@ -20,6 +20,10 @@ parser.add_argument("--images_per_bin", metavar="MAX", type=int,
                     default=10000,
                     help="Maximum number of images per TFRecord file (default: 10000)")
 
+parser.add_argument("--image_scale", metavar="SCALE", type=float,
+                    default=1.0,
+                    help="Scale images by this factor (default: 1.0)")
+
 parser.add_argument("--tf_map", metavar="TF_M", dest="tf_map", type=str,
                     default="map",
                     help="TF reference frame (default: map)")
@@ -233,7 +237,12 @@ def rosbag_to_tfrecord():
                             cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
                         else:
                             raise ValueError("Image topic type must be either \"sensor_msgs/Image\" or \"sensor_msgs/CompressedImage\".")
-                    
+                        
+                        # Scale the image
+                        if args.image_scale != 1.0:
+                            cv_image = cv2.resize(cv_image, (int(cv_image.shape[1] * args.image_scale),
+                                                             int(cv_image.shape[0] * args.image_scale)), cv2.INTER_AREA)
+
                         _, encoded = cv2.imencode(".jpeg", cv_image)
 
                         # Get the label     0: Unknown, 1: No anomaly, 2: Contains an anomaly
