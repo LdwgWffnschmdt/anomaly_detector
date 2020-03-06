@@ -20,6 +20,9 @@ parser.add_argument("--images_per_bin", metavar="MAX", type=int,
                     default=10000,
                     help="Maximum number of images per TFRecord file (default: 10000)")
 
+parser.add_argument("--image_crop", metavar=("X", "Y", "W", "H"), type=int, nargs=4,
+                    help="Crop images using. Cropping is applied before scaling (default: Complete image)")
+
 parser.add_argument("--image_scale", metavar="SCALE", type=float,
                     default=1.0,
                     help="Scale images by this factor (default: 1.0)")
@@ -238,6 +241,11 @@ def rosbag_to_tfrecord():
                         else:
                             raise ValueError("Image topic type must be either \"sensor_msgs/Image\" or \"sensor_msgs/CompressedImage\".")
                         
+                        # Crop the image
+                        if args.image_crop is not None:
+                            cv_image = cv_image[args.image_crop[1]:args.image_crop[1] + args.image_crop[3], # y:y+h
+                                                args.image_crop[0]:args.image_crop[0] + args.image_crop[2]] # x:x+w
+
                         # Scale the image
                         if args.image_scale != 1.0:
                             cv_image = cv2.resize(cv_image, (int(cv_image.shape[1] * args.image_scale),
