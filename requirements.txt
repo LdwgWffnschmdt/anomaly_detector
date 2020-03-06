@@ -5,6 +5,7 @@ h5py
 matplotlib
 pydot
 graphviz
+tqdm
 
 py-cpuinfo
 psutil
