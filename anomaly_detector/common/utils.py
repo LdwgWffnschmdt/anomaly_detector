@@ -43,7 +43,7 @@ def load_tfrecords(filenames):
         "metadata/location/rotation/x"      : tf.io.FixedLenFeature([], tf.float32),
         "metadata/location/rotation/y"      : tf.io.FixedLenFeature([], tf.float32),
         "metadata/location/rotation/z"      : tf.io.FixedLenFeature([], tf.float32),
-        "metadata/time"                     : tf.io.FixedLenFeature([], tf.float32), # TODO: Change to int64
+        "metadata/time"                     : tf.io.FixedLenFeature([], tf.int64), # TODO: Change to int64
         "metadata/label"                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
         "metadata/rosbag"                   : tf.io.FixedLenFeature([], tf.string),
         "metadata/tfrecord"                 : tf.io.FixedLenFeature([], tf.string),
@@ -83,15 +83,21 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
     ### Set up window
     cv2.namedWindow('image')
 
-    x_min, y_min, x_max, y_max = features.get_extent()
+    has_locations = features[0,0,0].location is not None
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.set_xlim([x_min, x_max])
-    ax.set_ylim([y_min, y_max])
+    if has_locations:
+        x_min, y_min, x_max, y_max = features.get_extent()
 
-    plt.ion()
-    fig.show()
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.set_xlim([x_min, x_max])
+        ax.set_ylim([y_min, y_max])
+
+        plt.ion()
+        fig.show()
+    else:
+        show_grid = False
+        show_map = False
 
     def __draw__(x=None):
         overlay = image.copy()
@@ -109,8 +115,12 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
         #                                                                meta["location/rotation/z"])
 
         threshold = cv2.getTrackbarPos('threshold', 'image')
-        show_grid = bool(cv2.getTrackbarPos('show_grid', 'image'))
-        show_map  = bool(cv2.getTrackbarPos('show_map', 'image'))
+        if has_locations:
+            show_grid = bool(cv2.getTrackbarPos('show_grid', 'image'))
+            show_map  = bool(cv2.getTrackbarPos('show_map', 'image'))
+        else:
+            show_grid = False
+            show_map = False
         show_values = bool(cv2.getTrackbarPos('show_values', 'image'))
         show_thresh = bool(cv2.getTrackbarPos('show_thresh', 'image'))
 
@@ -187,8 +197,9 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
     # create trackbars
     cv2.createTrackbar('threshold',   'image', int(threshold) , int(threshold) * 3, __draw__)
     cv2.createTrackbar('show_thresh', 'image', 1 ,              1,                  __draw__)
-    cv2.createTrackbar('show_grid',   'image', int(show_grid) , 1,                  __draw__)
-    cv2.createTrackbar('show_map',    'image', int(show_map)  , 1,                  __draw__)
+    if has_locations:
+        cv2.createTrackbar('show_grid',   'image', int(show_grid) , 1,                  __draw__)
+        cv2.createTrackbar('show_map',    'image', int(show_map)  , 1,                  __draw__)
     cv2.createTrackbar('show_values', 'image', 0 ,              1,                  __draw__)
     cv2.createTrackbar('delay',       'image', 1 ,              1000,               __draw__)
     cv2.createTrackbar('overlay',     'image', 40,              100 ,               __draw__)
@@ -198,8 +209,9 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
     thickness = 1
 
     ### Calculate grid overlay
-    ilu = ImageLocationUtility()
-    absolute_locations = ilu.span_grid(60, 60, 1, -30, -30)
+    if has_locations:
+        ilu = ImageLocationUtility()
+        absolute_locations = ilu.span_grid(60, 60, 1, -30, -30)
 
     tfrecord = None
     tfrecordCounter = 0
@@ -208,8 +220,8 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
 
     for i, feature_2d in enumerate(features):
         if tfrecord != feature_2d[0,0].tfrecord:
-            if not "2020-02-06-17-17-25.tfrecord" in feature_2d[0,0].tfrecord: # TODO: Remove for production
-                continue
+            # if not "2020-02-06-17-17-25.tfrecord" in feature_2d[0,0].tfrecord: # TODO: Remove for production
+            #     continue
             tfrecord = feature_2d[0,0].tfrecord
             tfrecordCounter = 0
             image_dataset = load_tfrecords(feature_2d[0,0].tfrecord).as_numpy_iterator()
