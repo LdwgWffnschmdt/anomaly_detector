@@ -46,12 +46,13 @@ from glob import glob
 
 import rospy
 import rosbag
-import tensorflow
+import tensorflow as tf
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
-import tf
+import tf as ros_tf
 import tf2_ros
 import tf2_py as tf2
+import numpy as np
 
 import common.utils as utils
 
@@ -98,7 +99,7 @@ def rosbag_to_tfrecord():
     
     # Expand wildcards
     bag_files_expanded = []
-    for s in files:
+    for s in bag_files:
         bag_files_expanded += glob(s)
     bag_files = list(set(bag_files_expanded)) # Remove duplicates
 
@@ -222,12 +223,19 @@ def rosbag_to_tfrecord():
                         # Get translation and orientation
                         msg_tf = tf_buffer.lookup_transform(tf_map, tf_base_link, t)#, rospy.Duration.from_sec(0.001))
                         translation = msg_tf.transform.translation
-                        euler = tf.transformations.euler_from_quaternion([msg_tf.transform.rotation.x, msg_tf.transform.rotation.y, msg_tf.transform.rotation.z, msg_tf.transform.rotation.w])
+                        euler = ros_tf.transformations.euler_from_quaternion([msg_tf.transform.rotation.x, msg_tf.transform.rotation.y, msg_tf.transform.rotation.z, msg_tf.transform.rotation.w])
 
                         # Get the image
-                        cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+                        if msg._type == "sensor_msgs/CompressedImage":
+                            image_arr = np.fromstring(msg.data, np.uint8)
+                            cv_image = cv2.imdecode(image_arr, cv2.IMREAD_COLOR)
+                        elif msg._type == "sensor_msgs/Image":
+                            cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+                        else:
+                            raise ValueError("Image topic type must be either \"sensor_msgs/Image\" or \"sensor_msgs/CompressedImage\".")
+                    
                         _, encoded = cv2.imencode(".jpeg", cv_image)
-                        
+
                         # Get the label     0: Unknown, 1: No anomaly, 2: Contains an anomaly
                         image_label = get_label(cv_image, image_label)
                         if image_label == None: # [esc]
@@ -246,7 +254,7 @@ def rosbag_to_tfrecord():
                                 output_filename = "%s.%.5d-of-%.5d.tfrecord" % (bag_file_name, bin_number, number_of_bins)
                                 
                             output_file = os.path.join(output_dir, output_filename)
-                            tfWriter = tensorflow.io.TFRecordWriter(output_file)
+                            tfWriter = tf.io.TFRecordWriter(output_file)
                             per_bin_count = 0
 
                         # Add image and position to TFRecord
@@ -261,15 +269,15 @@ def rosbag_to_tfrecord():
                             "metadata/label"                    : _int64_feature(image_label), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
                             "metadata/rosbag"                   : _bytes_feature(bag_file),
                             "metadata/tfrecord"                 : _bytes_feature(output_file),
-                            "image/height"      : _int64_feature(msg.height),
-                            "image/width"       : _int64_feature(msg.width),
+                            "image/height"      : _int64_feature(cv_image.shape[0]),
+                            "image/width"       : _int64_feature(cv_image.shape[1]),
                             "image/channels"    : _int64_feature(channels),
                             "image/colorspace"  : _bytes_feature(colorspace),
                             "image/format"      : _bytes_feature("jpeg"),
                             "image/encoded"     : _bytes_feature(encoded.tobytes())
                         }
 
-                        example = tensorflow.train.Example(features=tensorflow.train.Features(feature=feature_dict))
+                        example = tf.train.Example(features=tf.train.Features(feature=feature_dict))
                         
                         tfWriter.write(example.SerializeToString())
                         per_bin_count += 1
