@@ -27,7 +27,7 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
         image = tf.cast(image, tf.float32)
         #       \/ does the same #  image = (image / 127.5) - 1
         image = preprocess_input(image) # https://github.com/keras-team/keras-applications/blob/master/keras_applications/imagenet_utils.py#L152
-        image = tf.image.resize(image, (self.IMG_SIZE, self.IMG_SIZE))
+        image = tf.image.resize_images(image, (self.IMG_SIZE, self.IMG_SIZE))
         return image
 
     def extract_batch(self, batch):
@@ -36,6 +36,5 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
 # Only for tests
 if __name__ == "__main__":
     extractor = FeatureExtractorMobileNetV2()
-    extractor.plot_model(extractor.model)
-    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/FieldSAFE/TFRecord/2016-10-25-11-41-21_example.tfrecord")
-    # extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
+    # extractor.plot_model(extractor.model)
+    extractor.extract_files("/home/ldwg/data/CCW/2020-02-06-17-11-37.tfrecord")

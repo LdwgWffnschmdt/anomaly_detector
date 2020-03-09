@@ -38,14 +38,13 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, files, output_file="", batch_size=32, compression="lzf", compression_opts=None):
+    def extract_files(self, files, output_file="", batch_size=32, compression="lzf"):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             files (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
             output_file (str): Filename and path of the output file
             batch_size (str): Size of image batches fed to the extractor (Defaults: 32)
             compression (str): Output file compression, set to None for no compression (Default: "lzf"), gzip can be extremely slow combined with HDF5
-            compression_opts (str): Compression level, set to None for no compression (Default: None)
 
         Returns:
             success (bool)
@@ -79,99 +78,100 @@ class FeatureExtractorBase(object):
             return self.format_image(image), example
         parsed_dataset = parsed_dataset.map(_format_image)
         
-        # Get number of examples in dataset
-        total = sum(1 for record in parsed_dataset)
+        with tf.Session() as sess:
+            x = self.model.predict(parsed_dataset, steps=2640, verbose=1)#, callbacks=[tf.keras.callbacks.TensorBoard(log_dir='./logs')])
 
-        with utils.GracefulInterruptHandler() as h:
-            ### Extract features
-            utils.print_progress(0, 1, prefix = "Extracting features:")
+
+            # Get number of examples in dataset
+            # total = sum(1 for record in parsed_dataset)
+            total = 2640
+
+            with utils.GracefulInterruptHandler() as h:
+                ### Extract features
+                utils.print_progress(0, 1, prefix = "Extracting features:")
+                
+                # Get batches (seems to be better performance wise than extracting individual images)
+                batches = parsed_dataset.batch(batch_size)
+
+                # IO stuff
+                h5Writer = h5py.File(output_file, "w")
+                
+                metadata_dataset = h5Writer.create_dataset("metadata",
+                                                            shape=(total,),
+                                                            dtype=h5py.string_dtype(),
+                                                            compression=compression)
+                feature_dataset  = None
             
-            # Get batches (seems to be better performance wise than extracting individual images)
-            batches = parsed_dataset.batch(batch_size)
+                # Add metadata to the output file
+                h5Writer.attrs["Extractor"]                 = self.NAME
+                h5Writer.attrs["Files"]                     = files
+                h5Writer.attrs["Batch size"]                = batch_size
+                h5Writer.attrs["Compression"]               = compression
 
-            # IO stuff
-            h5Writer = h5py.File(output_file, "w")
-            
-            metadata_dataset = h5Writer.create_dataset("metadata",
-                                                        shape=(total,),
-                                                        dtype=h5py.string_dtype(),
-                                                        compression=compression,
-                                                        compression_opts=compression_opts)
-            feature_dataset  = None
-        
-            # Add metadata to the output file
-            h5Writer.attrs["Extractor"]                 = self.NAME
-            h5Writer.attrs["Files"]                     = files
-            h5Writer.attrs["Batch size"]                = batch_size
-            h5Writer.attrs["Compression"]               = compression
-            if compression_opts is not None:
-                h5Writer.attrs["Compression options"]   = compression_opts
+                computer_info = utils.getComputerInfo()
+                for key, value in computer_info.items():
+                    h5Writer.attrs[key] = value
+                h5Writer.attrs["Start"] = time.time()
 
-            computer_info = utils.getComputerInfo()
-            for key, value in computer_info.items():
-                h5Writer.attrs[key] = value
-            h5Writer.attrs["Start"] = time.time()
+                # For the progress bar
+                counter = 0
+                start = time.time()
 
-            # For the progress bar
-            counter = 0
-            start = time.time()
+                try:
+                    for batch in batches:
+                        if h.interrupted:
+                            logging.warning("Interrupted!")
+                            raise KeyboardInterrupt()
+                        
+                        # Extract features
+                        feature_batch = self.extract_batch(batch[0])
 
-            try:
-                for batch in batches:
-                    if h.interrupted:
-                        logging.warning("Interrupted!")
-                        raise KeyboardInterrupt()
-                    
-                    # Extract features
-                    feature_batch = self.extract_batch(batch[0])
-
-                    # Add features to list
-                    for index, feature_vector in enumerate(feature_batch):
-                        counter += 1
-                        if feature_dataset is None:
-                            feature_dataset = h5Writer.create_dataset("features",
-                                                                      shape=(total,) + feature_vector.shape,
-                                                                      dtype=np.float32,
-                                                                      compression=compression,
-                                                                      compression_opts=compression_opts)
-                        feature_dataset[counter - 1] = feature_vector.numpy()
-                        metadata_dataset[counter - 1] = str({
-                            "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
-                            "location/translation/y": batch[1]["metadata/location/translation/y"][index].numpy(),
-                            "location/translation/z": batch[1]["metadata/location/translation/z"][index].numpy(),
-                            "location/rotation/x"   : batch[1]["metadata/location/rotation/x"][index].numpy(),
-                            "location/rotation/y"   : batch[1]["metadata/location/rotation/y"][index].numpy(),
-                            "location/rotation/z"   : batch[1]["metadata/location/rotation/z"][index].numpy(),
-                            "time"                  : batch[1]["metadata/time"][index].numpy(),
-                            "label"                 : batch[1]["metadata/label"][index].numpy(),
-                            "rosbag"                : batch[1]["metadata/rosbag"][index].numpy(),
-                            "tfrecord"              : batch[1]["metadata/tfrecord"][index].numpy(),
-                            "feature_extractor"     : self.NAME
-                        })
-                    
-                    # Print progress
-                    utils.print_progress(counter,
-                                     total,
-                                     prefix = "Extracting features:",
-                                     suffix = "(%i / %i)" % (counter, total),
-                                     time_start = start)
-            except:
-                utils.print_progress(counter, total,
-                                              prefix = "Cancelled:",
-                                              suffix = "(%i / %i)" % (counter, total),
-                                              time_start = start)
-                exc = traceback.format_exc()
-                logging.error(exc)
-                h5Writer.attrs["Exception"] = exc
-                return False
-            finally:
-                end = time.time()
-                h5Writer.attrs["End"] = end
-                h5Writer.attrs["Duration"] = end - start
-                h5Writer.attrs["Duration (formatted)"] = utils.format_duration(end - start)
-                h5Writer.attrs["Number of frames extracted"] = counter
-                h5Writer.attrs["Number of total frames"] = total
-                h5Writer.close()
+                        # Add features to list
+                        for index, feature_vector in enumerate(feature_batch):
+                            counter += 1
+                            if feature_dataset is None:
+                                feature_dataset = h5Writer.create_dataset("features",
+                                                                        shape=(total,) + feature_vector.shape.as_list(),
+                                                                        dtype=np.float32,
+                                                                        compression=compression)
+                            feature_dataset[counter - 1] = feature_vector.numpy()
+                            metadata_dataset[counter - 1] = str({
+                                "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
+                                "location/translation/y": batch[1]["metadata/location/translation/y"][index].numpy(),
+                                "location/translation/z": batch[1]["metadata/location/translation/z"][index].numpy(),
+                                "location/rotation/x"   : batch[1]["metadata/location/rotation/x"][index].numpy(),
+                                "location/rotation/y"   : batch[1]["metadata/location/rotation/y"][index].numpy(),
+                                "location/rotation/z"   : batch[1]["metadata/location/rotation/z"][index].numpy(),
+                                "time"                  : batch[1]["metadata/time"][index].numpy(),
+                                "label"                 : batch[1]["metadata/label"][index].numpy(),
+                                "rosbag"                : batch[1]["metadata/rosbag"][index].numpy(),
+                                "tfrecord"              : batch[1]["metadata/tfrecord"][index].numpy(),
+                                "feature_extractor"     : self.NAME
+                            })
+                        
+                        # Print progress
+                        utils.print_progress(counter,
+                                        total,
+                                        prefix = "Extracting features:",
+                                        suffix = "(%i / %i)" % (counter, total),
+                                        time_start = start)
+                except:
+                    utils.print_progress(counter, total,
+                                                prefix = "Cancelled:",
+                                                suffix = "(%i / %i)" % (counter, total),
+                                                time_start = start)
+                    exc = traceback.format_exc()
+                    logging.error(exc)
+                    h5Writer.attrs["Exception"] = exc
+                    return False
+                finally:
+                    end = time.time()
+                    h5Writer.attrs["End"] = end
+                    h5Writer.attrs["Duration"] = end - start
+                    h5Writer.attrs["Duration (formatted)"] = utils.format_duration(end - start)
+                    h5Writer.attrs["Number of frames extracted"] = counter
+                    h5Writer.attrs["Number of total frames"] = total
+                    h5Writer.close()
 
         return True
 

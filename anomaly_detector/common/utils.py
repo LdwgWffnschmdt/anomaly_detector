@@ -350,7 +350,7 @@ def getComputerInfo():
 
     result_dict = {
         "Python version": cpu["python_version"],
-        "TensorFlow version": tf.version.VERSION,
+        "TensorFlow version": tf.__version__,
         "CPU Description": cpu["brand"],
         "CPU Clock speed (advertised)": cpu["hz_advertised"],
         "CPU Clock speed (actual)": cpu["hz_actual"],
@@ -358,9 +358,9 @@ def getComputerInfo():
     }
 
     # Get GPU info
-    gpus_tf = tf.config.experimental.list_physical_devices("GPU")
+    # gpus_tf = tf.config.experimental.list_physical_devices("GPU")
     
-    result_dict["Number of GPUs (tf)"] = len(gpus_tf)
+    # result_dict["Number of GPUs (tf)"] = len(gpus_tf)
 
     gpus = GPUtil.getGPUs()
     gpus_available = GPUtil.getAvailability(gpus)
