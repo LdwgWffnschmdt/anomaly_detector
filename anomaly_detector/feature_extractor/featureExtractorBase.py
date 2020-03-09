@@ -38,7 +38,7 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, files, output_file="", batch_size=32, compression="lzf", compression_opts=None):
+    def extract_files(self, files, output_file="", batch_size=128, compression="lzf", compression_opts=None):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             files (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
@@ -72,12 +72,22 @@ class FeatureExtractorBase(object):
             logging.info("Output file set to %s" % output_file)
 
         logging.info("Loading dataset")
-        parsed_dataset = utils.load_tfrecords(files)
+        parsed_dataset = utils.load_tfrecords(files, batch_size)
 
         # Format images to match network input
         def _format_image(image, example):
-            return self.format_image(image), example
-        parsed_dataset = parsed_dataset.map(_format_image)
+            location = [example["location/translation/x"],
+                        example["location/translation/y"],
+                        example["location/translation/z"],
+                        example["location/rotation/x"],
+                        example["location/rotation/y"],
+                        example["location/rotation/z"]]
+            time      = example["time"]
+            label     = example["label"]
+            rosbag    = example["rosbag"]
+            tfrecord  = example["tfrecord"]
+            return self.format_image(image), location, time, label, rosbag, tfrecord
+        parsed_dataset = parsed_dataset.map(_format_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
         
         # Get number of examples in dataset
         total = sum(1 for record in parsed_dataset)
@@ -87,17 +97,10 @@ class FeatureExtractorBase(object):
             utils.print_progress(0, 1, prefix = "Extracting features:")
             
             # Get batches (seems to be better performance wise than extracting individual images)
-            batches = parsed_dataset.batch(batch_size)
+            batches = parsed_dataset.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
             # IO stuff
             h5Writer = h5py.File(output_file, "w")
-            
-            metadata_dataset = h5Writer.create_dataset("metadata",
-                                                        shape=(total,),
-                                                        dtype=h5py.string_dtype(),
-                                                        compression=compression,
-                                                        compression_opts=compression_opts)
-            feature_dataset  = None
         
             # Add metadata to the output file
             h5Writer.attrs["Extractor"]                 = self.NAME
@@ -115,7 +118,16 @@ class FeatureExtractorBase(object):
             # For the progress bar
             counter = 0
             start = time.time()
+            
+            dt_str = h5py.string_dtype(encoding='ascii')
 
+            feature_dataset = None
+            locations_dataset   = np.empty((total, 6), dtype=np.float32)
+            time_dataset        = np.empty((total,),   dtype=np.uint64)
+            label_dataset       = np.empty((total,),   dtype=np.int8)
+            rosbag_dataset      = np.empty((total,),   dtype=object)
+            tfrecord_dataset    = np.empty((total,),   dtype=object)
+            
             try:
                 for batch in batches:
                     if h.interrupted:
@@ -125,36 +137,40 @@ class FeatureExtractorBase(object):
                     # Extract features
                     feature_batch = self.extract_batch(batch[0])
 
+                    current_batch_size = len(feature_batch)
+
                     # Add features to list
-                    for index, feature_vector in enumerate(feature_batch):
-                        counter += 1
-                        if feature_dataset is None:
-                            feature_dataset = h5Writer.create_dataset("features",
-                                                                      shape=(total,) + feature_vector.shape,
-                                                                      dtype=np.float32,
-                                                                      compression=compression,
-                                                                      compression_opts=compression_opts)
-                        feature_dataset[counter - 1] = feature_vector.numpy()
-                        metadata_dataset[counter - 1] = str({
-                            "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
-                            "location/translation/y": batch[1]["metadata/location/translation/y"][index].numpy(),
-                            "location/translation/z": batch[1]["metadata/location/translation/z"][index].numpy(),
-                            "location/rotation/x"   : batch[1]["metadata/location/rotation/x"][index].numpy(),
-                            "location/rotation/y"   : batch[1]["metadata/location/rotation/y"][index].numpy(),
-                            "location/rotation/z"   : batch[1]["metadata/location/rotation/z"][index].numpy(),
-                            "time"                  : batch[1]["metadata/time"][index].numpy(),
-                            "label"                 : batch[1]["metadata/label"][index].numpy(),
-                            "rosbag"                : batch[1]["metadata/rosbag"][index].numpy(),
-                            "tfrecord"              : batch[1]["metadata/tfrecord"][index].numpy(),
-                            "feature_extractor"     : self.NAME
-                        })
-                    
+                    if feature_dataset is None:
+                        feature_dataset = np.empty((total,) + feature_batch[0].shape)
+
+                    feature_dataset[counter : counter + current_batch_size]  = feature_batch.numpy()
+
+                    locations_dataset[counter : counter + current_batch_size] = batch[1].numpy()
+                    time_dataset[counter : counter + current_batch_size]      = batch[2].numpy()
+                    label_dataset[counter : counter + current_batch_size]     = batch[3].numpy()
+
+                    n = batch[4].numpy()
+
+                    rosbag_dataset[counter : counter + current_batch_size]    = batch[4].numpy()
+                    tfrecord_dataset[counter : counter + current_batch_size]  = batch[5].numpy()
+
+                    counter += current_batch_size
+
                     # Print progress
                     utils.print_progress(counter,
-                                     total,
-                                     prefix = "Extracting features:",
-                                     suffix = "(%i / %i)" % (counter, total),
-                                     time_start = start)
+                                         total,
+                                         prefix = "Extracting features:",
+                                         suffix = "(%i / %i)" % (counter, total),
+                                         time_start = start)
+
+                h5Writer.create_dataset("features", data=feature_dataset, dtype=np.float32,
+                                                    compression=compression,
+                                                    compression_opts=compression_opts)
+                if len(locations_dataset) > 0:  h5Writer.create_dataset("locations_dataset" , data=locations_dataset , dtype=np.float32, compression=compression, compression_opts=compression_opts)
+                if len(time_dataset) > 0:       h5Writer.create_dataset("time_dataset"      , data=time_dataset      , dtype=np.uint64, compression=compression, compression_opts=compression_opts)
+                if len(label_dataset) > 0:      h5Writer.create_dataset("label_dataset"     , data=label_dataset     , dtype=np.int8, compression=compression, compression_opts=compression_opts)
+                if len(rosbag_dataset) > 0:     h5Writer.create_dataset("rosbag_dataset"    , data=rosbag_dataset    , dtype=dt_str)
+                if len(tfrecord_dataset) > 0:   h5Writer.create_dataset("tfrecord_dataset"  , data=tfrecord_dataset  , dtype=dt_str)
             except:
                 utils.print_progress(counter, total,
                                               prefix = "Cancelled:",

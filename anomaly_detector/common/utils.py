@@ -21,7 +21,7 @@ logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=log
 #  Images IO  #
 ###############
 
-def load_tfrecords(filenames):
+def load_tfrecords(filenames, batch_size=64):
     """Loads a set of TFRecord files
     Args:
         filenames (str / str[]): TFRecord file(s) extracted
@@ -57,11 +57,28 @@ def load_tfrecords(filenames):
     
     def _parse_function(example_proto):
         # Parse the input tf.Example proto using the dictionary above.
-        example = tf.io.parse_single_example(example_proto, feature_description)
-        image = tf.image.decode_jpeg(example["image/encoded"], channels=3)
-        return image, example
+        return tf.io.parse_example(example_proto, feature_description)
 
-    return raw_dataset.map(_parse_function)
+    def _decode_function(example):
+        image = tf.image.decode_jpeg(example["image/encoded"], channels=3)
+        example_stripped = {
+            "location/translation/x": example["metadata/location/translation/x"],
+            "location/translation/y": example["metadata/location/translation/y"],
+            "location/translation/z": example["metadata/location/translation/z"],
+            "location/rotation/x"   : example["metadata/location/rotation/x"],
+            "location/rotation/y"   : example["metadata/location/rotation/y"],
+            "location/rotation/z"   : example["metadata/location/rotation/z"],
+            "time"                  : example["metadata/time"],
+            "label"                 : example["metadata/label"],
+            "rosbag"                : example["metadata/rosbag"],
+            "tfrecord"              : example["metadata/tfrecord"],
+        }
+        return image, example_stripped
+
+    return raw_dataset.batch(batch_size) \
+                      .map(_parse_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
+                      .unbatch() \
+                      .map(_decode_function, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 #################
 # Output helper #
@@ -349,12 +366,12 @@ def getComputerInfo():
     cpu = cpuinfo.get_cpu_info()
 
     result_dict = {
-        "Python version": cpu["python_version"],
+        # "Python version": cpu["python_version"],
         "TensorFlow version": tf.version.VERSION,
-        "CPU Description": cpu["brand"],
-        "CPU Clock speed (advertised)": cpu["hz_advertised"],
-        "CPU Clock speed (actual)": cpu["hz_actual"],
-        "CPU Architecture": cpu["arch"]
+        # "CPU Description": cpu["brand"],
+        # "CPU Clock speed (advertised)": cpu["hz_advertised"],
+        # "CPU Clock speed (actual)": cpu["hz_actual"],
+        # "CPU Architecture": cpu["arch"]
     }
 
     # Get GPU info
