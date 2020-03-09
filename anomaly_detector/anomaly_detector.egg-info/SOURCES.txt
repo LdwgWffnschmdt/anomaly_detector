@@ -31,5 +31,6 @@ anomaly_detector/feature_extractor/featureExtractorResNet50_LargeImage.py
 anomaly_detector/scripts/calculate_locations.py
 anomaly_detector/scripts/extract_features.py
 anomaly_detector/scripts/feature_extractor_benchmark.py
+anomaly_detector/scripts/rosbag_to_images.py
 anomaly_detector/scripts/rosbag_to_tfrecord.py
 anomaly_detector/scripts/tfrecord_to_hdf5.py
