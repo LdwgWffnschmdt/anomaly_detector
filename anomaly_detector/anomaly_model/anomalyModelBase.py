@@ -53,8 +53,8 @@ class AnomalyModelBase(object):
     ########################
     # Common functionality #
     ########################
-
-    def load_or_generate(self, features="/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/Features/MobileNetV2_Block6.h5",
+    
+    def load_or_generate(self, features="/home/ludwig/ros/src/ROS-kate_bag/bags/FieldSAFE/TFRecord/Features/MobileNetV2_Block6.h5",
                                load_features=False, load_mahalanobis_distances=False):
         """Load a model from file or generate it based on the features
         
@@ -155,9 +155,10 @@ class AnomalyModelBase(object):
         self.mahalanobis_no_anomaly = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.no_anomaly.flatten(), desc="No anomaly  ")))) # 75.49480115577167
         self.mahalanobis_anomaly    = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.anomaly.flatten(), desc="With anomaly"))))    # 76.93620254133627
 
-        self.mahalanobis_no_anomaly_max = np.nanmax(self.mahalanobis_no_anomaly)
-        self.mahalanobis_anomaly_max    = np.nanmax(self.mahalanobis_anomaly)
-        self.mahalanobis_max = max(self.mahalanobis_no_anomaly_max, self.mahalanobis_anomaly_max)
+        self.mahalanobis_no_anomaly_max = np.nanmax(self.mahalanobis_no_anomaly) if len(self.mahalanobis_no_anomaly) > 0 else np.nan
+        self.mahalanobis_anomaly_max    = np.nanmax(self.mahalanobis_anomaly) if len(self.mahalanobis_anomaly) > 0 else np.nan
+        
+        self.mahalanobis_max = np.nanmax([self.mahalanobis_no_anomaly_max, self.mahalanobis_anomaly_max])
 
         logging.info("Maximum Mahalanobis distance (no anomaly): %f" % self.mahalanobis_no_anomaly_max)
         logging.info("Maximum Mahalanobis distance (anomaly)   : %f" % self.mahalanobis_anomaly_max)

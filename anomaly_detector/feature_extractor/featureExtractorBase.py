@@ -130,13 +130,10 @@ class FeatureExtractorBase(object):
                         counter += 1
                         if feature_dataset is None:
                             feature_dataset = h5Writer.create_dataset("features",
-                                                                        shape=(total,
-                                                                                feature_vector.shape[0],
-                                                                                feature_vector.shape[1],
-                                                                                feature_vector.shape[2]),
-                                                                        dtype=np.float32,
-                                                                        compression=compression,
-                                                                        compression_opts=compression_opts)
+                                                                      shape=(total,) + feature_vector.shape,
+                                                                      dtype=np.float32,
+                                                                      compression=compression,
+                                                                      compression_opts=compression_opts)
                         feature_dataset[counter - 1] = feature_vector.numpy()
                         metadata_dataset[counter - 1] = str({
                             "location/translation/x": batch[1]["metadata/location/translation/x"][index].numpy(),
@@ -163,8 +160,9 @@ class FeatureExtractorBase(object):
                                               prefix = "Cancelled:",
                                               suffix = "(%i / %i)" % (counter, total),
                                               time_start = start)
-
-                h5Writer.attrs["Exception"] = traceback.format_exc()
+                exc = traceback.format_exc()
+                logging.error(exc)
+                h5Writer.attrs["Exception"] = exc
                 return False
             finally:
                 end = time.time()
