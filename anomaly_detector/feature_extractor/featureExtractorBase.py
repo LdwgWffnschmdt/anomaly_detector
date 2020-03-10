@@ -9,6 +9,7 @@ import tensorflow as tf
 import tensorflow_hub as hub
 import numpy as np
 import h5py
+from tqdm import tqdm
 
 import common.utils as utils
 
@@ -71,7 +72,6 @@ class FeatureExtractorBase(object):
             output_file = os.path.join(output_dir, self.NAME + ".h5")
             logging.info("Output file set to %s" % output_file)
 
-        logging.info("Loading dataset")
         parsed_dataset = utils.load_tfrecords(files, batch_size)
 
         # Format images to match network input
@@ -90,50 +90,43 @@ class FeatureExtractorBase(object):
         parsed_dataset = parsed_dataset.map(_format_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
         
         # Get number of examples in dataset
-        total = sum(1 for record in parsed_dataset)
+        total = sum(1 for record in tqdm(parsed_dataset, desc="Loading dataset"))
 
-        with utils.GracefulInterruptHandler() as h:
-            ### Extract features
-            utils.print_progress(0, 1, prefix = "Extracting features:")
-            
-            # Get batches (seems to be better performance wise than extracting individual images)
-            batches = parsed_dataset.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+        # Get batches (seems to be better performance wise than extracting individual images)
+        batches = parsed_dataset.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
-            # IO stuff
-            h5Writer = h5py.File(output_file, "w")
+        # IO stuff
+        hf = h5py.File(output_file, "w")
+    
+        # Add metadata to the output file
+        hf.attrs["Extractor"]                 = self.NAME
+        hf.attrs["Files"]                     = files
+        hf.attrs["Batch size"]                = batch_size
+        hf.attrs["Compression"]               = compression
+        if compression_opts is not None:
+            hf.attrs["Compression options"]   = compression_opts
+
+        computer_info = utils.getComputerInfo()
+        for key, value in computer_info.items():
+            hf.attrs[key] = value
         
-            # Add metadata to the output file
-            h5Writer.attrs["Extractor"]                 = self.NAME
-            h5Writer.attrs["Files"]                     = files
-            h5Writer.attrs["Batch size"]                = batch_size
-            h5Writer.attrs["Compression"]               = compression
-            if compression_opts is not None:
-                h5Writer.attrs["Compression options"]   = compression_opts
+        start = time.time()
+        counter = 0
 
-            computer_info = utils.getComputerInfo()
-            for key, value in computer_info.items():
-                h5Writer.attrs[key] = value
-            h5Writer.attrs["Start"] = time.time()
+        hf.attrs["Start"] = start
+        
+        dt_str = h5py.string_dtype(encoding='ascii')
 
-            # For the progress bar
-            counter = 0
-            start = time.time()
-            
-            dt_str = h5py.string_dtype(encoding='ascii')
-
-            feature_dataset = None
-            locations_dataset   = np.empty((total, 6), dtype=np.float32)
-            time_dataset        = np.empty((total,),   dtype=np.uint64)
-            label_dataset       = np.empty((total,),   dtype=np.int8)
-            rosbag_dataset      = np.empty((total,),   dtype=object)
-            tfrecord_dataset    = np.empty((total,),   dtype=object)
-            
-            try:
+        feature_dataset     = None
+        locations_dataset   = np.empty((total, 6), dtype=np.float32)
+        time_dataset        = np.empty((total,),   dtype=np.uint64)
+        label_dataset       = np.empty((total,),   dtype=np.int8)
+        rosbag_dataset      = np.empty((total,),   dtype=object)
+        tfrecord_dataset    = np.empty((total,),   dtype=object)
+        
+        try:
+            with tqdm(desc="Extracting features (batch size: %i)" % batch_size, total=total) as pbar:
                 for batch in batches:
-                    if h.interrupted:
-                        logging.warning("Interrupted!")
-                        raise KeyboardInterrupt()
-                    
                     # Extract features
                     feature_batch = self.extract_batch(batch[0])
 
@@ -148,46 +141,37 @@ class FeatureExtractorBase(object):
                     locations_dataset[counter : counter + current_batch_size] = batch[1].numpy()
                     time_dataset[counter : counter + current_batch_size]      = batch[2].numpy()
                     label_dataset[counter : counter + current_batch_size]     = batch[3].numpy()
-
-                    n = batch[4].numpy()
-
                     rosbag_dataset[counter : counter + current_batch_size]    = batch[4].numpy()
                     tfrecord_dataset[counter : counter + current_batch_size]  = batch[5].numpy()
 
                     counter += current_batch_size
+                    pbar.update(n=current_batch_size)
 
-                    # Print progress
-                    utils.print_progress(counter,
-                                         total,
-                                         prefix = "Extracting features:",
-                                         suffix = "(%i / %i)" % (counter, total),
-                                         time_start = start)
-
-                h5Writer.create_dataset("features", data=feature_dataset, dtype=np.float32,
-                                                    compression=compression,
-                                                    compression_opts=compression_opts)
-                if len(locations_dataset) > 0:  h5Writer.create_dataset("locations_dataset" , data=locations_dataset , dtype=np.float32, compression=compression, compression_opts=compression_opts)
-                if len(time_dataset) > 0:       h5Writer.create_dataset("time_dataset"      , data=time_dataset      , dtype=np.uint64, compression=compression, compression_opts=compression_opts)
-                if len(label_dataset) > 0:      h5Writer.create_dataset("label_dataset"     , data=label_dataset     , dtype=np.int8, compression=compression, compression_opts=compression_opts)
-                if len(rosbag_dataset) > 0:     h5Writer.create_dataset("rosbag_dataset"    , data=rosbag_dataset    , dtype=dt_str)
-                if len(tfrecord_dataset) > 0:   h5Writer.create_dataset("tfrecord_dataset"  , data=tfrecord_dataset  , dtype=dt_str)
-            except:
-                utils.print_progress(counter, total,
-                                              prefix = "Cancelled:",
-                                              suffix = "(%i / %i)" % (counter, total),
-                                              time_start = start)
-                exc = traceback.format_exc()
-                logging.error(exc)
-                h5Writer.attrs["Exception"] = exc
-                return False
-            finally:
-                end = time.time()
-                h5Writer.attrs["End"] = end
-                h5Writer.attrs["Duration"] = end - start
-                h5Writer.attrs["Duration (formatted)"] = utils.format_duration(end - start)
-                h5Writer.attrs["Number of frames extracted"] = counter
-                h5Writer.attrs["Number of total frames"] = total
-                h5Writer.close()
+            hf.create_dataset("features"        , data=feature_dataset   , dtype=np.float32,  compression=compression, compression_opts=compression_opts)
+            hf.create_dataset("camera_locations", data=locations_dataset , dtype=np.float32,  compression=compression, compression_opts=compression_opts)
+            hf["camera_locations"].attrs["Axes"] = ["translation/x",
+                                                    "translation/y",
+                                                    "translation/z",
+                                                    "rotation/x",
+                                                    "rotation/y",
+                                                    "rotation/z"]
+            hf.create_dataset("times"           , data=time_dataset      , dtype=np.uint64,   compression=compression, compression_opts=compression_opts)
+            hf.create_dataset("labels"          , data=label_dataset     , dtype=np.int8,     compression=compression, compression_opts=compression_opts)
+            hf.create_dataset("rosbags"         , data=rosbag_dataset    , dtype=dt_str,      compression=compression, compression_opts=compression_opts)
+            hf.create_dataset("tfrecords"       , data=tfrecord_dataset  , dtype=dt_str,      compression=compression, compression_opts=compression_opts)
+        except:
+            exc = traceback.format_exc()
+            logging.error(exc)
+            hf.attrs["Exception"] = exc
+            return False
+        finally:
+            end = time.time()
+            hf.attrs["End"] = end
+            hf.attrs["Duration"] = end - start
+            hf.attrs["Duration (formatted)"] = utils.format_duration(end - start)
+            hf.attrs["Number of frames extracted"] = counter
+            hf.attrs["Number of total frames"] = total
+            hf.close()
 
         return True
 

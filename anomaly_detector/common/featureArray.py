@@ -34,37 +34,40 @@ class FeatureArray(np.ndarray):
         if file_extension != ".h5":
             raise ValueError("Filename has to be *.h5")
         
-        start = time.time()
-
         with h5py.File(filename, "r") as hf:
             attrs = dict(hf.attrs)
 
-            print("Open:\t\t%.3f" % (time.time() - start))
+            dt_str = h5py.string_dtype(encoding='ascii')
 
-            # Parse metadata object
-            start = time.time()
-            metadata = np.array([ast.literal_eval(m) for m in hf["metadata"]])
-            print("Metadata:\t%.3f" % (time.time() - start))
+            features_raw      = np.array(hf["features"]        , dtype=np.float32)
+            camera_locations  = np.array(hf["camera_locations"], dtype=np.float32)
+            times             = np.array(hf["times"]           , dtype=np.uint64)
+            labels            = np.array(hf["labels"]          , dtype=np.int8)
+            rosbags           = np.array(hf["rosbags"]         , dtype=dt_str)
+            tfrecords         = np.array(hf["tfrecords"]       , dtype=dt_str)
+            feature_extractor = hf.attrs["Extractor"]
 
-            start = time.time()
-            features_raw = np.array(hf["features"])
-            print("Features:\t%.3f" % (time.time() - start))
-    
-            start = time.time()
             locations = hf.get("locations")
             if locations is not None:
                 locations = np.array(locations)
-            print("Locations:\t%.3f" % (time.time() - start))
             
             total, h, w, depth = features_raw.shape
 
             features = np.empty(shape=(total, h, w), dtype=Feature)
             
             for i, y, x in tqdm(np.ndindex(features.shape), desc="Loading features", total=np.prod(features.shape)):
-                meta = metadata[i]
-                features[i, y, x] = Feature(features_raw[i, y, x], meta, x, y, w, h)
+                feature = Feature(features_raw[i, y, x], x, y, w, h)
+                feature.camera_location = camera_locations[i]
+                feature.time = times[i]
+                feature.label = labels[i]
+                feature.rosbag = rosbags[i]
+                feature.tfrecord = tfrecords[i]
+                feature.feature_extractor = feature_extractor
+                
                 if locations is not None:
-                    features[i, y, x].location = locations[i, y, x]
+                    feature.location = locations[i, y, x]
+
+                features[i, y, x] = feature
         
         obj = np.asarray(features).view(cls)
         obj.attrs = attrs
@@ -232,7 +235,7 @@ class FeatureArray(np.ndarray):
         return np.var(self.array_flat, axis=0, dtype=np.float64)
 
     def cov(self):
-        return np.cov(self.array_flat, rowvar=False, dtype=np.float64)
+        return np.cov(self.array_flat, rowvar=False)
 
     def mean(self):
         return np.mean(self.array_flat, axis=0, dtype=np.float64)

@@ -3,12 +3,11 @@ import numpy as np
 class Feature(np.ndarray):
     """A Feature is the output of a Feature Extractor (values) with metadata as attributes"""
 
-    def __new__(cls, input_array, metadata, x, y, w, h):
+    def __new__(cls, input_array, x, y, w, h):
         # Input array is an already formed ndarray instance
         # We first cast to be our class type
         obj = np.asarray(input_array).view(cls)
         
-        obj.metadata = metadata
         obj.x = x
         obj.y = y
         obj.w = w
@@ -20,8 +19,6 @@ class Feature(np.ndarray):
     def __array_finalize__(self, obj):
         if obj is None: return
         
-        self.metadata = getattr(obj, "metadata", None)
-
         # Patch position
         self.x = getattr(obj, "x", None)
         self.y = getattr(obj, "y", None)
@@ -30,25 +27,24 @@ class Feature(np.ndarray):
         self.w = getattr(obj, "w", None)
         self.h = getattr(obj, "h", None)
 
+        self.camera_location = None
+        self.time = None
+        self.label = None
+        self.rosbag = None
+        self.tfrecord = None
+        self.feature_extractor = None
+
         # Will eventually be array [x, y]
         # (call FeatureArray.calculate_locations)
         self.location = None
 
         self.__bins__ = {}
     
-    def __get_property__(key):
-        return lambda self: None if self.metadata is None or not key in self.metadata.keys() else self.metadata[key]
-
-    time              = property(__get_property__("time"))
-    label             = property(__get_property__("label"))
-    rosbag            = property(__get_property__("rosbag"))
-    tfrecord          = property(__get_property__("tfrecord"))
-    feature_extractor = property(__get_property__("feature_extractor"))
-
-    camera_position   = property(lambda self: None if self.metadata is None else
-                                                np.array([self.metadata["location/translation/x"],
-                                                          self.metadata["location/translation/y"]]))
-    camera_rotation   = property(__get_property__("location/rotation/z"))
+    camera_position   = property(lambda self: None if self.camera_location is None else
+                                                np.array([self.camera_location[0],
+                                                          self.camera_location[1]]))
+    camera_rotation   = property(lambda self: None if self.camera_location is None else
+                                                self.camera_location[5])
 
     def get_bin(self, cell_size, extent=None):
         """Gets the indices for the bin the given feature belongs to
@@ -75,8 +71,5 @@ class Feature(np.ndarray):
         return np.array(self, dtype=dtype)
 
 if __name__ == "__main__":
-    meta = {"time": 232, "test": 24}
-    f = Feature(np.array([2,3,4]), meta, 0, 0, 10, 10)
+    f = Feature(np.array([2,3,4]), 0, 0, 10, 10)
     print f.w
-    print f.metadata
-    print f.time
