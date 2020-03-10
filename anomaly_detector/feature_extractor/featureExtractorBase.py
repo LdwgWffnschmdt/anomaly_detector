@@ -72,28 +72,13 @@ class FeatureExtractorBase(object):
             output_file = os.path.join(output_dir, self.NAME + ".h5")
             logging.info("Output file set to %s" % output_file)
 
-        parsed_dataset = utils.load_tfrecords(files, batch_size)
+        dataset = utils.load_tfrecords(files, self.format_image)
 
-        # Format images to match network input
-        def _format_image(image, example):
-            location = [example["location/translation/x"],
-                        example["location/translation/y"],
-                        example["location/translation/z"],
-                        example["location/rotation/x"],
-                        example["location/rotation/y"],
-                        example["location/rotation/z"]]
-            time      = example["time"]
-            label     = example["label"]
-            rosbag    = example["rosbag"]
-            tfrecord  = example["tfrecord"]
-            return self.format_image(image), location, time, label, rosbag, tfrecord
-        parsed_dataset = parsed_dataset.map(_format_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-        
         # Get number of examples in dataset
-        total = sum(1 for record in tqdm(parsed_dataset, desc="Loading dataset"))
+        total = sum(1 for record in tqdm(dataset, desc="Loading dataset"))
 
         # Get batches (seems to be better performance wise than extracting individual images)
-        batches = parsed_dataset.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+        batches = dataset.batch(batch_size)
 
         # IO stuff
         hf = h5py.File(output_file, "w")

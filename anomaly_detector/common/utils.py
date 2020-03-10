@@ -21,7 +21,7 @@ logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=log
 #  Images IO  #
 ###############
 
-def load_tfrecords(filenames, batch_size=64):
+def load_tfrecords(filenames, batch_size=64, preprocess_function=None):
     """Loads a set of TFRecord files
     Args:
         filenames (str / str[]): TFRecord file(s) extracted
@@ -61,24 +61,26 @@ def load_tfrecords(filenames, batch_size=64):
 
     def _decode_function(example):
         image = tf.image.decode_jpeg(example["image/encoded"], channels=3)
-        example_stripped = {
-            "location/translation/x": example["metadata/location/translation/x"],
-            "location/translation/y": example["metadata/location/translation/y"],
-            "location/translation/z": example["metadata/location/translation/z"],
-            "location/rotation/x"   : example["metadata/location/rotation/x"],
-            "location/rotation/y"   : example["metadata/location/rotation/y"],
-            "location/rotation/z"   : example["metadata/location/rotation/z"],
-            "time"                  : example["metadata/time"],
-            "label"                 : example["metadata/label"],
-            "rosbag"                : example["metadata/rosbag"],
-            "tfrecord"              : example["metadata/tfrecord"],
-        }
-        return image, example_stripped
+        location = [example["metadata/location/translation/x"],
+                    example["metadata/location/translation/y"],
+                    example["metadata/location/translation/z"],
+                    example["metadata/location/rotation/x"],
+                    example["metadata/location/rotation/y"],
+                    example["metadata/location/rotation/z"]]
+        time      = example["metadata/time"]
+        label     = example["metadata/label"]
+        rosbag    = example["metadata/rosbag"]
+        tfrecord  = example["metadata/tfrecord"]
+        if preprocess_function is not None:
+            image = preprocess_function(image)
+        return image, location, time, label, rosbag, tfrecord
 
     return raw_dataset.batch(batch_size) \
                       .map(_parse_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
+                      .cache() \
                       .unbatch() \
-                      .map(_decode_function, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+                      .map(_decode_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
+                      .prefetch(tf.data.experimental.AUTOTUNE)
 
 #################
 # Output helper #
