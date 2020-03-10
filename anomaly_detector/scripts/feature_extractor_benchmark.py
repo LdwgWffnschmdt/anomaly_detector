@@ -6,11 +6,20 @@ import argparse
 parser = argparse.ArgumentParser(description="Benchmark the specified feature extractors.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("tfrecord", metavar="F", dest="tfrecord", type=str,
+parser.add_argument("tfrecord", metavar="F", type=str,
                     help="TFRecord file to use for benchmarks")
 
 parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', type=str,
                     help="Extractor name. Leave empty for all extractors (default: \"\")")
+
+parser.add_argument("--batch_size", metavar="B", dest="batch_size", type=int, default=16,
+                    help="Batch size for testing batched extraction. (default: 16)")
+
+parser.add_argument("--extract_single_repeat", metavar="B", dest="extract_single_repeat", type=int, default=100,
+                    help="Number of single extraction repetitions. (default: 10)")
+
+parser.add_argument("--extract_batch_repeat", metavar="B", dest="extract_batch_repeat", type=int, default=10,
+                    help="Number of batch extraction repetitions. (default: 10)")
 
 args = parser.parse_args()
 
@@ -22,13 +31,16 @@ import timeit
 
 import xlsxwriter
 import tensorflow as tf
+from tqdm import tqdm
 
 import feature_extractor
 import common.utils as utils
 
+row = 0
+col = 0
+
 def feature_extractor_benchmark():
-    BATCH_SIZE = 32
-    
+    global col
     # Create a workbook and add a worksheet for meta data.
     workbook = xlsxwriter.Workbook(os.path.join(os.path.dirname(os.path.realpath(__file__)), datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark.xlsx")))
     heading_format = workbook.add_format({'bold': True, 'font_color': '#0071bc', "font_size": 20})
@@ -39,7 +51,7 @@ def feature_extractor_benchmark():
     worksheet_meta.set_column(0, 0, 25)
     worksheet_meta.set_column(1, 1, 40)
 
-    row = 0
+    
     def add_meta(n, s="", format=None):
         global row
         worksheet_meta.write(row, 0, n, format)
@@ -49,6 +61,7 @@ def feature_extractor_benchmark():
     add_meta("Feature extractor benchmark", format=heading_format)
 
     add_meta("Start", datetime.now().strftime("%d.%m.%Y, %H:%M:%S"))
+    add_meta("Batch size", args.batch_size)
 
     computer_info = utils.getComputerInfo()
 
@@ -65,7 +78,7 @@ def feature_extractor_benchmark():
     module = __import__("feature_extractor")
     
     try:
-        for extractor_name in args.extractor:
+        for extractor_name in tqdm(args.extractor, desc="Benchmarking extractors"):
             worksheet = workbook.add_worksheet(extractor_name.replace("FeatureExtractor", ""))
             worksheet.set_column(0, 20, 20)
 
@@ -79,26 +92,27 @@ def feature_extractor_benchmark():
 
             def log(s, t):
                 """Log duration t with info string s"""
-                logging.info("%-40s (%s): %s" % (extractor_name, s, str(t)))
+                # logging.info("%-40s (%s): %s" % (extractor_name, s, str(t)))
                 add_to_excel(s, t)
 
             _class = getattr(module, extractor_name)
 
             # Test extractor initialization
-            log("Initialization", timeit.repeat(lambda: _class(), number=1, repeat=5))
+            log("Initialization", timeit.repeat(lambda: _class(), number=1, repeat=10))
+
+            extractor = _class()
 
             # Load a test dataset
-            dataset = utils.load_tfrecords(args.tfrecord)
+            dataset = utils.load_tfrecords(args.tfrecord, preprocess_function=extractor.format_image)
 
             # Test batch extraction
-            extractor = _class()
-            batch = list(dataset.take(BATCH_SIZE).batch(BATCH_SIZE).as_numpy_iterator())[0]
-            log("Extract batch", timeit.repeat(lambda: extractor.extract_batch(batch[0]), number=1, repeat=10))
+            if args.batch_size > 0:
+                batch = list(dataset.batch(args.batch_size).take(1).as_numpy_iterator())[0]
+                log("Extract batch (%i)" % args.batch_size, timeit.repeat(lambda: extractor.extract_batch(batch[0]), number=1, repeat=args.extract_batch_repeat))
 
             # Test single image extraction
-            extractor = _class()
             single = list(dataset.take(1).as_numpy_iterator())[0] # Get a single entry
-            log("Extract single", timeit.repeat(lambda: extractor.extract(single[0]), number=1, repeat=10))
+            log("Extract single", timeit.repeat(lambda: extractor.extract(single[0]), number=1, repeat=args.extract_single_repeat))
     finally:
         workbook.close()
 
