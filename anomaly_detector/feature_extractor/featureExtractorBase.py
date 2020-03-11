@@ -29,6 +29,9 @@ class FeatureExtractorBase(object):
         image = tf.image.resize(image, (self.IMG_SIZE, self.IMG_SIZE))
         return image
 
+    def __transform_dataset__(self, dataset):
+        return dataset
+
     ########################
     # Common functionality #
     ########################
@@ -72,13 +75,17 @@ class FeatureExtractorBase(object):
             output_file = os.path.join(output_dir, self.NAME + ".h5")
             logging.info("Output file set to %s" % output_file)
 
-        dataset = utils.load_tfrecords(files, self.format_image)
+        dataset = utils.load_tfrecords(files, preprocess_function=self.format_image)
+        
+        # Call internal transformations
+        dataset = self.__transform_dataset__(dataset)
 
         # Get number of examples in dataset
         total = sum(1 for record in tqdm(dataset, desc="Loading dataset"))
 
         # Get batches (seems to be better performance wise than extracting individual images)
-        batches = dataset.batch(batch_size)
+        if batch_size > 0:
+            dataset = dataset.batch(batch_size)
 
         # IO stuff
         hf = h5py.File(output_file, "w")
@@ -90,6 +97,8 @@ class FeatureExtractorBase(object):
         hf.attrs["Compression"]               = compression
         if compression_opts is not None:
             hf.attrs["Compression options"]   = compression_opts
+        if hasattr(self, "TEMPORAL_BATCH_SIZE"):
+            hf.attrs["Temporal batch size"]   = self.TEMPORAL_BATCH_SIZE
 
         computer_info = utils.getComputerInfo()
         for key, value in computer_info.items():
@@ -111,7 +120,7 @@ class FeatureExtractorBase(object):
         
         try:
             with tqdm(desc="Extracting features (batch size: %i)" % batch_size, total=total) as pbar:
-                for batch in batches:
+                for batch in dataset:
                     # Extract features
                     feature_batch = self.extract_batch(batch[0])
 
