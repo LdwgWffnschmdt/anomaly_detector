@@ -55,6 +55,8 @@ class FeatureExtractorBase(object):
             success (bool)
         """
         
+        files_inp = str(files)
+
         if isinstance(files, basestring):
             files = [files]
             
@@ -74,8 +76,13 @@ class FeatureExtractorBase(object):
                 os.makedirs(output_dir)
             output_file = os.path.join(output_dir, self.NAME + ".h5")
             logging.info("Output file set to %s" % output_file)
-
-        dataset = utils.load_tfrecords(files, preprocess_function=self.format_image)
+        
+        if files[0].endswith(".tfrecord"):
+            dataset = utils.load_tfrecords(files, preprocess_function=self.format_image)
+        elif files[0].endswith(".jpg"):
+            dataset = utils.load_jpgs(files, preprocess_function=self.format_image)
+        else:
+            raise ValueError("Supported file types are *.tfrecord and *.jpg")
         
         # Call internal transformations
         dataset = self.__transform_dataset__(dataset)
@@ -92,7 +99,7 @@ class FeatureExtractorBase(object):
     
         # Add metadata to the output file
         hf.attrs["Extractor"]                 = self.NAME
-        hf.attrs["Files"]                     = files
+        hf.attrs["Files"]                     = files_inp
         hf.attrs["Batch size"]                = batch_size
         hf.attrs["Compression"]               = compression
         if compression_opts is not None:

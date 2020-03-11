@@ -5,6 +5,7 @@ import logging
 import sys
 import time
 import signal
+import yaml
 
 import tensorflow as tf
 import numpy as np
@@ -77,9 +78,62 @@ def load_tfrecords(filenames, batch_size=64, preprocess_function=None):
 
     return raw_dataset.batch(batch_size) \
                       .map(_parse_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
-                      .cache() \
                       .unbatch() \
                       .map(_decode_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
+                      .cache() \
+                      .prefetch(tf.data.experimental.AUTOTUNE)
+
+def load_jpgs(filenames, batch_size=64, preprocess_function=None):
+    """Loads a set of TFRecord files
+    Args:
+        filenames (str / str[]): JPEG file(s) extracted
+                                 by rosbag_to_images
+
+    Returns:
+        tf.data.MapDataset
+    """
+    if not filenames or len(filenames) < 1 or filenames[0] == "":
+        raise ValueError("Please specify at least one filename (%s)" % filenames)
+    
+    raw_dataset = tf.data.Dataset.list_files(filenames)
+
+    def _load_metadata(yml):
+        # Load and decode metadata file
+        with open(str(yml.numpy()), "r") as file:
+            meta = yaml.safe_load(file)
+
+            location = [meta["location/translation/x"],
+                        meta["location/translation/y"],
+                        meta["location/translation/z"],
+                        meta["location/rotation/x"],
+                        meta["location/rotation/y"],
+                        meta["location/rotation/z"]]
+            time      = meta["time"]
+            label     = meta["label"]
+            rosbag    = meta["rosbag"]
+            tfrecord  = tf.constant("", dtype=tf.string) # Nuffin
+        return location, time, label, rosbag, tfrecord
+
+    def _decode_function(file_path):
+        # Load and decode image
+        image = tf.io.read_file(file_path)
+        image = tf.image.decode_jpeg(image, channels=3)
+
+        # Get the metadata file path
+        yml = tf.strings.regex_replace(file_path, ".jpg", ".yml")
+
+        location, time, label, rosbag, tfrecord = tf.py_function(_load_metadata, [yml], [tf.float32,
+                                                                                         tf.int64,
+                                                                                         tf.int8,
+                                                                                         tf.string,
+                                                                                         tf.string])
+
+        if preprocess_function is not None:
+            image = preprocess_function(image)
+        return image, location, time, label, rosbag, tfrecord
+
+    return raw_dataset.map(_decode_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
+                      .cache() \
                       .prefetch(tf.data.experimental.AUTOTUNE)
 
 #################
