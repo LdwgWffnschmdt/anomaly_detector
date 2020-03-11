@@ -58,8 +58,7 @@ def tfrecord_to_images():
     for x in tqdm(parsed_dataset, desc="Extracting images", total=total):
         output_file = os.path.join(output_dir, str(x[2].numpy()))
         cv2.imwrite(output_file + ".jpg", x[0].numpy())
-        y = x[1].numpy()[1]
-        s = float(y)
+        
         feature_dict = {
             "location/translation/x"   : float(x[1].numpy()[0]),
             "location/translation/y"   : float(x[1].numpy()[1]),
