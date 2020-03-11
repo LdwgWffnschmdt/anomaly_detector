@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from imageLocationUtility import ImageLocationUtility
 
 # Configure logging
-logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
+logging.basicConfig(format="%(asctime)s [%(levelname)s]: %(message)s", level=logging.INFO)
 
 ###############
 #  Images IO  #
@@ -140,7 +140,7 @@ def load_jpgs(filenames, batch_size=64, preprocess_function=None):
 # Output helper #
 #################
 
-def visualize(features, threshold, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False, show_map=True):
+def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images", feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False, show_map=True):
     """Visualize features on the source image
 
     Args:
@@ -150,15 +150,20 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
         pause_func (function): Function converting a feature to a boolean that pauses the video
         show_grid (bool): Overlay real world coordinate grid
     """
-    image, example, feature_2d = (None, None, None)
+    index = 0
+    image = None
     total, height, width = features.shape
     
     ### Set up window
-    cv2.namedWindow('image')
+    cv2.namedWindow("image")
 
     has_locations = features[0,0,0].location is not None
 
     if has_locations:
+        ### Calculate grid overlay
+        ilu = ImageLocationUtility()
+        absolute_locations = ilu.span_grid(60, 60, 1, -30, -30)
+
         x_min, y_min, x_max, y_max = features.get_extent()
 
         fig = plt.figure()
@@ -173,10 +178,13 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
         show_map = False
 
     def __draw__(x=None):
+        image = features[index, 0, 0].get_image()
+        feature_2d = features[index,...]
+
         overlay = image.copy()
 
         # if example["metadata/time"] != meta["time"]:
-        #     logging.error("Times somehow don't match (%f)" % (example["metadata/time"]- meta["time"]))
+        #     logging.error("Times somehow don"t match (%f)" % (example["metadata/time"]- meta["time"]))
 
         patch_size = (image.shape[1] / width, image.shape[0] / height)
         
@@ -187,15 +195,16 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
         #                                                                meta["location/rotation/y"],
         #                                                                meta["location/rotation/z"])
 
-        threshold = cv2.getTrackbarPos('threshold', 'image')
         if has_locations:
-            show_grid = bool(cv2.getTrackbarPos('show_grid', 'image'))
-            show_map  = bool(cv2.getTrackbarPos('show_map', 'image'))
+            show_grid = bool(cv2.getTrackbarPos("show_grid", "image"))
+            show_map  = bool(cv2.getTrackbarPos("show_map", "image"))
         else:
             show_grid = False
             show_map = False
-        show_values = bool(cv2.getTrackbarPos('show_values', 'image'))
-        show_thresh = bool(cv2.getTrackbarPos('show_thresh', 'image'))
+        
+        threshold = cv2.getTrackbarPos("threshold", "image")
+        show_values = bool(cv2.getTrackbarPos("show_values", "image"))
+        show_thresh = bool(cv2.getTrackbarPos("show_thresh", "image"))
 
         if show_map:
             ax.clear()
@@ -211,12 +220,12 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
                      feature_2d[-1, -1].location[1],
                      feature_2d[0 , -1].location[1]])
 
-            # ax.plot(feature_2d[0 ,  0].location[0], feature_2d[0 ,  0].location[1], 'r+', markersize=2, linewidth=2)
-            # ax.plot(feature_2d[-1,  0].location[0], feature_2d[-1,  0].location[1], 'r+', markersize=2, linewidth=2)
-            # ax.plot(feature_2d[0 , -1].location[0], feature_2d[0 , -1].location[1], 'r+', markersize=2, linewidth=2)
-            # ax.plot(feature_2d[-1, -1].location[0], feature_2d[-1, -1].location[1], 'r+', markersize=2, linewidth=2)
+            # ax.plot(feature_2d[0 ,  0].location[0], feature_2d[0 ,  0].location[1], "r+", markersize=2, linewidth=2)
+            # ax.plot(feature_2d[-1,  0].location[0], feature_2d[-1,  0].location[1], "r+", markersize=2, linewidth=2)
+            # ax.plot(feature_2d[0 , -1].location[0], feature_2d[0 , -1].location[1], "r+", markersize=2, linewidth=2)
+            # ax.plot(feature_2d[-1, -1].location[0], feature_2d[-1, -1].location[1], "r+", markersize=2, linewidth=2)
             # # ax.plot(meta["location/translation/x"], 
-            #         meta["location/translation/y"], 'bo')
+            #         meta["location/translation/y"], "bo")
             fig.canvas.draw()
 
         for x in range(width):
@@ -259,7 +268,7 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
                         (255, 255, 255),
                         thickness, lineType=cv2.LINE_AA)
 
-        alpha = cv2.getTrackbarPos('overlay','image') / 100.0  # Transparency factor.
+        alpha = cv2.getTrackbarPos("overlay","image") / 100.0  # Transparency factor.
 
         # Following line overlays transparent overlay over the image
         image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
@@ -268,51 +277,39 @@ def visualize(features, threshold, feature_to_color_func=None, feature_to_text_f
         cv2.imshow("image", image_new)
     
     # create trackbars
-    cv2.createTrackbar('threshold',   'image', int(threshold) , int(threshold) * 3, __draw__)
-    cv2.createTrackbar('show_thresh', 'image', 1 ,              1,                  __draw__)
+    cv2.createTrackbar("threshold",   "image", int(threshold) , int(threshold) * 3, __draw__)
+    cv2.createTrackbar("show_thresh", "image", 1,               1,                  __draw__)
     if has_locations:
-        cv2.createTrackbar('show_grid',   'image', int(show_grid) , 1,                  __draw__)
-        cv2.createTrackbar('show_map',    'image', int(show_map)  , 1,                  __draw__)
-    cv2.createTrackbar('show_values', 'image', 0 ,              1,                  __draw__)
-    cv2.createTrackbar('delay',       'image', 1 ,              1000,               __draw__)
-    cv2.createTrackbar('overlay',     'image', 40,              100 ,               __draw__)
+        cv2.createTrackbar("show_grid",   "image", int(show_grid) , 1,                  __draw__)
+        cv2.createTrackbar("show_map",    "image", int(show_map)  , 1,                  __draw__)
+    cv2.createTrackbar("show_values", "image", 0,               1,                  __draw__)
+    cv2.createTrackbar("delay",       "image", 1,               1000,               __draw__)
+    cv2.createTrackbar("overlay",     "image", 40,              100,                __draw__)
+    cv2.createTrackbar("index",       "image", 0,               total,               __draw__)
 
     font      = cv2.FONT_HERSHEY_SIMPLEX
     fontScale = 0.25
     thickness = 1
 
-    ### Calculate grid overlay
-    if has_locations:
-        ilu = ImageLocationUtility()
-        absolute_locations = ilu.span_grid(60, 60, 1, -30, -30)
-
-    tfrecord = None
-    tfrecordCounter = 0
-
     pause = False
 
-    for i, feature_2d in enumerate(features):
-        if tfrecord != feature_2d[0,0].tfrecord:
-            # if not "2020-02-06-17-17-25.tfrecord" in feature_2d[0,0].tfrecord: # TODO: Remove for production
-            #     continue
-            tfrecord = feature_2d[0,0].tfrecord
-            tfrecordCounter = 0
-            image_dataset = load_tfrecords(feature_2d[0,0].tfrecord).as_numpy_iterator()
-        else:
-            tfrecordCounter += 1
-
-        image, example = next(image_dataset)
-
-        # if meta["label"] == 1:
-        #     continue
+    while index < total:
+        new_index = cv2.getTrackbarPos("show_values", "image")
+        if new_index != index:
+            pause = True
+        index = new_index
 
         __draw__()
         
-        key = cv2.waitKey(0 if pause else cv2.getTrackbarPos('delay','image'))
+        key = cv2.waitKey(0 if pause else cv2.getTrackbarPos("delay","image"))
         if key == 27:   # [esc] => Quit
             return None
         elif key != -1:
             pause = not pause
+
+        # Play
+        index += 1
+        cv2.setTrackbarPos("index", "image", index)
     
     cv2.destroyAllWindows()
 
@@ -394,7 +391,7 @@ def image_write_label(image, label):
     fontScale              = 0.5
     thickness              = 1
 
-    cv2.putText(image,'Label: ',
+    cv2.putText(image,"Label: ",
         bottomLeftCornerOfText,
         font,
         fontScale,

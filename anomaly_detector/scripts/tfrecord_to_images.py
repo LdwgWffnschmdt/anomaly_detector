@@ -48,11 +48,10 @@ def tfrecord_to_images():
             os.makedirs(output_dir)
         logging.info("Output directory set to %s" % output_dir)
 
-    logging.info("Loading dataset")
     parsed_dataset = utils.load_tfrecords(files)
 
     # Get number of examples in dataset
-    total = sum(1 for record in parsed_dataset)
+    total = sum(1 for record in tqdm(parsed_dataset, desc="Loading dataset"))
 
     # Add features to list
     for x in tqdm(parsed_dataset, desc="Extracting images", total=total):

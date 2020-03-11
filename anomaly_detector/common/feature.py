@@ -1,4 +1,9 @@
+import os
+from cachetools import cached, LRUCache
+from cachetools.keys import hashkey
+
 import numpy as np
+import cv2
 
 class Feature(np.ndarray):
     """A Feature is the output of a Feature Extractor (values) with metadata as attributes"""
@@ -45,6 +50,13 @@ class Feature(np.ndarray):
                                                           self.camera_location[1]]))
     camera_rotation   = property(lambda self: None if self.camera_location is None else
                                                 self.camera_location[5])
+
+    image_cache = LRUCache(maxsize=20*60)  # Least recently used cache for images
+
+    @cached(image_cache, key=lambda self, images_path: hashkey(self.time)) # The cache should only be based on the timestamp
+    def get_image(self, images_path="~/data/CCW/Images"):
+        images_path = os.path.expanduser(images_path)
+        return cv2.imread(os.path.join(images_path, "%i.jpg" % self.time))
 
     def get_bin(self, cell_size, extent=None):
         """Gets the indices for the bin the given feature belongs to
