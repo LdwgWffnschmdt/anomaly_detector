@@ -365,7 +365,7 @@ from psutil import virtual_memory
 def getComputerInfo():
 
     # Get CPU info
-    cpu = cpuinfo.get_cpu_info()
+    # cpu = cpuinfo.get_cpu_info()
 
     result_dict = {
         # "Python version": cpu["python_version"],

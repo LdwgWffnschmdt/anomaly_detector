@@ -5,7 +5,7 @@ import logging
 
 import numpy as np
 # import tensorflow_probability as tfp
-# from scipy.spatial import distance
+from scipy.spatial import distance
 
 from anomalyModelBase import AnomalyModelBase
 import common.utils as utils
@@ -34,9 +34,11 @@ class AnomalyModelSVG(AnomalyModelBase):
         
         # TODO: This is a hack for collapsed SVGs. Should normally not happen
         if not self._var.any(): # var contains only zeros
-            return (feature == self._mean).all()
+            return (feature.base == self._mean).all()
 
-        return np.sqrt(np.sum((feature - self._mean) **2 / self._var))
+        # res = np.sqrt(np.sum((feature.base - self._mean) **2 / self._var))
+        res2 = distance.mahalanobis(feature, self._mean, self._varI)
+        return res2
         
         ### scipy implementation is way slower
         # if self._varI is None:
@@ -55,6 +57,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         # Get the variance
         # logging.info("Calculating the variance")
         self._var = features_flat.var()
+        self._varI = np.linalg.pinv(np.diag(self._var))
         # --> one variance per feature dimension
 
         # Get the mean
@@ -69,6 +72,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         if not "var" in h5file.keys() or not "mean" in h5file.keys():
             return False
         self._var       = np.array(h5file["var"])
+        self._varI = np.linalg.pinv(np.diag(self._var))
         self._mean      = np.array(h5file["mean"])
         assert len(self._var) == len(self._mean), "Dimensions of variance and mean do not match!"
         return True

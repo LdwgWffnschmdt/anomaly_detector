@@ -19,6 +19,5 @@ class FeatureExtractorEfficientNetB6(FeatureExtractorBase):
 # Only for tests
 if __name__ == "__main__":
     extractor = FeatureExtractorEfficientNetB6()
-    # extractor.plot_model(extractor.model, 600)
-    extractor.extract_files("/home/ldwg/data/CCW/2020-02-06-17-11-37.tfrecord")
-    # extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
+    extractor.plot_model(extractor.model, 600)
+    extractor.extract_files("/home/ldwg/data/CCW/2020-02-06-17-11-37.tfrecord", batch_size=16)
