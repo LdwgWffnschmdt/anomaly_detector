@@ -150,7 +150,8 @@ def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images",
         pause_func (function): Function converting a feature to a boolean that pauses the video
         show_grid (bool): Overlay real world coordinate grid
     """
-    index = 0
+    visualize.index = 0
+    visualize.pause = False
     image = None
     total, height, width = features.shape
     
@@ -178,8 +179,8 @@ def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images",
         show_map = False
 
     def __draw__(x=None):
-        image = features[index, 0, 0].get_image()
-        feature_2d = features[index,...]
+        image = features[visualize.index, 0, 0].get_image(images_path)
+        feature_2d = features[visualize.index,...]
 
         overlay = image.copy()
 
@@ -273,9 +274,16 @@ def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images",
         # Following line overlays transparent overlay over the image
         image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
         
-        image_write_label(image_new, feature_2d[0,0].label)
+        # image_write_label(image_new, feature_2d[0,0].label)
         cv2.imshow("image", image_new)
     
+    def __index_update__(new_index=None):
+        if new_index != visualize.index:
+            visualize.pause = True
+        visualize.index = new_index
+        __draw__()
+
+
     # create trackbars
     cv2.createTrackbar("threshold",   "image", int(threshold) , int(threshold) * 3, __draw__)
     cv2.createTrackbar("show_thresh", "image", 1,               1,                  __draw__)
@@ -285,33 +293,31 @@ def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images",
     cv2.createTrackbar("show_values", "image", 0,               1,                  __draw__)
     cv2.createTrackbar("delay",       "image", 1,               1000,               __draw__)
     cv2.createTrackbar("overlay",     "image", 40,              100,                __draw__)
-    cv2.createTrackbar("index",       "image", 0,               total,               __draw__)
+    cv2.createTrackbar("index",       "image", 0,               total - 1,          __index_update__)
 
     font      = cv2.FONT_HERSHEY_SIMPLEX
     fontScale = 0.25
     thickness = 1
 
-    pause = False
-
-    while index < total:
-        new_index = cv2.getTrackbarPos("show_values", "image")
-        if new_index != index:
-            pause = True
-        index = new_index
-
-        __draw__()
+    while visualize.index < total:
+        if visualize.index == total - 1:
+            visualize.pause = True
+        else:
+            visualize.index += 1
+            cv2.setTrackbarPos("index", "image", visualize.index)
         
-        key = cv2.waitKey(0 if pause else cv2.getTrackbarPos("delay","image"))
+        key = cv2.waitKey(0 if visualize.pause else cv2.getTrackbarPos("delay","image"))
         if key == 27:   # [esc] => Quit
-            return None
-        elif key != -1:
-            pause = not pause
+            break
+        elif key == 32: # [space] => Pause
+            visualize.pause = not visualize.pause
 
-        # Play
-        index += 1
-        cv2.setTrackbarPos("index", "image", index)
-    
     cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    from common import FeatureArray
+    features = FeatureArray("/mnt/w/bags/TFRecord/CCW/Features/C3D.h5")
+    visualize(features, images_path="/mnt/w/bags/TFRecord/CCW/Images/")
 
 # Print iterations progress
 # (https://gist.github.com/aubricus/f91fb55dc6ba5557fbab06119420dd6a)

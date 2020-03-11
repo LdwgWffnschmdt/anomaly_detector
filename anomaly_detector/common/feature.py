@@ -51,9 +51,9 @@ class Feature(np.ndarray):
     camera_rotation   = property(lambda self: None if self.camera_location is None else
                                                 self.camera_location[5])
 
-    image_cache = LRUCache(maxsize=20*60)  # Least recently used cache for images
+    image_cache = LRUCache(maxsize=20*60*2)  # Least recently used cache for images
 
-    @cached(image_cache, key=lambda self, images_path: hashkey(self.time)) # The cache should only be based on the timestamp
+    @cached(image_cache, key=lambda self, *args: hashkey(self.time)) # The cache should only be based on the timestamp
     def get_image(self, images_path="~/data/CCW/Images"):
         images_path = os.path.expanduser(images_path)
         return cv2.imread(os.path.join(images_path, "%i.jpg" % self.time))
