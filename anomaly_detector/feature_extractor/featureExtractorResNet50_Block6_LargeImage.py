@@ -1,43 +1,21 @@
 import tensorflow as tf
-from tensorflow.keras.applications.resnet_v2 import preprocess_input
 
-from featureExtractorBase import FeatureExtractorBase
+from featureExtractorResNet50V2 import FeatureExtractorResNet50V2
 
-class FeatureExtractorResNet50V2_Block6_LargeImage(FeatureExtractorBase):
+class FeatureExtractorResNet50V2_Block6_LargeImage(FeatureExtractorResNet50V2):
     """Feature extractor based on ResNet50V2 (trained on ImageNet).
     Output layer: conv4_block6_out
     Generates 15x15x1024 feature vectors per image
     """
+    # More info on image size: https://github.com/tensorflow/models/blob/master/research/slim/nets/resnet_v2.py#L128
+    # TODO: Maybe increase image size to also increase spatial output resolution
+    IMG_SIZE   = 449
+    BATCH_SIZE = 8
 
     def __init__(self):
-        FeatureExtractorBase.__init__(self)
-
-        # More info on image size: https://github.com/tensorflow/models/blob/master/research/slim/nets/resnet_v2.py#L128
-        # TODO: Maybe increase image size to also increase spatial output resolution
-        self.IMG_SIZE = 449 # All images will be resized to 224x224
-
-        # Create the base model from the pre-trained model ResNet50V2
-        model_full = tf.keras.applications.ResNet50V2(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
-                                                      include_top=False,
-                                                      weights="imagenet")
-        model_full.trainable = False
-
+        FeatureExtractorResNet50V2.__init__(self)
         self.model = tf.keras.Model(model_full.inputs, model_full.get_layer("conv4_block6_out").output)   
         self.model.trainable = False
-    
-    def format_image(self, image):
-        """Resize the images to a fixed input size, and
-        rescale the input channels to a range of [-1, 1].
-        (According to https://www.tensorflow.org/tutorials/images/transfer_learning)
-        """
-        image = tf.cast(image, tf.float32)
-        #       \/ does the same #  image = (image / 127.5) - 1
-        image = preprocess_input(image) # https://github.com/keras-team/keras-applications/blob/master/keras_applications/imagenet_utils.py#L152
-        image = tf.image.resize(image, (self.IMG_SIZE, self.IMG_SIZE))
-        return image
-
-    def extract_batch(self, batch):
-        return self.model(batch)
 
 # Only for tests
 if __name__ == "__main__":

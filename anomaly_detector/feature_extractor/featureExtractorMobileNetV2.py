@@ -7,12 +7,10 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
     """Feature extractor based on MobileNetV2 (trained on ImageNet).
     Generates 5x5x1280 feature vectors per image
     """
+    IMG_SIZE   = 224
+    BATCH_SIZE = 64
 
     def __init__(self):
-        FeatureExtractorBase.__init__(self)
-
-        self.IMG_SIZE = 224 # All images will be resized to 224x224
-
         # Create the base model from the pre-trained model MobileNet V2
         self.model = tf.keras.applications.MobileNetV2(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
                                                        include_top=False,

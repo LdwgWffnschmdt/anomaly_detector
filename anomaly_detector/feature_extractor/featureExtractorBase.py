@@ -15,13 +15,12 @@ import consts
 import common.utils as utils
 
 class FeatureExtractorBase(object):
+    NAME       = property(lambda self: self.__class__.__name__.replace("FeatureExtractor", ""))
     
-    def __init__(self):
-        self.NAME       = self.__class__.__name__.replace("FeatureExtractor", "")
-        # OVERRIDE THESE WITH THE RESPECTIVE IMPLEMENTATION
-        self.IMG_SIZE   = 224
-        self.BATCH_SIZE = consts.DEFAULT_BATCH_SIZE # Change this per network so it best utilizes resources
-    
+    # OVERRIDE THESE WITH THE RESPECTIVE IMPLEMENTATION
+    IMG_SIZE   = 224
+    BATCH_SIZE = consts.DEFAULT_BATCH_SIZE # Change this per network so it best utilizes resources
+
     def extract_batch(self, batch): # Should be implemented by child class
         """Extract the features of batch of images"""
         pass  

@@ -7,13 +7,11 @@ class FeatureExtractorI3D(FeatureExtractorBase):
     """Feature extractor based on I3D (trained on Kinetics-600).
     Generates 1x1x600 feature vectors per temporal image batch
     """
+    IMG_SIZE            = 224
+    BATCH_SIZE          = 0
+    TEMPORAL_BATCH_SIZE = 16
 
     def __init__(self):
-        FeatureExtractorBase.__init__(self)
-
-        self.IMG_SIZE = 224 # All images will be resized to 224x224
-        self.BATCH_SIZE = 0
-        self.TEMPORAL_BATCH_SIZE = 16
 
         # Create the base model from the pre-trained model
         inputs = tf.keras.Input(shape=(self.TEMPORAL_BATCH_SIZE, self.IMG_SIZE, self.IMG_SIZE, 3))

@@ -1,22 +1,14 @@
-from featureExtractorBase import FeatureExtractorBase
+from featureExtractorEfficientNetBase import FeatureExtractorEfficientNetBase
 
-class FeatureExtractorEfficientNetB6_Block10(FeatureExtractorBase):
+class FeatureExtractorEfficientNetB6_Block10(FeatureExtractorEfficientNetBase):
     """Feature extractor based on EfficientNetB6 (trained on ImageNet).
     Output layer: block_10
     Generates 66x66x72 feature vectors per image
     """
-
-    def __init__(self):
-        FeatureExtractorBase.__init__(self)
-
-        self.IMG_SIZE = 528 # All images will be resized to 528x528
-
-        # Create the base model from the pre-trained model
-        self.model = self.load_model("https://tfhub.dev/google/efficientnet/b6/feature-vector/1",
-                                     output_key="block_10")
-    
-    def extract_batch(self, batch):
-        return self.model(batch)
+    __handle__     = "https://tfhub.dev/google/efficientnet/b6/feature-vector/1"
+    __output_key__ ="block_10"
+    IMG_SIZE   = 528
+    BATCH_SIZE = 8
 
 # Only for tests
 if __name__ == "__main__":

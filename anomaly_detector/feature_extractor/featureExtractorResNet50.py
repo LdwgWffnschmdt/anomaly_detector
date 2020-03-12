@@ -7,14 +7,12 @@ class FeatureExtractorResNet50V2(FeatureExtractorBase):
     """Feature extractor based on ResNet50V2 (trained on ImageNet).
     Generates 7x7x2048 feature vectors per image
     """
+    # More info on image size: https://github.com/tensorflow/models/blob/master/research/slim/nets/resnet_v2.py#L128
+    # TODO: Maybe increase image size to also increase spatial output resolution
+    IMG_SIZE   = 224
+    BATCH_SIZE = 32
 
     def __init__(self):
-        FeatureExtractorBase.__init__(self)
-
-        # More info on image size: https://github.com/tensorflow/models/blob/master/research/slim/nets/resnet_v2.py#L128
-        # TODO: Maybe increase image size to also increase spatial output resolution
-        self.IMG_SIZE = 224 # All images will be resized to 224x224
-
         # Create the base model from the pre-trained model ResNet50V2
         self.model = tf.keras.applications.ResNet50V2(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
                                                       include_top=False,

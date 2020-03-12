@@ -11,15 +11,12 @@ class FeatureExtractorC3D(FeatureExtractorBase):
     Output layer: conv5b + MaxPooling3D to reduce frames
     Generates 7x7x512 feature vectors per temporal image batch
     """
-    __layer__ = "conv5b"
+    __layer__           = "conv5b"
+    IMG_SIZE            = 112
+    BATCH_SIZE          = 32
+    TEMPORAL_BATCH_SIZE = 16   # Fixed for C3D
 
     def __init__(self):
-        FeatureExtractorBase.__init__(self)
-
-        self.IMG_SIZE = 112           # All images will be resized to 112x112
-        self.BATCH_SIZE = 64
-        self.TEMPORAL_BATCH_SIZE = 16 # Fixed for C3D
-
         # Create the base model from the pre-trained C3D
         model_full = C3D(weights='sports1M')
         model_full.trainable = False

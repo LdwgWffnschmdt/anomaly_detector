@@ -6,6 +6,7 @@ class FeatureExtractorC3D_Block4(FeatureExtractorC3D):
     Generates 14x14x512 feature vectors per temporal image batch
     """
     __layer__ = "conv4b"
+    BATCH_SIZE = 32
 
 # Only for tests
 if __name__ == "__main__":

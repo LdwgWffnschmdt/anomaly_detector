@@ -7,19 +7,18 @@ class FeatureExtractorVGG16(FeatureExtractorBase):
     """Feature extractor based on VGG16 without the last max pooling layer (trained on ImageNet).
     Generates 14x14x512 feature vectors per image
     """
+    __layer__  = "block5_conv3"
+    IMG_SIZE   = 224
+    BATCH_SIZE = 32
 
     def __init__(self):
-        FeatureExtractorBase.__init__(self)
-
-        self.IMG_SIZE = 224 # All images will be resized to 224x224
-
         # Create the base model from the pre-trained model MobileNet V2
         model_full = tf.keras.applications.VGG16(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
                                                  include_top=False,
                                                  weights="imagenet")
         model_full.trainable = False
 
-        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer("block5_conv3").output)   
+        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.__layer__).output)   
         self.model.trainable = False
     
     def format_image(self, image):
