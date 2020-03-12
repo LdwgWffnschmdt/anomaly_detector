@@ -10,7 +10,7 @@ parser.add_argument("--list", dest="list", action="store_true",
                     help="List all extractors and exit")
 
 parser.add_argument("files", metavar="F", type=str, nargs='*',
-                    help="The feature file(s). Supports \"path/to/*.tfrecord\"")
+                    help="The feature file(s). Supports \"path/to/*.tfrecord\" or \"path/to/*.jpg\"")
 
 parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', type=str,
                     help="Extractor name. Leave empty for all extractors (default: \"\")")

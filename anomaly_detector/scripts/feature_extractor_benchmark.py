@@ -78,34 +78,34 @@ def feature_extractor_benchmark():
     # Get an instance of each class
     module = __import__("feature_extractor")
     
-    try:
-        for extractor_name in tqdm(args.extractor, desc="Benchmarking extractors"):
-            worksheet = workbook.add_worksheet(extractor_name.replace("FeatureExtractor", ""))
-            worksheet.set_column(0, 20, 20)
+    for extractor_name in tqdm(args.extractor, desc="Benchmarking extractors"):
+        worksheet = workbook.add_worksheet(extractor_name.replace("FeatureExtractor", ""))
+        worksheet.set_column(0, 20, 20)
 
-            col = 0
+        col = 0
 
-            def log(s, times):
-                """Log duration t with info string s"""
-                global col
-                
-                logging.info("%-40s (%s): %.5fs  -  %.5fs" % (extractor_name, s, min(times), max(times)))
-                
-                worksheet.write(0, col, s, subheading_format)
-                for i, t in enumerate(times):
-                    worksheet.write_number(i + 1, col, t)
-                col += 1
+        def log(s, times):
+            """Log duration t with info string s"""
+            global col
+            
+            logging.info("%-40s (%s): %.5fs  -  %.5fs" % (extractor_name, s, min(times), max(times)))
+            
+            worksheet.write(0, col, s, subheading_format)
+            for i, t in enumerate(times):
+                worksheet.write_number(i + 1, col, t)
+            col += 1
 
-            def logerr(s, err):
-                """Log duration t with info string s"""
-                global col
-                
-                logging.error("%-40s (%s): %s" % (extractor_name, s, err))
-                
-                worksheet.write(0, col, s, subheading_format)
-                worksheet.write_string(1, col, err)
-                col += 1
+        def logerr(s, err):
+            """Log duration t with info string s"""
+            global col
+            
+            logging.error("%-40s (%s): %s" % (extractor_name, s, err))
+            
+            worksheet.write(0, col, s, subheading_format)
+            worksheet.write_string(1, col, err)
+            col += 1
 
+        try:
             _class = getattr(module, extractor_name)
 
             # Test extractor initialization
@@ -130,8 +130,9 @@ def feature_extractor_benchmark():
                 log("Extract single", timeit.repeat(lambda: extractor.extract(single[0]), number=1, repeat=args.extract_single_repeat))
             except:
                 logerr("Extract single", traceback.format_exc())
-    finally:
-        workbook.close()
+        except:
+            logerr("Error?", traceback.format_exc())
+    workbook.close()
 
 if __name__ == "__main__":
     feature_extractor_benchmark()

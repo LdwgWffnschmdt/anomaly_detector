@@ -20,7 +20,7 @@ class FeatureExtractorBase(object):
         self.NAME       = self.__class__.__name__.replace("FeatureExtractor", "")
         # OVERRIDE THESE WITH THE RESPECTIVE IMPLEMENTATION
         self.IMG_SIZE   = 224
-        self.BATCH_SIZE = 128 # Change this per network so it best utilizes resources
+        self.BATCH_SIZE = consts.DEFAULT_BATCH_SIZE # Change this per network so it best utilizes resources
     
     def extract_batch(self, batch): # Should be implemented by child class
         """Extract the features of batch of images"""
