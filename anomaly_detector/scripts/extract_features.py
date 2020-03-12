@@ -20,6 +20,7 @@ args = parser.parse_args()
 import os
 import time
 import logging
+import traceback
 
 logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
 
@@ -44,16 +45,14 @@ def extract_features():
 
     module = __import__("feature_extractor")
     
-    try:
-        for extractor_name in args.extractor:
-            logging.info("Instantiating %s" % extractor_name)
-
+    for extractor_name in args.extractor:
+        logging.info("Instantiating %s" % extractor_name)
+        try:
             # Get an instance
             extractor = getattr(module, extractor_name)()
-
             extractor.extract_files(args.files)
-    finally:
-        pass
+        except:
+            logging.error("%s: %s" % (extractor_name, traceback.format_exc()))
 
 if __name__ == "__main__":
     extract_features()
