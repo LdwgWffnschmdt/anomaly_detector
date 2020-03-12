@@ -87,16 +87,23 @@ class FeatureExtractorBase(object):
         # Load dataset
         if files[0].endswith(".tfrecord"):
             dataset = utils.load_tfrecords(files, preprocess_function=self.format_image)
+
+            # Call internal transformations (eg. temporal windowing for 3D networks)
+            dataset = self.__transform_dataset__(dataset)
+
+            # Get number of examples in dataset
+            total = sum(1 for record in tqdm(dataset, desc="Loading dataset"))
+
         elif files[0].endswith(".jpg"):
             dataset = utils.load_jpgs(files, preprocess_function=self.format_image)
+            
+            # Call internal transformations (eg. temporal windowing for 3D networks)
+            dataset = self.__transform_dataset__(dataset)
+            
+            total = len(files)
         else:
             raise ValueError("Supported file types are *.tfrecord and *.jpg")
         
-        # Call internal transformations (eg. temporal windowing for 3D networks)
-        dataset = self.__transform_dataset__(dataset)
-
-        # Get number of examples in dataset
-        total = sum(1 for record in tqdm(dataset, desc="Loading dataset"))
 
         # Get batches (seems to be better performance wise than extracting individual images)
         if batch_size > 0:

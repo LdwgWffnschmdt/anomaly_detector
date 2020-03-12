@@ -8,9 +8,10 @@ from Models.C3D.sports1M_utils import preprocess_input
 
 class FeatureExtractorC3D(FeatureExtractorBase):
     """Feature extractor based on C3D (trained on sports1M).
-    Output layer: pool5
-    Generates 4x4x512 feature vectors per temporal image batch
+    Output layer: conv5b + MaxPooling3D to reduce frames
+    Generates 7x7x512 feature vectors per temporal image batch
     """
+    __layer__ = "conv5b"
 
     def __init__(self):
         FeatureExtractorBase.__init__(self)
@@ -23,7 +24,11 @@ class FeatureExtractorC3D(FeatureExtractorBase):
         model_full = C3D(weights='sports1M')
         model_full.trainable = False
 
-        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer("pool5").output)   
+        output = model_full.get_layer(self.__layer__).output
+        pool_size = (output.shape[1], 1, 1)
+        output = tf.keras.layers.MaxPooling3D(pool_size=pool_size, strides=pool_size, padding='valid', name='reduce_frames')(output)
+
+        self.model = tf.keras.Model(model_full.inputs, output)
         self.model.trainable = False
     
     def __transform_dataset__(self, dataset):
