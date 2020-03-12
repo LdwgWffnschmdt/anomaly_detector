@@ -250,9 +250,18 @@ class FeatureArray(np.ndarray):
             # Remove the old locations dataset
             if "locations" in hf.keys():
                 del hf["locations"]
+            
+            start = time.time()
             self.calculate_locations()
+            end = time.time()
+            
             locations = np.reshape([f.location for f in self.flatten()], self.shape + (2,))
             hf.create_dataset("locations", data=locations, dtype=np.float64)
+            
+            hf["locations"].attrs["Start"] = start
+            hf["locations"].attrs["End"] = end
+            hf["locations"].attrs["Duration"] = end - start
+            hf["locations"].attrs["Duration (formatted)"] = utils.format_duration(end - start)
         
     def calculate_locations(self):
         """Calculate the real world coordinates of every feature"""
