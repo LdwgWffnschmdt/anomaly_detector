@@ -30,7 +30,7 @@ class FeatureArray(np.ndarray):
         logging.info("Reading metadata and features from: %s" % filename)
 
         # Check file extension
-        fn, file_extension = os.path.splitext(filename)
+        _, file_extension = os.path.splitext(filename)
         if file_extension != ".h5":
             raise ValueError("Filename has to be *.h5")
         
@@ -51,7 +51,7 @@ class FeatureArray(np.ndarray):
             if locations is not None:
                 locations = np.array(locations)
             
-            total, h, w, depth = features_raw.shape
+            total, h, w, _ = features_raw.shape
 
             features = np.empty(shape=(total, h, w), dtype=Feature)
             
@@ -254,7 +254,7 @@ class FeatureArray(np.ndarray):
             start = time.time()
             self.calculate_locations()
             end = time.time()
-            
+
             locations = np.reshape([f.location for f in self.flatten()], self.shape + (2,))
             hf.create_dataset("locations", data=locations, dtype=np.float64)
             
@@ -280,7 +280,7 @@ class FeatureArray(np.ndarray):
         ilu = ImageLocationUtility()
 
         logging.info("Calculating locations of every patch")
-        total, h, w = self.shape
+        _, h, w = self.shape
         
         image_locations = ilu.span_grid(w, h, offset_x=0.5, offset_y=0.5)
         relative_locations = ilu.image_to_relative(image_locations)
