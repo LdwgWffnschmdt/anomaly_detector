@@ -179,7 +179,7 @@ def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images",
         show_map = False
 
     def __draw__(x=None):
-        image = features[visualize.index, 0, 0].get_image(images_path)
+        image = cv2.cvtColor(features[visualize.index, 0, 0].get_image(images_path), cv2.COLOR_BGR2RGB)
         feature_2d = features[visualize.index,...]
 
         overlay = image.copy()
@@ -274,7 +274,7 @@ def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images",
         # Following line overlays transparent overlay over the image
         image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
         
-        # image_write_label(image_new, feature_2d[0,0].label)
+        image_write_label(image_new, feature_2d[0,0].label)
         cv2.imshow("image", image_new)
     
     def __index_update__(new_index=None):
