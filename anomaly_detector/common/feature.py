@@ -5,7 +5,7 @@ from cachetools.keys import hashkey
 import numpy as np
 import cv2
 
-import anomaly_detector.consts as consts
+import consts
 
 class Feature(np.ndarray):
     """A Feature is the output of a Feature Extractor (values) with metadata as attributes"""

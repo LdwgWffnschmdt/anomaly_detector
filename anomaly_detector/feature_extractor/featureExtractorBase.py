@@ -11,7 +11,7 @@ import numpy as np
 import h5py
 from tqdm import tqdm
 
-import anomaly_detector.consts as consts
+import consts
 import common.utils as utils
 
 class FeatureExtractorBase(object):

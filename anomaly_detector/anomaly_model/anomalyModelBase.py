@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-import anomaly_detector.consts as consts
+import consts
 from common import FeatureArray
 import common.utils as utils
 

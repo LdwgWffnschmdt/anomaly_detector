@@ -13,7 +13,7 @@ import h5py
 import cv2
 import matplotlib.pyplot as plt
 
-import anomaly_detector.consts as consts
+import consts
 from imageLocationUtility import ImageLocationUtility
 
 # Configure logging
