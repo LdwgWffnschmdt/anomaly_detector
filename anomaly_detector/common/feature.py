@@ -5,6 +5,8 @@ from cachetools.keys import hashkey
 import numpy as np
 import cv2
 
+import anomaly_detector.consts as consts
+
 class Feature(np.ndarray):
     """A Feature is the output of a Feature Extractor (values) with metadata as attributes"""
 
@@ -54,8 +56,7 @@ class Feature(np.ndarray):
     image_cache = LRUCache(maxsize=20*60*2)  # Least recently used cache for images
 
     @cached(image_cache, key=lambda self, *args: hashkey(self.time)) # The cache should only be based on the timestamp
-    def get_image(self, images_path="~/data/CCW/Images"):
-        images_path = os.path.expanduser(images_path)
+    def get_image(self, images_path=consts.IMAGES_PATH):
         return cv2.imread(os.path.join(images_path, "%i.jpg" % self.time))
 
     def get_bin(self, cell_size, extent=None):

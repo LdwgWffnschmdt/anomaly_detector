@@ -141,7 +141,7 @@ def load_jpgs(filenames, batch_size=64, preprocess_function=None):
 # Output helper #
 #################
 
-def visualize(features, threshold=100, images_path=None, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False, show_map=True):
+def visualize(features, threshold=100, images_path=consts.IMAGES_PATH, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False, show_map=True):
     """Visualize features on the source image
 
     Args:
@@ -151,9 +151,6 @@ def visualize(features, threshold=100, images_path=None, feature_to_color_func=N
         pause_func (function): Function converting a feature to a boolean that pauses the video
         show_grid (bool): Overlay real world coordinate grid
     """
-    
-    if images_path is None:
-        images_path = consts.IMAGES_PATH
     
     visualize.index = 0
     visualize.pause = False

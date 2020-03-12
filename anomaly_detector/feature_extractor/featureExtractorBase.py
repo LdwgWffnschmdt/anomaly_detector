@@ -43,7 +43,7 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, files=None, output_file="", batch_size=128, compression="lzf", compression_opts=None):
+    def extract_files(self, files=consts.EXTRACT_FILES, output_file="", batch_size=128, compression="lzf", compression_opts=None):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             files (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
@@ -56,9 +56,6 @@ class FeatureExtractorBase(object):
             success (bool)
         """
 
-        if files is None:
-            files = consts.EXTRACT_FILES
-        
         files_inp = str(files)
 
         if isinstance(files, basestring):

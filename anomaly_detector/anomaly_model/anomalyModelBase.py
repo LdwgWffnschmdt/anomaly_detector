@@ -55,17 +55,14 @@ class AnomalyModelBase(object):
     # Common functionality #
     ########################
     
-    def load_or_generate(self, features=None,
+    def load_or_generate(self, features=consts.FEATURES_FILE,
                                load_features=False, load_mahalanobis_distances=False):
         """Load a model from file or generate it based on the features
         
         Args:
             features (str, FeatureArray) : HDF5 file containing metadata and features (see feature_extractor for details)
         """
-        # Get default Features file if none is given
-        if features is None:
-            features = consts.FEATURES_FILE
-
+        
         # Load features if necessary
         if isinstance(features, basestring):
             if features == "" or not os.path.exists(features) or not os.path.isfile(features):
@@ -226,36 +223,29 @@ class AnomalyModelBase(object):
 
         plt.show()
 
-    def visualize(self, images_path=None, threshold=None, feature_to_color_func=None, feature_to_text_func=None, pause_func=None):
+    def visualize(self, **kwargs):
         """ Visualize the result of a anomaly model """
-        if threshold is None:
+        if "threshold" not in kwargs:
             if not hasattr(self, "mahalanobis_max") or self.mahalanobis_max is None:
                 self.calculate_mahalobis_distances()
-            threshold = self.mahalanobis_max * 0.9
+            kwargs["threshold"] = self.mahalanobis_max * 0.9
         
-        def _default_feature_to_color(feature, t, show_thresh):
-            b = 0#100 if feature in self.normal_distribution else 0
-            g = 0
-            if show_thresh:
-                r = 100 if self._mahalanobis_distance(feature) > t else 0
-            elif t == 0:
-                r = 0
-            else:
-                r = min(255, int(self._mahalanobis_distance(feature) * (255 / t)))
-            return (b, g, r)
+        if "feature_to_color_func" not in kwargs:
+            def _default_feature_to_color(feature, t, show_thresh):
+                b = 0#100 if feature in self.normal_distribution else 0
+                g = 0
+                if show_thresh:
+                    r = 100 if self._mahalanobis_distance(feature) > t else 0
+                elif t == 0:
+                    r = 0
+                else:
+                    r = min(255, int(self._mahalanobis_distance(feature) * (255 / t)))
+                return (b, g, r)
+            kwargs["feature_to_color_func"] = _default_feature_to_color
 
-        def _default_feature_to_text(feature, t):
-            return round(self._mahalanobis_distance(feature), 2)
+        if "feature_to_text_func" not in kwargs:
+            def _default_feature_to_text(feature, t):
+                return round(self._mahalanobis_distance(feature), 2)
+            kwargs["feature_to_text_func"] = _default_feature_to_color
 
-        if feature_to_color_func is None:
-            feature_to_color_func = _default_feature_to_color
-
-        if feature_to_text_func is None:
-            feature_to_text_func = _default_feature_to_text
-
-        utils.visualize(self.features,
-                        images_path=images_path,
-                        threshold=threshold,
-                        feature_to_color_func=feature_to_color_func,
-                        feature_to_text_func=feature_to_text_func,
-                        pause_func=pause_func)
+        utils.visualize(self.features, **kwargs)
