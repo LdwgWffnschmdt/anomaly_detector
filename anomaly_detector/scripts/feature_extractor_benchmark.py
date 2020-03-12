@@ -27,6 +27,7 @@ import os
 import logging
 from datetime import datetime
 import inspect
+import traceback
 import timeit
 
 import xlsxwriter
@@ -83,17 +84,27 @@ def feature_extractor_benchmark():
             worksheet.set_column(0, 20, 20)
 
             col = 0
-            def add_to_excel(n, times):
+
+            def log(s, times):
+                """Log duration t with info string s"""
                 global col
-                worksheet.write(0, col, n, subheading_format)
+                
+                logging.info("%-40s (%s): %.5fs  -  %.5fs" % (extractor_name, s, min(times), max(times)))
+                
+                worksheet.write(0, col, s, subheading_format)
                 for i, t in enumerate(times):
                     worksheet.write_number(i + 1, col, t)
                 col += 1
 
-            def log(s, t):
+            def logerr(s, err):
                 """Log duration t with info string s"""
-                # logging.info("%-40s (%s): %s" % (extractor_name, s, str(t)))
-                add_to_excel(s, t)
+                global col
+                
+                logging.error("%-40s (%s): %s" % (extractor_name, s, err))
+                
+                worksheet.write(0, col, s, subheading_format)
+                worksheet.write_string(1, col, err)
+                col += 1
 
             _class = getattr(module, extractor_name)
 
@@ -107,12 +118,18 @@ def feature_extractor_benchmark():
 
             # Test batch extraction
             if args.batch_size > 0:
-                batch = list(dataset.batch(args.batch_size).take(1).as_numpy_iterator())[0]
-                log("Extract batch (%i)" % args.batch_size, timeit.repeat(lambda: extractor.extract_batch(batch[0]), number=1, repeat=args.extract_batch_repeat))
+                try:
+                    batch = list(dataset.batch(args.batch_size).take(1).as_numpy_iterator())[0]
+                    log("Extract batch (%i)" % args.batch_size, timeit.repeat(lambda: extractor.extract_batch(batch[0]), number=1, repeat=args.extract_batch_repeat))
+                except:
+                    logerr("Extract batch (%i)" % args.batch_size, traceback.format_exc())
 
             # Test single image extraction
-            single = list(dataset.take(1).as_numpy_iterator())[0] # Get a single entry
-            log("Extract single", timeit.repeat(lambda: extractor.extract(single[0]), number=1, repeat=args.extract_single_repeat))
+            try:
+                single = list(dataset.take(1).as_numpy_iterator())[0] # Get a single entry
+                log("Extract single", timeit.repeat(lambda: extractor.extract(single[0]), number=1, repeat=args.extract_single_repeat))
+            except:
+                logerr("Extract single", traceback.format_exc())
     finally:
         workbook.close()
 

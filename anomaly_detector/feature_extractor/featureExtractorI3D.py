@@ -12,6 +12,7 @@ class FeatureExtractorI3D(FeatureExtractorBase):
         FeatureExtractorBase.__init__(self)
 
         self.IMG_SIZE = 224 # All images will be resized to 224x224
+        self.BATCH_SIZE = 0
         self.TEMPORAL_BATCH_SIZE = 16
 
         # Create the base model from the pre-trained model
@@ -33,4 +34,4 @@ class FeatureExtractorI3D(FeatureExtractorBase):
 if __name__ == "__main__":
     extractor = FeatureExtractorI3D()
     extractor.plot_model(extractor.model)
-    extractor.extract_files(batch_size=0)
+    extractor.extract_files()

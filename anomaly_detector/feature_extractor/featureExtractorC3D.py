@@ -16,6 +16,7 @@ class FeatureExtractorC3D(FeatureExtractorBase):
         FeatureExtractorBase.__init__(self)
 
         self.IMG_SIZE = 112           # All images will be resized to 112x112
+        self.BATCH_SIZE = 64
         self.TEMPORAL_BATCH_SIZE = 16 # Fixed for C3D
 
         # Create the base model from the pre-trained C3D
@@ -39,4 +40,4 @@ class FeatureExtractorC3D(FeatureExtractorBase):
 if __name__ == "__main__":
     extractor = FeatureExtractorC3D()
     extractor.plot_model(extractor.model)
-    extractor.extract_files(batch_size=64)
+    extractor.extract_files()

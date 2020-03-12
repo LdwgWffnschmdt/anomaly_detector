@@ -84,7 +84,7 @@ def load_tfrecords(filenames, batch_size=64, preprocess_function=None):
                       .cache() \
                       .prefetch(tf.data.experimental.AUTOTUNE)
 
-def load_jpgs(filenames, batch_size=64, preprocess_function=None):
+def load_jpgs(filenames, preprocess_function=None):
     """Loads a set of TFRecord files
     Args:
         filenames (str / str[]): JPEG file(s) extracted

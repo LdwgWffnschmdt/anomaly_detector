@@ -17,8 +17,10 @@ import common.utils as utils
 class FeatureExtractorBase(object):
     
     def __init__(self):
-        self.NAME = self.__class__.__name__.replace("FeatureExtractor", "")
-        self.IMG_SIZE = 260
+        self.NAME       = self.__class__.__name__.replace("FeatureExtractor", "")
+        # OVERRIDE THESE WITH THE RESPECTIVE IMPLEMENTATION
+        self.IMG_SIZE   = 224
+        self.BATCH_SIZE = 128 # Change this per network so it best utilizes resources
     
     def extract_batch(self, batch): # Should be implemented by child class
         """Extract the features of batch of images"""
@@ -31,7 +33,8 @@ class FeatureExtractorBase(object):
         return image
 
     def __transform_dataset__(self, dataset):
-        return dataset
+        """Do any transformations necessary (eg. temporal windowing for 3D networks)"""
+        return dataset # Nothing by default
 
     ########################
     # Common functionality #
@@ -43,12 +46,12 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, files=consts.EXTRACT_FILES, output_file="", batch_size=128, compression="lzf", compression_opts=None):
+    def extract_files(self, files=consts.EXTRACT_FILES, output_file="", batch_size=None, compression="lzf", compression_opts=None):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             files (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
             output_file (str): Filename and path of the output file
-            batch_size (str): Size of image batches fed to the extractor (Defaults: 32)
+            batch_size (str): Size of image batches fed to the extractor. Set to 0 for no batching. (Default: self.BATCH_SIZE)
             compression (str): Output file compression, set to None for no compression (Default: "lzf"), gzip can be extremely slow combined with HDF5
             compression_opts (str): Compression level, set to None for no compression (Default: None)
 
@@ -78,6 +81,10 @@ class FeatureExtractorBase(object):
             output_file = os.path.join(output_dir, self.NAME + ".h5")
             logging.info("Output file set to %s" % output_file)
         
+        if batch_size is None:
+            batch_size = self.BATCH_SIZE
+
+        # Load dataset
         if files[0].endswith(".tfrecord"):
             dataset = utils.load_tfrecords(files, preprocess_function=self.format_image)
         elif files[0].endswith(".jpg"):
@@ -85,7 +92,7 @@ class FeatureExtractorBase(object):
         else:
             raise ValueError("Supported file types are *.tfrecord and *.jpg")
         
-        # Call internal transformations
+        # Call internal transformations (eg. temporal windowing for 3D networks)
         dataset = self.__transform_dataset__(dataset)
 
         # Get number of examples in dataset
@@ -98,57 +105,59 @@ class FeatureExtractorBase(object):
         # IO stuff
         hf = h5py.File(output_file, "w")
     
-        # Add metadata to the output file
-        hf.attrs["Extractor"]                 = self.NAME
-        hf.attrs["Files"]                     = files_inp
-        hf.attrs["Batch size"]                = batch_size
-        hf.attrs["Compression"]               = compression
-        if compression_opts is not None:
-            hf.attrs["Compression options"]   = compression_opts
-        if hasattr(self, "TEMPORAL_BATCH_SIZE"):
-            hf.attrs["Temporal batch size"]   = self.TEMPORAL_BATCH_SIZE
-
-        computer_info = utils.getComputerInfo()
-        for key, value in computer_info.items():
-            hf.attrs[key] = value
-        
-        start = time.time()
-        counter = 0
-
-        hf.attrs["Start"] = start
-        
-        dt_str = h5py.string_dtype(encoding='ascii')
-
-        feature_dataset     = None
-        locations_dataset   = np.empty((total, 6), dtype=np.float32)
-        time_dataset        = np.empty((total,),   dtype=np.uint64)
-        label_dataset       = np.empty((total,),   dtype=np.int8)
-        rosbag_dataset      = np.empty((total,),   dtype=object)
-        tfrecord_dataset    = np.empty((total,),   dtype=object)
-        
         try:
+            # Add metadata to the output file
+            hf.attrs["Extractor"]                 = self.NAME
+            hf.attrs["Files"]                     = files_inp
+            hf.attrs["Batch size"]                = batch_size
+            hf.attrs["Compression"]               = compression
+            if compression_opts is not None:
+                hf.attrs["Compression options"]   = compression_opts
+            if hasattr(self, "TEMPORAL_BATCH_SIZE"):
+                hf.attrs["Temporal batch size"]   = self.TEMPORAL_BATCH_SIZE
+
+            computer_info = utils.getComputerInfo()
+            for key, value in computer_info.items():
+                hf.attrs[key] = value
+            
+            start = time.time()
+            counter = 0
+
+            hf.attrs["Start"] = start
+            
+            # Create arrays to store output
+            feature_dataset     = None # We don't know the feature shape yet
+            locations_dataset   = np.empty((total, 6), dtype=np.float32)
+            time_dataset        = np.empty((total,),   dtype=np.uint64)
+            label_dataset       = np.empty((total,),   dtype=np.int8)
+            rosbag_dataset      = np.empty((total,),   dtype=np.str)
+            tfrecord_dataset    = np.empty((total,),   dtype=np.str)
+            
+            # Loop over the dataset
             with tqdm(desc="Extracting features (batch size: %i)" % batch_size, total=total) as pbar:
                 for batch in dataset:
                     # Extract features
-                    feature_batch = self.extract_batch(batch[0])
+                    feature_batch = self.extract_batch(batch[0]) # This is where the magic happens
 
                     current_batch_size = len(feature_batch)
 
-                    # Add features to list
                     if feature_dataset is None:
+                        # Create the array to store the features now
                         feature_dataset = np.empty((total,) + feature_batch[0].shape)
 
-                    feature_dataset[counter : counter + current_batch_size]  = feature_batch.numpy()
-
+                    # Save the features and their metadata to the arrays
+                    feature_dataset[counter : counter + current_batch_size]   = feature_batch.numpy()
                     locations_dataset[counter : counter + current_batch_size] = batch[1].numpy()
                     time_dataset[counter : counter + current_batch_size]      = batch[2].numpy()
                     label_dataset[counter : counter + current_batch_size]     = batch[3].numpy()
                     rosbag_dataset[counter : counter + current_batch_size]    = batch[4].numpy()
                     tfrecord_dataset[counter : counter + current_batch_size]  = batch[5].numpy()
 
+                    # Count and update progress bar
                     counter += current_batch_size
                     pbar.update(n=current_batch_size)
 
+            # Save arrays to file
             hf.create_dataset("features"        , data=feature_dataset   , dtype=np.float32,  compression=compression, compression_opts=compression_opts)
             hf.create_dataset("camera_locations", data=locations_dataset , dtype=np.float32,  compression=compression, compression_opts=compression_opts)
             hf["camera_locations"].attrs["Axes"] = ["translation/x",
@@ -159,6 +168,7 @@ class FeatureExtractorBase(object):
                                                     "rotation/z"]
             hf.create_dataset("times"           , data=time_dataset      , dtype=np.uint64,   compression=compression, compression_opts=compression_opts)
             hf.create_dataset("labels"          , data=label_dataset     , dtype=np.int8,     compression=compression, compression_opts=compression_opts)
+            dt_str = h5py.string_dtype(encoding='ascii')
             hf.create_dataset("rosbags"         , data=rosbag_dataset    , dtype=dt_str,      compression=compression, compression_opts=compression_opts)
             hf.create_dataset("tfrecords"       , data=tfrecord_dataset  , dtype=dt_str,      compression=compression, compression_opts=compression_opts)
         except:

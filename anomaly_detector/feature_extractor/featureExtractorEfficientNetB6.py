@@ -8,7 +8,8 @@ class FeatureExtractorEfficientNetB6(FeatureExtractorBase):
     def __init__(self):
         FeatureExtractorBase.__init__(self)
 
-        self.IMG_SIZE = 528 # All images will be resized to 528x528
+        self.IMG_SIZE   = 528 # All images will be resized to 528x528
+        self.BATCH_SIZE = 16  # More does not fit memory
 
         # Create the base model from the pre-trained model
         self.model = self.load_model("https://tfhub.dev/google/efficientnet/b6/feature-vector/1")
@@ -20,4 +21,4 @@ class FeatureExtractorEfficientNetB6(FeatureExtractorBase):
 if __name__ == "__main__":
     extractor = FeatureExtractorEfficientNetB6()
     extractor.plot_model(extractor.model, 600)
-    extractor.extract_files(batch_size=16)
+    extractor.extract_files()
