@@ -19,11 +19,7 @@ class AnomalyModelBalancedDistributionPos(AnomalyModelBalancedDistribution):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelBalancedDistributionPos()
-    model.load_or_generate()
-
-    model.calculate_mahalobis_distances()
-
-    # def _pause(feature):
-    #     return feature in test.model.normal_distribution
-
-    # model.visualize(pause_func=_pause)
+    if model.load_or_generate(load_features=True):
+        # model.calculate_mahalobis_distances()
+        # model.show_mahalanobis_distribution()
+        model.visualize(threshold=200)

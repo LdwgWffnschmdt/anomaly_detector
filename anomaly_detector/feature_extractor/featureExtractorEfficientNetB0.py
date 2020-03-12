@@ -20,4 +20,4 @@ class FeatureExtractorEfficientNetB0(FeatureExtractorBase):
 if __name__ == "__main__":
     extractor = FeatureExtractorEfficientNetB0()
     extractor.plot_model(extractor.model)
-    # extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
+    extractor.extract_files()

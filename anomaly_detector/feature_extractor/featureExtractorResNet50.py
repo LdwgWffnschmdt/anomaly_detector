@@ -38,5 +38,5 @@ class FeatureExtractorResNet50V2(FeatureExtractorBase):
 # Only for tests
 if __name__ == "__main__":
     extractor = FeatureExtractorResNet50V2()
-    # extractor.plot_model(extractor.model)
-    extractor.extract_files("/home/ldwg/data/CCW/2020-02-06-17-11-37.tfrecord")
+    extractor.plot_model(extractor.model)
+    extractor.extract_files()

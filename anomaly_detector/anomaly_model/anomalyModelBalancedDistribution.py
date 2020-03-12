@@ -175,17 +175,16 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelBalancedDistribution()
-    model.load_or_generate()
+    if model.load_or_generate(load_features=True):
+        
+        def _feature_to_color(feature):
+            b = 100 if feature in model.balanced_distribution else 0
+            g = 0
+            r = model._mahalanobis_distance(feature) * (255 / 60)
+            #r = 100 if self.model._mahalanobis_distance(feature) > threshold else 0
+            return (b, g, r)
 
-    # test.calculate_mahalobis_distances()
-    def _feature_to_color(feature):
-        b = 100 if feature in model.balanced_distribution else 0
-        g = 0
-        r = model._mahalanobis_distance(feature) * (255 / 60)
-        #r = 100 if self.model._mahalanobis_distance(feature) > threshold else 0
-        return (b, g, r)
+        def _pause(feature):
+            return feature in test.model.balanced_distribution
 
-    def _pause(feature):
-        return feature in test.model.balanced_distribution
-
-    model.visualize(threshold=60, feature_to_color_func=_feature_to_color)
+        model.visualize(threshold=60, feature_to_color_func=_feature_to_color)

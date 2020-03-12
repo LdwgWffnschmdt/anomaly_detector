@@ -19,6 +19,7 @@ class AnomalyModelSVGPos(AnomalyModelSVG):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelSVGPos()
-    model.load_or_generate()
-
-    model.calculate_mahalobis_distances()
+    if model.load_or_generate(load_features=True):
+        # model.calculate_mahalobis_distances()
+        # model.show_mahalanobis_distribution()
+        model.visualize(threshold=200)

@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
+import anomaly_detector.consts as consts
 from common import FeatureArray
 import common.utils as utils
 
@@ -54,13 +55,16 @@ class AnomalyModelBase(object):
     # Common functionality #
     ########################
     
-    def load_or_generate(self, features="/home/ldwg/data/CCW/Features/C3D.h5",
+    def load_or_generate(self, features=None,
                                load_features=False, load_mahalanobis_distances=False):
         """Load a model from file or generate it based on the features
         
         Args:
             features (str, FeatureArray) : HDF5 file containing metadata and features (see feature_extractor for details)
         """
+        # Get default Features file if none is given
+        if features is None:
+            features = consts.FEATURES_FILE
 
         # Load features if necessary
         if isinstance(features, basestring):
@@ -222,7 +226,7 @@ class AnomalyModelBase(object):
 
         plt.show()
 
-    def visualize(self, threshold=None, feature_to_color_func=None, feature_to_text_func=None, pause_func=None):
+    def visualize(self, images_path=None, threshold=None, feature_to_color_func=None, feature_to_text_func=None, pause_func=None):
         """ Visualize the result of a anomaly model """
         if threshold is None:
             if not hasattr(self, "mahalanobis_max") or self.mahalanobis_max is None:
@@ -249,7 +253,9 @@ class AnomalyModelBase(object):
         if feature_to_text_func is None:
             feature_to_text_func = _default_feature_to_text
 
-        utils.visualize(self.features, threshold,
+        utils.visualize(self.features,
+                        images_path=images_path,
+                        threshold=threshold,
                         feature_to_color_func=feature_to_color_func,
                         feature_to_text_func=feature_to_text_func,
                         pause_func=pause_func)

@@ -89,4 +89,4 @@ if __name__ == "__main__":
     if model.load_or_generate(load_features=True):
         # model.calculate_mahalobis_distances()
         # model.show_mahalanobis_distribution()
-        model.visualize()
+        model.visualize(threshold=200)

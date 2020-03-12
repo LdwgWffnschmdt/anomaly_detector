@@ -33,4 +33,4 @@ class FeatureExtractorI3D(FeatureExtractorBase):
 if __name__ == "__main__":
     extractor = FeatureExtractorI3D()
     extractor.plot_model(extractor.model)
-    extractor.extract_files("/home/ldwg/data/CCW/2020-02-06-17-11-37.tfrecord", batch_size=0)
+    extractor.extract_files(batch_size=0)

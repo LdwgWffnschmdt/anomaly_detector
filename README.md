@@ -11,6 +11,15 @@ pip install -r requirements.txt
 pip install -e .    # Install the current directory as pip package but keep it editable (-e)
 ```
 
+## Constants
+Create a file `./anomaly_detector/consts.py` with the following constants for quick debug excecutions:
+```python
+IMAGES_PATH   = "/path/to/Images/"
+EXTRACT_FILES = "/path/to/Images/*.jpg"
+FEATURES_PATH = "/path/to/Features/"
+FEATURES_FILE = FEATURES_PATH + "C3D.h5"
+```
+
 # Data preparation
 
 ### `Bag file` ➡ `TFRecord file(s)` ➡ `Feature extractor` ➡ `Anomaly model`

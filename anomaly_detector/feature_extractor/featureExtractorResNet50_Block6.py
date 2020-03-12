@@ -42,5 +42,5 @@ class FeatureExtractorResNet50V2_Block6(FeatureExtractorBase):
 # Only for tests
 if __name__ == "__main__":
     extractor = FeatureExtractorResNet50V2_Block6()
-    # extractor.plot_model(extractor.model)
-    extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
+    extractor.plot_model(extractor.model)
+    extractor.extract_files()

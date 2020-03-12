@@ -21,5 +21,5 @@ class FeatureExtractorEfficientNetB0_Block10(FeatureExtractorBase):
 # Only for tests
 if __name__ == "__main__":
     extractor = FeatureExtractorEfficientNetB0_Block10()
-    # extractor.plot_model(extractor.model)
-    extractor.extract_files("/home/ldwg/data/CCW/2020-02-06-17-11-37.tfrecord")
+    extractor.plot_model(extractor.model)
+    extractor.extract_files()

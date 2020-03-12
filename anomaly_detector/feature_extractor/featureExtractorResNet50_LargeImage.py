@@ -39,4 +39,4 @@ class FeatureExtractorResNet50V2_LargeImage(FeatureExtractorBase):
 if __name__ == "__main__":
     extractor = FeatureExtractorResNet50V2_LargeImage()
     extractor.plot_model(extractor.model)
-    # extractor.extract_files("/home/ludwig/ros/src/ROS-kate_bag/bags/real/TFRecord/*.tfrecord")
+    extractor.extract_files()

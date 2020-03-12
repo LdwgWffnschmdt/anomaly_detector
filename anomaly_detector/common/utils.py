@@ -13,6 +13,7 @@ import h5py
 import cv2
 import matplotlib.pyplot as plt
 
+import anomaly_detector.consts as consts
 from imageLocationUtility import ImageLocationUtility
 
 # Configure logging
@@ -140,7 +141,7 @@ def load_jpgs(filenames, batch_size=64, preprocess_function=None):
 # Output helper #
 #################
 
-def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images", feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False, show_map=True):
+def visualize(features, threshold=100, images_path=None, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False, show_map=True):
     """Visualize features on the source image
 
     Args:
@@ -150,6 +151,10 @@ def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images",
         pause_func (function): Function converting a feature to a boolean that pauses the video
         show_grid (bool): Overlay real world coordinate grid
     """
+    
+    if images_path is None:
+        images_path = consts.IMAGES_PATH
+    
     visualize.index = 0
     visualize.pause = False
     image = None
@@ -316,8 +321,8 @@ def visualize(features, threshold=100, images_path="/home/ldwg/data/CCW/Images",
 
 if __name__ == "__main__":
     from common import FeatureArray
-    features = FeatureArray("/mnt/w/bags/TFRecord/CCW/Features/C3D.h5")
-    visualize(features, images_path="/mnt/w/bags/TFRecord/CCW/Images/")
+    features = FeatureArray(consts.FEATURES_FILE)
+    visualize(features)
 
 # Print iterations progress
 # (https://gist.github.com/aubricus/f91fb55dc6ba5557fbab06119420dd6a)
