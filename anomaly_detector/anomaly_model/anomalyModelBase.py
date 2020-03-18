@@ -247,6 +247,6 @@ class AnomalyModelBase(object):
         if "feature_to_text_func" not in kwargs:
             def _default_feature_to_text(feature, t):
                 return round(self._mahalanobis_distance(feature), 2)
-            kwargs["feature_to_text_func"] = _default_feature_to_color
+            kwargs["feature_to_text_func"] = _default_feature_to_text
 
         utils.visualize(self.features, **kwargs)

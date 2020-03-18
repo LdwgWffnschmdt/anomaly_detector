@@ -138,6 +138,100 @@ def load_jpgs(filenames, preprocess_function=None):
 # Output helper #
 #################
 
+def format_duration(t):
+    """Format duration in seconds to a nice string (e.g. "1h 5m 20s")
+    Args:
+        t (int / float): Duration in seconds
+
+    Returns:
+        str
+    """
+    hours, remainder = divmod(t, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    output = "%is" % seconds
+    
+    if (minutes > 0):
+        output = "%im %s" % (minutes, output)
+        
+    if (hours > 0):
+        output = "%ih %s" % (hours, output)
+
+    return output
+
+def image_write_label(image, label):
+    """Write the specified label on an image for debug purposes
+    (0: Unknown, 1: No anomaly, 2: Contains an anomaly)
+    
+    Args:
+        image (Image)
+    """
+    
+    text = {
+        0: "Unknown",
+        1: "No anomaly",
+        2: "Contains anomaly"
+    }
+
+    colors = {
+        0: (255,255,255),   # Unknown
+        1: (0, 204, 0),     # No anomaly
+        2: (0, 0, 255)      # Contains anomaly
+    }
+
+    font                   = cv2.FONT_HERSHEY_SIMPLEX
+    bottomLeftCornerOfText = (10,50)
+    fontScale              = 0.5
+    thickness              = 1
+
+    cv2.putText(image,"Label: ",
+        bottomLeftCornerOfText,
+        font,
+        fontScale,
+        (255,255,255),
+        thickness, lineType=cv2.LINE_AA)
+    
+    cv2.putText(image, text.get(label, 0),
+        (bottomLeftCornerOfText[0] + 50, bottomLeftCornerOfText[1]),
+        font,
+        fontScale,
+        colors.get(label, 0),
+        thickness, lineType=cv2.LINE_AA)
+
+def image_add_trackbar(image, index, features):
+    """Add trackbar to image
+    
+    Args:
+        image (Image)
+        index (int): Current index
+        features (FeatureArray)
+    """
+    
+    colors = {
+        0: (255,255,255),   # Unknown
+        1: (0, 204, 0),     # No anomaly
+        2: (0, 0, 255)      # Contains anomaly
+    }
+
+    width = image.shape[1]
+
+    trackbar = np.zeros((width, 3), dtype=np.uint8)
+
+    factor = features.shape[0] / float(width)
+
+    for i in range(width):
+        # Get label
+        label = features[int(i * factor), 0, 0].label
+        trackbar[i,:] = colors[label]
+
+    trackbar[int(index / factor),:] = (255, 0, 0)
+
+    # Repeat vertically
+    trackbar = np.expand_dims(trackbar, axis=0).repeat(15, axis=0)
+
+    return np.concatenate((image, trackbar), axis=0)
+
+
 def visualize(features, threshold=100, images_path=consts.IMAGES_PATH, feature_to_color_func=None, feature_to_text_func=None, pause_func=None, show_grid=False, show_map=True):
     """Visualize features on the source image
 
@@ -153,6 +247,7 @@ def visualize(features, threshold=100, images_path=consts.IMAGES_PATH, feature_t
     visualize.pause = False
     image = None
     total, height, width = features.shape
+    max_index = total - 1
     
     ### Set up window
     cv2.namedWindow("image")
@@ -272,7 +367,11 @@ def visualize(features, threshold=100, images_path=consts.IMAGES_PATH, feature_t
 
         # Following line overlays transparent overlay over the image
         image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
+
+        # Draw Trackbar
+        image_new = image_add_trackbar(image_new, visualize.index, features)
         
+        # Draw current label
         image_write_label(image_new, feature_2d[0,0].label)
         cv2.imshow("image", image_new)
     
@@ -292,91 +391,49 @@ def visualize(features, threshold=100, images_path=consts.IMAGES_PATH, feature_t
     cv2.createTrackbar("show_values", "image", 0,               1,                  __draw__)
     cv2.createTrackbar("delay",       "image", 1,               1000,               __draw__)
     cv2.createTrackbar("overlay",     "image", 40,              100,                __draw__)
-    cv2.createTrackbar("index",       "image", 0,               total - 1,          __index_update__)
+    cv2.createTrackbar("skip",        "image", 1,               1000,               lambda x: None)
+    cv2.createTrackbar("index",       "image", 0,               max_index,          __index_update__)
 
     font      = cv2.FONT_HERSHEY_SIMPLEX
     fontScale = 0.25
     thickness = 1
 
-    while visualize.index < total:
-        if visualize.index == total - 1:
+    __draw__()
+
+    while True:
+        if visualize.index >= max_index:
+            visualize.index = max_index
             visualize.pause = True
-        else:
-            visualize.index += 1
-            cv2.setTrackbarPos("index", "image", visualize.index)
         
         key = cv2.waitKey(0 if visualize.pause else cv2.getTrackbarPos("delay","image"))
+        
         if key == 27:   # [esc] => Quit
-            break
+            cv2.destroyAllWindows()
+            return
         elif key == 32: # [space] => Pause
             visualize.pause = not visualize.pause
+            continue
+        elif key == 100:# [d] => Seek forward + pause
+            visualize.index += 1
+            visualize.pause = True
+        elif key == 97:# [a] => Seek backward + pause
+            visualize.index -= 1
+            visualize.pause = True
+        elif key == 101:# [e] => Seek 20 forward
+            visualize.index += 20
+        elif key == 113:# [q] => Seek 20 backward
+            visualize.index -= 20
+        elif key == -1: # No input, continue
+            visualize.index += cv2.getTrackbarPos("skip", "image")
 
-    cv2.destroyAllWindows()
+        # Update trackbar and thus trigger a draw
+        cv2.setTrackbarPos("index", "image", visualize.index)
+
 
 if __name__ == "__main__":
     from common import FeatureArray
     features = FeatureArray(consts.FEATURES_FILE)
     visualize(features)
-
-def format_duration(t):
-    """Format duration in seconds to a nice string (e.g. "1h 5m 20s")
-    Args:
-        t (int / float): Duration in seconds
-
-    Returns:
-        str
-    """
-    hours, remainder = divmod(t, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    
-    output = "%is" % seconds
-    
-    if (minutes > 0):
-        output = "%im %s" % (minutes, output)
-        
-    if (hours > 0):
-        output = "%ih %s" % (hours, output)
-
-    return output
-
-def image_write_label(image, label):
-    """Write the specified label on an image for debug purposes
-    (0: Unknown, 1: No anomaly, 2: Contains an anomaly)
-    
-    Args:
-        image (Image)
-    """
-    
-    text = {
-        0: "Unknown",
-        1: "No anomaly",
-        2: "Contains anomaly"
-    }
-
-    colors = {
-        0: (255,255,255),   # Unknown
-        1: (0, 204, 0),     # No anomaly
-        2: (0, 0, 255)      # Contains anomaly
-    }
-
-    font                   = cv2.FONT_HERSHEY_SIMPLEX
-    bottomLeftCornerOfText = (10,50)
-    fontScale              = 0.5
-    thickness              = 1
-
-    cv2.putText(image,"Label: ",
-        bottomLeftCornerOfText,
-        font,
-        fontScale,
-        (255,255,255),
-        thickness, lineType=cv2.LINE_AA)
-    
-    cv2.putText(image, text.get(label, 0),
-        (bottomLeftCornerOfText[0] + 50, bottomLeftCornerOfText[1]),
-        font,
-        fontScale,
-        colors.get(label, 0),
-        thickness, lineType=cv2.LINE_AA)
 
 #################
 # Computer Info #
