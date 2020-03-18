@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import common.logger as logger
 import time
 
@@ -8,6 +9,7 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import distance
+from tqdm import tqdm
 
 from anomalyModelBase import AnomalyModelBase
 import common.utils as utils
@@ -73,25 +75,17 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         assert features_flat.shape[0] > self.initial_normal_features, \
             "Not enough initial features provided. Please decrease initial_normal_features (%i)" % self.initial_normal_features
 
-        with utils.GracefulInterruptHandler() as h:
-            # Create initial set of "normal" vectors
-            self.balanced_distribution = features_flat[:self.initial_normal_features]
+        # Create initial set of "normal" vectors
+        self.balanced_distribution = features_flat[:self.initial_normal_features]
 
-            start = time.time()
+        self._calculate_mean_and_covariance()
 
-            self._calculate_mean_and_covariance()
-            
-            # loggin.info(np.mean(np.array([self._mahalanobis_distance(f) for f in features_flat])))
-
-            utils.print_progress(0, 1, prefix = "%i / %i" % (self.initial_normal_features, features_flat.shape[0]))
-            
-            # Loop over the remaining feature vectors
-            for index, feature in enumerate(features_flat[self.initial_normal_features:]):
-                if h.interrupted:
-                    logger.warning("Interrupted!")
-                    self.balanced_distribution = None
-                    return False
-
+        # Loop over the remaining feature vectors
+        with tqdm(desc="Creating balanced distribution",
+                    initial=self.initial_normal_features,
+                    total=features_flat.shape[0],
+                    file=sys.stderr) as pbar:
+            for feature in features_flat[self.initial_normal_features:]:
                 # Calculate the Mahalanobis distance to the "normal" distribution
                 dist = self._mahalanobis_distance(feature)
                 if dist > self.threshold_learning:
@@ -102,28 +96,20 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
                     self._calculate_mean_and_covariance()
                 
                 # Print progress
-                utils.print_progress(index + self.initial_normal_features + 1,
-                                     features_flat.shape[0],
-                                     prefix = "%i / %i" % (index + self.initial_normal_features + 1, features_flat.shape[0]),
-                                     suffix = "%i vectors in Balanced Distribution" % len(self.balanced_distribution),
-                                     time_start = start)
+                pbar.set_postfix("%i vectors in Balanced Distribution" % len(self.balanced_distribution))
+                pbar.update()
 
-            # Prune the distribution
-            
-            logger.info(np.mean(np.array([self._mahalanobis_distance(f) for f in self.balanced_distribution])))
+        # Prune the distribution
+        
+        logger.info(np.mean(np.array([self._mahalanobis_distance(f) for f in self.balanced_distribution])))
 
-            prune_filter = []
-            pruned = 0
-            logger.info("Pruning Balanced Distribution")
-            utils.print_progress(0, 1, prefix = "%i / %i" % (self.initial_normal_features, features_flat.shape[0]))
-            start = time.time()
+        prune_filter = []
+        pruned = 0
 
-            for index, feature in enumerate(self.balanced_distribution):
-                if h.interrupted:
-                    logger.warning("Interrupted!")
-                    self.balanced_distribution = None
-                    return False
-
+        with tqdm(desc="Pruning balanced distribution",
+                    total=len(self.balanced_distribution),
+                    file=sys.stderr) as pbar:
+            for feature in self.balanced_distribution:
                 prune = self._mahalanobis_distance(feature) < self.threshold_learning * self.pruning_parameter
                 prune_filter.append(prune)
 
@@ -131,18 +117,15 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
                     pruned += 1
 
                 # Print progress
-                utils.print_progress(index + 1,
-                                     len(self.balanced_distribution),
-                                     prefix = "%i / %i" % (index + 1, len(self.balanced_distribution)),
-                                     suffix = "%i vectors pruned" % pruned,
-                                     time_start = start)
+                pbar.set_postfix("%i vectors pruned" % pruned)
+                pbar.update()
 
-            self.balanced_distribution = self.balanced_distribution[prune_filter]
+        self.balanced_distribution = self.balanced_distribution[prune_filter]
 
-            logger.info("Generated Balanced Distribution with %i entries" % len(self.balanced_distribution))
-        
-            self._calculate_mean_and_covariance()
-            return True
+        logger.info("Generated Balanced Distribution with %i entries" % len(self.balanced_distribution))
+    
+        self._calculate_mean_and_covariance()
+        return True
 
         
     def __load_model_from_file__(self, h5file):

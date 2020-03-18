@@ -43,6 +43,7 @@ parser.add_argument("--label", metavar="L", dest="label", type=int,
 args = parser.parse_args()
 
 import os
+import sys
 import time
 import common.logger as logger
 from glob import glob
@@ -56,6 +57,7 @@ import tf as ros_tf
 import tf2_ros
 import tf2_py as tf2
 import numpy as np
+from tqdm import tqdm
 
 import common.utils as utils
 
@@ -98,11 +100,15 @@ def rosbag_to_images():
         logger.error("label has to be between -2 and 2.")
         return
 
+    # Add progress bar if multiple files
+    if len(bag_files > 1):
+        bag_files = tqdm(bag_files, desc="Bag files", file=sys.stderr)
+
     for bag_file in bag_files:
         # Check parameters
         if bag_file == "" or not os.path.exists(bag_file) or not os.path.isfile(bag_file):
             logger.error("Specified bag does not exist (%s)" % bag_file)
-            return
+            continue
 
         logger.info("Extracting %s" % bag_file)
 
@@ -139,56 +145,33 @@ def rosbag_to_images():
         ################
         #     MAIN     #
         ################
-        with utils.GracefulInterruptHandler() as h:
-            with rosbag.Bag(bag_file, "r") as bag:
-                ### Get /tf transforms
-                utils.print_progress(0, 1, prefix = "Extracting transforms:")
-                expected_tf_count = bag.get_message_count(["/tf", "/tf_static"])
-                total_tf_count = 0
-                start = time.time()
-                tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(bag.get_end_time() - bag.get_start_time()), debug=False)
-                for topic, msg, t in bag.read_messages(topics=["/tf", "/tf_static"]):
-                    if h.interrupted:
-                        logger.warning("Interrupted!")
-                        return
-                    
-                    for msg_tf in msg.transforms:
-                        if topic == "/tf_static":
-                            tf_buffer.set_transform_static(msg_tf, "default_authority")
-                        else:
-                            tf_buffer.set_transform(msg_tf, "default_authority")
-                    total_tf_count += 1
-                    
-                    # Print progress
-                    utils.print_progress(total_tf_count,
-                                        expected_tf_count,
-                                        prefix = "Extracting transforms:",
-                                        suffix = "(%i / %i)" % (total_tf_count, expected_tf_count),
-                                        time_start = start)
+        with rosbag.Bag(bag_file, "r") as bag:
+            ### Get /tf transforms
+            expected_tf_count = bag.get_message_count(["/tf", "/tf_static"])
+            
+            tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(bag.get_end_time() - bag.get_start_time()), debug=False)
+            
+            for topic, msg, t in tqdm(bag.read_messages(topics=["/tf", "/tf_static"]),
+                                        desc="Extracting transforms",
+                                        total=expected_tf_count,
+                                        file=sys.stderr):
+                for msg_tf in msg.transforms:
+                    if topic == "/tf_static":
+                        tf_buffer.set_transform_static(msg_tf, "default_authority")
+                    else:
+                        tf_buffer.set_transform(msg_tf, "default_authority")
 
-                ### Get images
-                utils.print_progress(0, 1, prefix = "Writing images:")
+            ### Get images
+            expected_im_count = bag.get_message_count(image_topic)
 
-                expected_im_count = bag.get_message_count(image_topic)
+            skipped_count = 0       
 
-                total_count = 0
-                total_saved_count = 0
-                skipped_count = 0       
+            image_label = None
 
-                colorspace = b"RGB"
-                channels = 3
-
-                image_label = None
-
-                start = time.time()
-
+            with tqdm(desc="Writing images",
+                        total=expected_im_count,
+                        file=sys.stderr) as pbar:
                 for topic, msg, t in bag.read_messages(topics=image_topic):
-                    if h.interrupted:
-                        logger.warning("Interrupted!")
-                        return
-                    
-                    total_count += 1
-                    
                     try:
                         # Get translation and orientation
                         msg_tf = tf_buffer.lookup_transform(tf_map, tf_base_link, t)#, rospy.Duration.from_sec(0.001))
@@ -238,18 +221,16 @@ def rosbag_to_images():
 
                         with open(output_file + ".yml", "w") as yaml_file:
                             yaml.dump(feature_dict, yaml_file, default_flow_style=False)
-                        
-                        total_saved_count += 1
 
+                    except KeyboardInterrupt:
+                        logger.info("Cancelled")
+                        return
                     except tf2.ExtrapolationException:
                         skipped_count += 1
-
+                        
                     # Print progress
-                    utils.print_progress(total_count,
-                                        expected_im_count,
-                                        prefix = "Writing images:",
-                                        suffix = "(%i / %i, skipped %i)" % (total_saved_count, expected_im_count, skipped_count),
-                                        time_start = start)
+                    pbar.set_postfix("%i skipped" % skipped_count)
+                    pbar.update()
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":

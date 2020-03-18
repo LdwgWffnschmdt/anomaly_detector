@@ -318,38 +318,6 @@ if __name__ == "__main__":
     features = FeatureArray(consts.FEATURES_FILE)
     visualize(features)
 
-# Print iterations progress
-# (https://gist.github.com/aubricus/f91fb55dc6ba5557fbab06119420dd6a)
-def print_progress(iteration, total, prefix="", suffix="", decimals=1, bar_length=40, time_start=None):
-    """Call in a loop to create terminal progress bar
-
-    Args:
-        iteration (int): (Required) current iteration
-        total (int): (Required) total iterations
-        prefix (str): (Optional) prefix string
-        suffix (str): (Optional) suffix string
-        decimals (int): (Optional) positive number of decimals in percent complete
-        bar_length (int): (Optional) character length of bar
-    """
-    iteration = min(iteration, total)
-
-    str_format = "{0:." + str(decimals) + "f}"
-    percents = str_format.format(100 * (iteration / float(total)))
-    filled_length = int(round(bar_length * iteration / float(total)))
-    bar = "█" * filled_length + "-" * (bar_length - filled_length)
-    t = ""
-    if time_start:
-        elapsed = time.time() - time_start
-        fps = iteration / elapsed
-        eta = 0 if fps == 0 else (total - iteration) / fps
-        t = "[Elapsed: %s, ETA: %s, FPS: %.2f]" % (format_duration(elapsed), format_duration(eta), fps)
-
-    sys.stdout.write("\r%-25s |%s| %5s%s %-40s%-30s" % (prefix, bar, percents, "%", suffix, t)),
-
-    if iteration == total:
-        sys.stdout.write("\n")
-    sys.stdout.flush()
-
 def format_duration(t):
     """Format duration in seconds to a nice string (e.g. "1h 5m 20s")
     Args:
