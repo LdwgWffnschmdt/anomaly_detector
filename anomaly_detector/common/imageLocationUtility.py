@@ -1,4 +1,4 @@
-import logging
+import common.logger as logger
 
 import cv2
 import numpy as np

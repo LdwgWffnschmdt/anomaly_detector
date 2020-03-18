@@ -16,7 +16,8 @@ args = parser.parse_args()
 
 import os
 import time
-import logging
+import common.logger as logger
+import sys
 import traceback
 import yaml
 from glob import glob
@@ -39,14 +40,14 @@ def tfrecord_to_images():
 
     # Check parameters
     if not files or len(files) < 1 or files[0] == "":
-        logging.error("No input file specified.")
+        logger.error("No input file specified.")
         return
     
     if output_dir is None or output_dir == "" or not os.path.exists(output_dir) or not os.path.isdir(output_dir):
         output_dir = os.path.join(os.path.abspath(os.path.dirname(files[0])), "Images")
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        logging.info("Output directory set to %s" % output_dir)
+        logger.info("Output directory set to %s" % output_dir)
 
     parsed_dataset = utils.load_tfrecords(files)
 
@@ -54,7 +55,7 @@ def tfrecord_to_images():
     total = sum(1 for record in tqdm(parsed_dataset, desc="Loading dataset"))
 
     # Add features to list
-    for x in tqdm(parsed_dataset, desc="Extracting images", total=total):
+    for x in tqdm(parsed_dataset, desc="Extracting images", total=total, file=sys.stderr):
         output_file = os.path.join(output_dir, str(x[2].numpy()))
         cv2.imwrite(output_file + ".jpg", x[0].numpy())
         

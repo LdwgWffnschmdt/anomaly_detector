@@ -28,7 +28,8 @@ parser.add_argument("--extract_batch_repeat", metavar="B", dest="extract_batch_r
 args = parser.parse_args()
 
 import os
-import logging
+import common.logger as logger
+import sys
 from datetime import datetime
 import inspect
 import traceback
@@ -100,7 +101,7 @@ def feature_extractor_benchmark():
     # Get an instance of each class
     module = __import__("feature_extractor")
     
-    for extractor_name in tqdm(args.extractor, desc="Benchmarking extractors"):
+    for extractor_name in tqdm(args.extractor, desc="Benchmarking extractors", file=sys.stderr):
         worksheet = workbook.add_worksheet(extractor_name.replace("FeatureExtractor", ""))
         worksheet.set_column(0, 20, 20)
 
@@ -110,7 +111,7 @@ def feature_extractor_benchmark():
             """Log duration t with info string s"""
             global col
             
-            logging.info("%-40s (%s): %.5fs  -  %.5fs" % (extractor_name, s, np.min(times), np.max(times)))
+            logger.info("%-40s (%s): %.5fs  -  %.5fs" % (extractor_name, s, np.min(times), np.max(times)))
             
             worksheet.write(0, col, s, subheading_format)
             for i, t in enumerate(times):
@@ -121,7 +122,7 @@ def feature_extractor_benchmark():
             """Log duration t with info string s"""
             global col
             
-            logging.error("%-40s (%s): %s" % (extractor_name, s, err))
+            logger.error("%-40s (%s): %s" % (extractor_name, s, err))
             
             worksheet.write(0, col, s, subheading_format)
             worksheet.write_string(1, col, err)
@@ -154,8 +155,8 @@ def feature_extractor_benchmark():
                 times = np.array(timeit.repeat(lambda: extractor.extract(single[0]), number=1, repeat=args.extract_single_repeat))
                 mins.append(np.min(times))
                 log("Extract single", times)
-            except KeyboardInterrupt:
-                raise KeyboardInterrupt()
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except:
                 logerr("Extract single", traceback.format_exc())
             
@@ -167,14 +168,14 @@ def feature_extractor_benchmark():
                     times = times / batch_size
                     mins.append(np.min(times))
                     log("Extract batch (%i)" % batch_size, times)
-                except KeyboardInterrupt:
-                    raise KeyboardInterrupt()
+                except (KeyboardInterrupt, SystemExit):
+                    raise
                 except:
                     logerr("Extract batch (%i)" % batch_size, traceback.format_exc())
 
             log("Extraction minima", mins)
         except KeyboardInterrupt:
-            logging.info("Cancelled")
+            logger.info("Cancelled")
             break
         except:
             logerr("Error?", traceback.format_exc())

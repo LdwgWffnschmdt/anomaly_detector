@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-import logging
+import common.logger as logger
 import sys
 import time
 import signal
@@ -15,9 +15,6 @@ import matplotlib.pyplot as plt
 
 import consts
 from imageLocationUtility import ImageLocationUtility
-
-# Configure logging
-logging.basicConfig(format="%(asctime)s [%(levelname)s]: %(message)s", level=logging.INFO)
 
 ###############
 #  Images IO  #
@@ -187,7 +184,7 @@ def visualize(features, threshold=100, images_path=consts.IMAGES_PATH, feature_t
         overlay = image.copy()
 
         # if example["metadata/time"] != meta["time"]:
-        #     logging.error("Times somehow don"t match (%f)" % (example["metadata/time"]- meta["time"]))
+        #     logger.error("Times somehow don"t match (%f)" % (example["metadata/time"]- meta["time"]))
 
         patch_size = (image.shape[1] / width, image.shape[0] / height)
         

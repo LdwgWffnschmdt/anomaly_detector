@@ -2,8 +2,9 @@
 
 import os
 import time
-import logging
+import common.logger as logger
 import traceback
+import sys
 
 import h5py
 import numpy as np
@@ -37,7 +38,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
 
         model = self.get_model(feature.get_bin(self.CELL_SIZE))
         if model is None:
-            logging.warning("No model available for this bin (%i, %i)" % feature.get_bin(self.CELL_SIZE))
+            logger.warning("No model available for this bin (%i, %i)" % feature.get_bin(self.CELL_SIZE))
             return 0 # Unknown
         
         return model.classify(feature)
@@ -48,21 +49,21 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         
         model = self.get_model(feature.get_bin(self.CELL_SIZE))
         if model is None:
-            logging.warning("No model available for this bin (%i, %i)" % feature.get_bin(self.CELL_SIZE))
+            logger.warning("No model available for this bin (%i, %i)" % feature.get_bin(self.CELL_SIZE))
             return -1 # TODO: What should we do?
         
         return model._mahalanobis_distance(feature)
 
     def __generate_model__(self, features):
-        # Get location for features
-        features.calculate_locations()
+        # Ensure locations are calculated
+        features.ensure_locations()
         
         shape = features.calculate_rasterization(self.CELL_SIZE)
 
         # Empty grid that will contain the model for each bin
         self.models = np.empty(shape=shape, dtype=object)
 
-        for bin in tqdm(np.ndindex(shape), desc="Generating models", total=np.prod(shape)):
+        for bin in tqdm(np.ndindex(shape), desc="Generating models", total=np.prod(shape), file=sys.stderr):
             bin_features_flat = features.bin(bin, self.CELL_SIZE)
             
             if len(bin_features_flat) > 0:
@@ -88,7 +89,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         
         self.models = np.empty(shape=h5file.attrs["Models shape"], dtype=object)
 
-        with tqdm(desc="Loading models", total=h5file.attrs["Num models"]) as pbar:
+        with tqdm(desc="Loading models", total=h5file.attrs["Num models"], file=sys.stderr) as pbar:
             def _add_model(name, g):
                 if "u" in g.attrs.keys() and "v" in g.attrs.keys():
                     u = g.attrs["u"]
@@ -110,7 +111,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         h5file.attrs["Num models"] = sum(x is not None for x in self.models.flatten())
         h5file.attrs["Models shape"] = self.models.shape
         
-        for u, v in tqdm(np.ndindex(self.models.shape), desc="Saving models", total=np.prod(self.models.shape)):
+        for u, v in tqdm(np.ndindex(self.models.shape), desc="Saving models", total=np.prod(self.models.shape), file=sys.stderr):
             model = self.get_model((u, v))
             if model is not None:
                 g = h5file.create_group("%i/%i" % (u, v))

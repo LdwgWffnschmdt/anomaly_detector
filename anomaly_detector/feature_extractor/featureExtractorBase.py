@@ -1,6 +1,7 @@
 """ Abstract base class for all feature extractors """
 import os
-import logging
+import common.logger as logger
+import sys
 import time
 import traceback
 from glob import glob
@@ -78,7 +79,7 @@ class FeatureExtractorBase(object):
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
             output_file = os.path.join(output_dir, self.NAME + ".h5")
-            logging.info("Output file set to %s" % output_file)
+            logger.info("Output file set to %s" % output_file)
         
         if batch_size is None:
             batch_size = self.BATCH_SIZE
@@ -91,7 +92,7 @@ class FeatureExtractorBase(object):
             dataset = self.__transform_dataset__(dataset)
 
             # Get number of examples in dataset
-            total = sum(1 for record in tqdm(dataset, desc="Loading dataset"))
+            total = sum(1 for record in tqdm(dataset, desc="Loading dataset", file=sys.stderr))
 
         elif files[0].endswith(".jpg"):
             dataset = utils.load_jpgs(files, preprocess_function=self.format_image)
@@ -140,7 +141,7 @@ class FeatureExtractorBase(object):
             tfrecord_dataset    = np.empty((total,),   dtype=np.str)
             
             # Loop over the dataset
-            with tqdm(desc="Extracting features (batch size: %i)" % batch_size, total=total) as pbar:
+            with tqdm(desc="Extracting features (batch size: %i)" % batch_size, total=total, file=sys.stderr) as pbar:
                 for batch in dataset:
                     # Extract features
                     feature_batch = self.extract_batch(batch[0]) # This is where the magic happens
@@ -179,7 +180,7 @@ class FeatureExtractorBase(object):
             hf.create_dataset("tfrecords"       , data=tfrecord_dataset  , dtype=dt_str,      compression=compression, compression_opts=compression_opts)
         except:
             exc = traceback.format_exc()
-            logging.error(exc)
+            logger.error(exc)
             hf.attrs["Exception"] = exc
             return False
         finally:
@@ -216,7 +217,7 @@ class FeatureExtractorBase(object):
         image = tf.cast(np.random.rand(1, self.IMG_SIZE, self.IMG_SIZE, 3), tf.float32)
         model = hub.load(handle).signatures[signature]
         out = model(image)
-        logging.info("Outputs for model at %s with signature %s" % (handle, signature))
+        logger.info("Outputs for model at %s with signature %s" % (handle, signature))
         for s in map(lambda y: "%-40s | %s" % (y, str(out[y].shape)), sorted(list(out), key=lambda x:out[x].shape[1])):
             print(s)
 
@@ -231,7 +232,7 @@ class FeatureExtractorBase(object):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        logging.info("Creating plot of model %s: %s" % (self.NAME, to_file))
+        logger.info("Creating plot of model %s: %s" % (self.NAME, to_file))
         
         tf.keras.utils.plot_model(
             model,

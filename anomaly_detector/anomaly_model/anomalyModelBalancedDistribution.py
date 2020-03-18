@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-import logging
+import common.logger as logger
 import time
 
 import h5py
@@ -68,7 +68,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         # Reduce features to simple list
         features_flat = features.flatten()
 
-        logging.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
+        logger.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
 
         assert features_flat.shape[0] > self.initial_normal_features, \
             "Not enough initial features provided. Please decrease initial_normal_features (%i)" % self.initial_normal_features
@@ -88,7 +88,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
             # Loop over the remaining feature vectors
             for index, feature in enumerate(features_flat[self.initial_normal_features:]):
                 if h.interrupted:
-                    logging.warning("Interrupted!")
+                    logger.warning("Interrupted!")
                     self.balanced_distribution = None
                     return False
 
@@ -110,17 +110,17 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
             # Prune the distribution
             
-            logging.info(np.mean(np.array([self._mahalanobis_distance(f) for f in self.balanced_distribution])))
+            logger.info(np.mean(np.array([self._mahalanobis_distance(f) for f in self.balanced_distribution])))
 
             prune_filter = []
             pruned = 0
-            logging.info("Pruning Balanced Distribution")
+            logger.info("Pruning Balanced Distribution")
             utils.print_progress(0, 1, prefix = "%i / %i" % (self.initial_normal_features, features_flat.shape[0]))
             start = time.time()
 
             for index, feature in enumerate(self.balanced_distribution):
                 if h.interrupted:
-                    logging.warning("Interrupted!")
+                    logger.warning("Interrupted!")
                     self.balanced_distribution = None
                     return False
 
@@ -139,7 +139,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
             self.balanced_distribution = self.balanced_distribution[prune_filter]
 
-            logging.info("Generated Balanced Distribution with %i entries" % len(self.balanced_distribution))
+            logger.info("Generated Balanced Distribution with %i entries" % len(self.balanced_distribution))
         
             self._calculate_mean_and_covariance()
             return True

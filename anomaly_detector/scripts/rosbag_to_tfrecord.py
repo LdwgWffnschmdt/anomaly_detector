@@ -48,7 +48,7 @@ args = parser.parse_args()
 
 import os
 import time
-import logging
+import common.logger as logger
 from glob import glob
 
 import rospy
@@ -114,31 +114,31 @@ def rosbag_to_tfrecord():
         output_dir = os.path.join(os.path.abspath(os.path.dirname(bag_files[0])), "TFRecord")
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        logging.info("Output directory set to %s" % output_dir)
+        logger.info("Output directory set to %s" % output_dir)
 
     if image_topic is None or image_topic == "":
-        logging.error("No image topic given. Use parameter image_topic.")
+        logger.error("No image topic given. Use parameter image_topic.")
         return
 
     if tf_map is None or tf_map == "" or tf_base_link == "":
-        logging.error("Please specify tf frame names.")
+        logger.error("Please specify tf frame names.")
         return
 
     if images_per_bin is None or images_per_bin < 1:
-        logging.error("images_per_bin has to be greater than 1.")
+        logger.error("images_per_bin has to be greater than 1.")
         return
 
     if -2 > label or label > 2:
-        logging.error("label has to be between -2 and 2.")
+        logger.error("label has to be between -2 and 2.")
         return
 
     for bag_file in bag_files:
         # Check parameters
         if bag_file == "" or not os.path.exists(bag_file) or not os.path.isfile(bag_file):
-            logging.error("Specified bag does not exist (%s)" % bag_file)
+            logger.error("Specified bag does not exist (%s)" % bag_file)
             return
 
-        logging.info("Extracting %s" % bag_file)
+        logger.info("Extracting %s" % bag_file)
 
         bag_file_name = os.path.splitext(os.path.basename(bag_file))[0]
 
@@ -183,7 +183,7 @@ def rosbag_to_tfrecord():
                 tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(bag.get_end_time() - bag.get_start_time()), debug=False)
                 for topic, msg, t in bag.read_messages(topics=["/tf", "/tf_static"]):
                     if h.interrupted:
-                        logging.warning("Interrupted!")
+                        logger.warning("Interrupted!")
                         return
                     
                     for msg_tf in msg.transforms:
@@ -221,7 +221,7 @@ def rosbag_to_tfrecord():
 
                 for topic, msg, t in bag.read_messages(topics=image_topic):
                     if h.interrupted:
-                        logging.warning("Interrupted!")
+                        logger.warning("Interrupted!")
                         return
                     
                     total_count += 1
@@ -256,7 +256,7 @@ def rosbag_to_tfrecord():
                         # Get the label     0: Unknown, 1: No anomaly, 2: Contains an anomaly
                         image_label = get_label(cv_image, image_label)
                         if image_label == None: # [esc]
-                            logging.warning("Interrupted!")
+                            logger.warning("Interrupted!")
                             return
 
                         # Create a new writer if we need one

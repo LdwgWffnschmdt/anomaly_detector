@@ -1,6 +1,7 @@
 import os
 import time
-import logging
+import common.logger as logger
+import sys
 import ast
 
 import numpy as np
@@ -27,7 +28,7 @@ class FeatureArray(np.ndarray):
         # Input array is an already formed ndarray instance
         # We first cast to be our class type
 
-        logging.info("Reading metadata and features from: %s" % filename)
+        logger.info("Reading metadata and features from: %s" % filename)
 
         # Check file extension
         _, file_extension = os.path.splitext(filename)
@@ -55,7 +56,7 @@ class FeatureArray(np.ndarray):
 
             features = np.empty(shape=(total, h, w), dtype=Feature)
             
-            for i, y, x in tqdm(np.ndindex(features.shape), desc="Loading features", total=np.prod(features.shape)):
+            for i, y, x in tqdm(np.ndindex(features.shape), desc="Loading features", total=np.prod(features.shape), file=sys.stderr):
                 feature = Feature(features_raw[i, y, x], x, y, w, h)
                 feature.camera_location = camera_locations[i]
                 feature.time = times[i]
@@ -146,13 +147,13 @@ class FeatureArray(np.ndarray):
         shape = (int(np.ceil((x_max - x_min) / cell_size)),
                  int(np.ceil((y_max - y_min) / cell_size)))
 
-        logging.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
+        logger.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
 
-        logging.info("Calculating corresponding bin for every feature")
+        logger.info("Calculating corresponding bin for every feature")
         self.__rasterizations__[cell_size]["feature_indices"] = np.empty(shape=shape, dtype=object)
         self.__rasterizations__[cell_size]["feature_indices_count"] = np.zeros(shape=shape, dtype=np.uint32)
         # Get the corresponding bin for every feature
-        for i, f in enumerate(tqdm(self.flatten(), desc="Calculating bins")):
+        for i, f in enumerate(tqdm(self.flatten(), desc="Calculating bins"), file=sys.stderr):
             bin = f.get_bin(cell_size, extent)
 
             if self.__rasterizations__[cell_size]["feature_indices"][bin] is None:
@@ -192,7 +193,7 @@ class FeatureArray(np.ndarray):
             x_max = self[0,0,0].location[0]
             y_max = self[0,0,0].location[1]
 
-            for f in tqdm(self.flatten(), desc="Calculating extent"):
+            for f in tqdm(self.flatten(), desc="Calculating extent", file=sys.stderr):
                 if f.location[0] > x_max:
                     x_max = f.location[0]
                 if f.location[0] < x_min:
@@ -208,7 +209,7 @@ class FeatureArray(np.ndarray):
             with h5py.File(self.filename, "r+") as hf:
                 hf.attrs["Extent"] = self.__extent__
             
-            logging.info("Extent of features: (%i, %i)/(%i, %i)." % (x_min, y_min, x_max, y_max))
+            logger.info("Extent of features: (%i, %i)/(%i, %i)." % (x_min, y_min, x_max, y_max))
         else:
             x_min, y_min, x_max, y_max = self.__extent__
         
@@ -262,7 +263,12 @@ class FeatureArray(np.ndarray):
             hf["locations"].attrs["End"] = end
             hf["locations"].attrs["Duration"] = end - start
             hf["locations"].attrs["Duration (formatted)"] = utils.format_duration(end - start)
-        
+    
+    def ensure_locations(self):
+        # Cheap check TODO: Improve on this and only calculate the locations not done yet
+        if self.take(1).location is None:
+            self.calculate_locations()
+
     def calculate_locations(self):
         """Calculate the real world coordinates of every feature"""
 
@@ -272,30 +278,23 @@ class FeatureArray(np.ndarray):
             self.base.calculate_locations()
             return
 
-        # Cheap check TODO: Improve on this and only calculate the locations not done yet
-        if self.take(1).location is not None:
-            logging.info("Already calculated locations")
-            return
-
         ilu = ImageLocationUtility()
 
-        logging.info("Calculating locations of every patch")
+        logger.info("Calculating locations of every patch")
         _, h, w = self.shape
         
         image_locations = ilu.span_grid(w, h, offset_x=0.5, offset_y=0.5)
         relative_locations = ilu.image_to_relative(image_locations)
 
-        for i, y, x in tqdm(np.ndindex(self.shape), desc="Calculating locations", total=np.prod(self.shape)):
+        for i, y, x in tqdm(np.ndindex(self.shape), desc="Calculating locations", total=np.prod(self.shape), file=sys.stderr):
             feature = self[i, y, x]
             feature.location = ilu.relative_to_absolute(relative_locations[x, y], feature.camera_position, feature.camera_rotation)
 
     def add_location_as_feature_dimension(self):
         """Act as if the location of a feature would be two additional feature dimensions"""
-        # Cheap check
-        if self.take(1).location is None:
-            self.calculate_locations()
+        self.ensure_locations()
 
-        logging.info("Adding locations as feature dimensions")
+        logger.info("Adding locations as feature dimensions")
 
         features_flat = self.flatten()
         for i in range(len(features_flat)):

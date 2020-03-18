@@ -1,6 +1,7 @@
 import os
 import time
-import logging
+import common.logger as logger
+import sys
 
 import h5py
 import matplotlib.pyplot as plt
@@ -90,12 +91,12 @@ class AnomalyModelBase(object):
 
         # Generate model
         if self.__generate_model__(self.features.no_anomaly) == False:
-            logging.info("Could not generate model.")
+            logger.info("Could not generate model.")
             return False
 
         end = time.time()
 
-        logging.info("Writing model to: %s" % self.features.filename)
+        logger.info("Writing model to: %s" % self.features.filename)
         with h5py.File(self.features.filename, "a") as hf:
             g = hf.get(self.NAME)
 
@@ -117,7 +118,7 @@ class AnomalyModelBase(object):
             g.attrs["Duration (formatted)"] = utils.format_duration(end - start)
 
             self.__save_model_to_file__(g)
-        logging.info("Successfully written model to: %s" % self.features.filename)
+        logger.info("Successfully written model to: %s" % self.features.filename)
 
         if load_mahalanobis_distances:
             self.calculate_mahalobis_distances()
@@ -126,7 +127,7 @@ class AnomalyModelBase(object):
 
     def load_from_file(self, model_file, load_features=False, load_mahalanobis_distances=False):
         """ Load a model from file """
-        logging.info("Reading model from: %s" % model_file)
+        logger.info("Reading model from: %s" % model_file)
         with h5py.File(model_file, "r") as hf:
             g = hf.get(self.NAME)
             
@@ -150,19 +151,19 @@ class AnomalyModelBase(object):
         if self.load_mahalanobis_distances():
             return True
 
-        logging.info("Calculating Mahalanobis distances of %i features with and %i features without anomalies" % \
+        logger.info("Calculating Mahalanobis distances of %i features with and %i features without anomalies" % \
             (len(self.features.no_anomaly.flatten()), len(self.features.anomaly.flatten())))
 
-        self.mahalanobis_no_anomaly = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.no_anomaly.flatten(), desc="No anomaly  ")))) # 75.49480115577167
-        self.mahalanobis_anomaly    = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.anomaly.flatten(), desc="With anomaly"))))    # 76.93620254133627
+        self.mahalanobis_no_anomaly = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.no_anomaly.flatten(), desc="No anomaly  ", file=sys.stderr)))) # 75.49480115577167
+        self.mahalanobis_anomaly    = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.anomaly.flatten(), desc="With anomaly", file=sys.stderr))))    # 76.93620254133627
 
         self.mahalanobis_no_anomaly_max = np.nanmax(self.mahalanobis_no_anomaly) if len(self.mahalanobis_no_anomaly) > 0 else np.nan
         self.mahalanobis_anomaly_max    = np.nanmax(self.mahalanobis_anomaly) if len(self.mahalanobis_anomaly) > 0 else np.nan
         
         self.mahalanobis_max = np.nanmax([self.mahalanobis_no_anomaly_max, self.mahalanobis_anomaly_max])
 
-        logging.info("Maximum Mahalanobis distance (no anomaly): %f" % self.mahalanobis_no_anomaly_max)
-        logging.info("Maximum Mahalanobis distance (anomaly)   : %f" % self.mahalanobis_anomaly_max)
+        logger.info("Maximum Mahalanobis distance (no anomaly): %f" % self.mahalanobis_no_anomaly_max)
+        logger.info("Maximum Mahalanobis distance (anomaly)   : %f" % self.mahalanobis_anomaly_max)
         
         self.save_mahalanobis_distances()
 
@@ -184,8 +185,8 @@ class AnomalyModelBase(object):
             self.mahalanobis_anomaly_max    = g["mahalanobis_anomaly"].attrs["max"]
             self.mahalanobis_max = np.nanmax((self.mahalanobis_no_anomaly_max, self.mahalanobis_anomaly_max))
 
-            logging.info("Maximum Mahalanobis distance (no anomaly): %f" % self.mahalanobis_no_anomaly_max)
-            logging.info("Maximum Mahalanobis distance (anomaly)   : %f" % self.mahalanobis_anomaly_max)
+            logger.info("Maximum Mahalanobis distance (no anomaly): %f" % self.mahalanobis_no_anomaly_max)
+            logger.info("Maximum Mahalanobis distance (anomaly)   : %f" % self.mahalanobis_anomaly_max)
             return True
 
     def save_mahalanobis_distances(self):
@@ -202,12 +203,12 @@ class AnomalyModelBase(object):
             no_anomaly.attrs["max"] = self.mahalanobis_no_anomaly_max
             anomaly.attrs["max"]    = self.mahalanobis_anomaly_max
 
-            logging.info("Saved Mahalanobis distances to file")
+            logger.info("Saved Mahalanobis distances to file")
             return True
 
     def show_mahalanobis_distribution(self):
         """ Plot the distribution of all Mahalanobis distances """
-        logging.info("Showing Mahalanobis distance distribution")
+        logger.info("Showing Mahalanobis distance distribution")
         if self.mahalanobis_no_anomaly is None:
             self.calculate_mahalobis_distances()
         

@@ -12,7 +12,6 @@ class AnomalyModelSVGPos(AnomalyModelSVG):
     
     def __generate_model__(self, features):
         # Add location to features
-        features.calculate_locations()
         features.add_location_as_feature_dimension()
         AnomalyModelSVG.__generate_model__(self, features)
 

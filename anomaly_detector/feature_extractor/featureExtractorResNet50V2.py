@@ -1,7 +1,7 @@
+from featureExtractorBase import FeatureExtractorBase
+
 import tensorflow as tf
 from tensorflow.keras.applications.resnet_v2 import preprocess_input
-
-from featureExtractorBase import FeatureExtractorBase
 
 class FeatureExtractorResNet50V2(FeatureExtractorBase):
     """Feature extractor based on ResNet50V2 (trained on ImageNet).
