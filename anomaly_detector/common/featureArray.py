@@ -1,6 +1,5 @@
 import os
 import time
-import common.logger as logger
 import sys
 import ast
 
@@ -9,9 +8,7 @@ import h5py
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-import utils
-from feature import Feature
-from imageLocationUtility import ImageLocationUtility
+from common import utils, logger, Feature, ImageLocationUtility
 
 class FeatureArray(np.ndarray):
     """Array with metadata."""

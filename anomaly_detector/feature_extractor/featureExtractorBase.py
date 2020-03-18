@@ -1,6 +1,6 @@
 """ Abstract base class for all feature extractors """
 import os
-import common.logger as logger
+from common import utils, logger
 import sys
 import time
 import traceback
@@ -13,7 +13,6 @@ import h5py
 from tqdm import tqdm
 
 import consts
-import common.utils as utils
 
 class FeatureExtractorBase(object):
     NAME       = property(lambda self: self.__class__.__name__.replace("FeatureExtractor", ""))

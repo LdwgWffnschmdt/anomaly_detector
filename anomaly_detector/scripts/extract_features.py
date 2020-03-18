@@ -20,7 +20,7 @@ args = parser.parse_args()
 
 import os
 import time
-import common.logger as logger
+from common import logger
 import traceback
 
 def extract_features():

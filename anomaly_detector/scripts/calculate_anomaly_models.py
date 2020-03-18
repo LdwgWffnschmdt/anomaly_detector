@@ -13,14 +13,12 @@ args = parser.parse_args()
 
 import os
 import time
-import common.logger as logger
 import sys
 from glob import glob
 
 from tqdm import tqdm
 
-import common.utils as utils
-from common import FeatureArray
+from common import utils, logger, FeatureArray
 
 def calculate_anomaly_models():
     ################

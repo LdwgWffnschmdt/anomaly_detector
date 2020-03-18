@@ -4,7 +4,7 @@
 import rospy
 
 import feature_extractor
-import common.utils as utils
+from common import utils
 
 import anomaly_model
 

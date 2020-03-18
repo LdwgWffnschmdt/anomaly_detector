@@ -2,7 +2,6 @@
 
 import os
 import sys
-import common.logger as logger
 import time
 
 import h5py
@@ -12,7 +11,7 @@ from scipy.spatial import distance
 from tqdm import tqdm
 
 from anomalyModelBase import AnomalyModelBase
-import common.utils as utils
+from common import utils, logger
 
 class AnomalyModelBalancedDistribution(AnomalyModelBase):
     """Anomaly model formed by a Balanced Distribution of feature vectors

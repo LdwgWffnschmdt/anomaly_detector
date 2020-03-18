@@ -40,7 +40,7 @@ if "LOGGER_LOADED" not in globals():
     handler = TqdmLoggingHandler()
 
     formatter = colorlog.ColoredFormatter(
-            '%(log_color)s%(name)s%(asctime)s %(levelname).1s: %(message)s',
+            '%(log_color)s%(asctime)s %(levelname).1s: %(message)s',
             datefmt='%Y-%d-%d %H:%M:%S',
             log_colors={
                 'DEBUG': 'thin_cyan',

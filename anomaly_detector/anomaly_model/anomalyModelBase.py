@@ -1,6 +1,5 @@
 import os
 import time
-import common.logger as logger
 import sys
 
 import h5py
@@ -9,8 +8,7 @@ import numpy as np
 from tqdm import tqdm
 
 import consts
-from common import FeatureArray
-import common.utils as utils
+from common import FeatureArray, Visualize, utils, logger
 
 class AnomalyModelBase(object):
     
@@ -226,27 +224,34 @@ class AnomalyModelBase(object):
 
     def visualize(self, **kwargs):
         """ Visualize the result of a anomaly model """
+
         if "threshold" not in kwargs:
             if not hasattr(self, "mahalanobis_max") or self.mahalanobis_max is None:
                 self.calculate_mahalobis_distances()
             kwargs["threshold"] = self.mahalanobis_max * 0.9
         
         if "feature_to_color_func" not in kwargs:
-            def _default_feature_to_color(feature, t, show_thresh):
+            def _default_feature_to_color(v, feature):
                 b = 0#100 if feature in self.normal_distribution else 0
                 g = 0
-                if show_thresh:
-                    r = 100 if self._mahalanobis_distance(feature) > t else 0
+                threhold = v.get_trackbar("threshold")
+                if v.get_trackbar("show_thresh"):
+                    r = 100 if self._mahalanobis_distance(feature) > threshold else 0
                 elif t == 0:
                     r = 0
                 else:
-                    r = min(255, int(self._mahalanobis_distance(feature) * (255 / t)))
+                    r = min(255, int(self._mahalanobis_distance(feature) * (255 / threshold)))
                 return (b, g, r)
             kwargs["feature_to_color_func"] = _default_feature_to_color
 
         if "feature_to_text_func" not in kwargs:
-            def _default_feature_to_text(feature, t):
+            def _default_feature_to_text(v, feature):
                 return round(self._mahalanobis_distance(feature), 2)
             kwargs["feature_to_text_func"] = _default_feature_to_text
 
-        utils.visualize(self.features, **kwargs)
+        vis = Visualize(self.features, **kwargs)
+
+        vis.create_trackbar("threshold", kwargs["threshold"], kwargs["threshold"] * 3)
+        vis.create_trackbar("show_thresh", 1, 1)
+        
+        vis.show()

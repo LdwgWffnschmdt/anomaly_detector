@@ -49,7 +49,6 @@ args = parser.parse_args()
 import os
 import sys
 import time
-import common.logger as logger
 from glob import glob
 
 import rospy
@@ -63,7 +62,7 @@ import tf2_py as tf2
 import numpy as np
 from tqdm import tqdm
 
-import common.utils as utils
+from common import Visualize, utils, logger
 
 def _int64_feature(value):
     """Wrapper for inserting int64 features into Example proto."""
@@ -153,7 +152,7 @@ def rosbag_to_tfrecord():
                 image_cp = image.copy()
 
                 if label == -1 and not last_label is None:
-                    utils.image_write_label(image_cp, last_label)
+                    Visualize.image_write_label(image_cp, last_label)
 
                 cv2.imshow("Label image | [1]: No anomaly, [2]: Contains anomaly, [0]: Unknown", image_cp)
                 key = cv2.waitKey(0 if label == -2 or last_label == None else auto_duration)

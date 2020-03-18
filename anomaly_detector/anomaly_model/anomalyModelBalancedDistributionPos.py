@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from anomaly_model import AnomalyModelBalancedDistribution
-import common.utils as utils
-from common.imageLocationUtility import ImageLocationUtility
+from common import utils, ImageLocationUtility
 
 class AnomalyModelBalancedDistributionPos(AnomalyModelBalancedDistribution):
     """Anomaly model formed by a Balanced Distribution of feature vectors

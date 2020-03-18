@@ -16,7 +16,6 @@ args = parser.parse_args()
 
 import os
 import time
-import common.logger as logger
 import sys
 import traceback
 import yaml
@@ -26,7 +25,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-import common.utils as utils
+from common import utils, logger
 
 def tfrecord_to_images():
     files = args.files

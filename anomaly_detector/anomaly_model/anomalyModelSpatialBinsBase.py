@@ -2,7 +2,6 @@
 
 import os
 import time
-import common.logger as logger
 import traceback
 import sys
 
@@ -11,7 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 from anomalyModelBase import AnomalyModelBase
-import common.utils as utils
+from common import utils, logger
 from common import FeatureArray
 
 class AnomalyModelSpatialBinsBase(AnomalyModelBase):

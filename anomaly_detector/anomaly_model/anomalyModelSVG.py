@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 
 import os
-import common.logger as logger
 
 import numpy as np
 # import tensorflow_probability as tfp
 from scipy.spatial import distance
 
 from anomalyModelBase import AnomalyModelBase
-import common.utils as utils
+from common import utils, logger
 
 class AnomalyModelSVG(AnomalyModelBase):
     """Anomaly model formed by a Single Variate Gaussian (SVG) with model parameters Θ_SVG = (μ,σ²)

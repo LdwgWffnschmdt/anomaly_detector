@@ -20,9 +20,7 @@ from glob import glob
 
 from tqdm import tqdm
 
-import common.logger as logger
-import common.utils as utils
-from common import FeatureArray
+from common import utils, logger, FeatureArray
 
 def calculate_locations():
     ################

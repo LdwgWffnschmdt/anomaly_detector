@@ -1,7 +1,7 @@
-import common.logger as logger
-
 import cv2
 import numpy as np
+
+from common import logger
 
 class ImageLocationUtility(object):
     def __init__(self):

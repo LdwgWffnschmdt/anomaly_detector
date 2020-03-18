@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from anomaly_model import AnomalyModelSVG
-import common.utils as utils
-from common.imageLocationUtility import ImageLocationUtility
+from common import utils, logger
 
 class AnomalyModelSVGPos(AnomalyModelSVG):
     """Anomaly model formed by a Single Variate Gaussian (SVG) with model parameters Θ_SVG = (μ,σ²)

@@ -28,7 +28,7 @@ parser.add_argument("--extract_batch_repeat", metavar="B", dest="extract_batch_r
 args = parser.parse_args()
 
 import os
-import common.logger as logger
+from common import utils, logger
 import sys
 from datetime import datetime
 import inspect
@@ -42,7 +42,6 @@ import tensorflow as tf
 from tqdm import tqdm
 
 import feature_extractor
-import common.utils as utils
 
 row = 0
 col = 0
