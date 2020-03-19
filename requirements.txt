@@ -6,6 +6,7 @@ matplotlib
 pydot
 graphviz
 tqdm
+colorlog
 
 py-cpuinfo
 psutil
@@ -14,3 +15,4 @@ XlsxWriter
 
 rospkg
 opencv-python
+pillow
