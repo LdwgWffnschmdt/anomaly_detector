@@ -37,10 +37,7 @@ parser.add_argument("--tf_base_link", metavar="TF_B", dest="tf_base_link", type=
 
 parser.add_argument("--label", metavar="L", dest="label", type=int,
                     default=0,
-                    help="-2: labeling mode (show image and wait for input) [space]: No anomaly\n"
-                         "                                                  [tab]  : Contains anomaly\n"
-                         "-1: continuous labeling mode (show image for 10ms, keep label until change)\n"
-                         " 0: Unknown (default)\n"
+                    help=" 0: Unknown (default)\n"
                          " 1: No anomaly\n"
                          " 2: Contains an anomaly")
 
@@ -50,6 +47,8 @@ import os
 import sys
 import time
 from glob import glob
+
+from common import Visualize, utils, logger
 
 import rospy
 import rosbag
@@ -61,8 +60,6 @@ import tf2_ros
 import tf2_py as tf2
 import numpy as np
 from tqdm import tqdm
-
-from common import Visualize, utils, logger
 
 def _int64_feature(value):
     """Wrapper for inserting int64 features into Example proto."""
@@ -129,8 +126,8 @@ def rosbag_to_tfrecord():
         logger.error("images_per_bin has to be greater than 1.")
         return
 
-    if -2 > label or label > 2:
-        logger.error("label has to be between -2 and 2.")
+    if 0 > label or label > 2:
+        logger.error("label has to be between 0 and 2.")
         return
 
     # Add progress bar if multiple files
@@ -146,31 +143,6 @@ def rosbag_to_tfrecord():
         logger.info("Extracting %s" % bag_file)
 
         bag_file_name = os.path.splitext(os.path.basename(bag_file))[0]
-
-        def get_label(image, last_label, auto_duration=10):
-            if label < 0: # Labeling mode (show image and wait for input)
-                image_cp = image.copy()
-
-                if label == -1 and not last_label is None:
-                    Visualize.image_write_label(image_cp, last_label)
-
-                cv2.imshow("Label image | [1]: No anomaly, [2]: Contains anomaly, [0]: Unknown", image_cp)
-                key = cv2.waitKey(0 if label == -2 or last_label == None else auto_duration)
-                
-                if key == 27:   # [esc] => Quit
-                    return None
-                elif key == 48: # [0]   => Unknown
-                    return 0
-                elif key == 49: # [1]   => No anomaly
-                    return 1
-                elif key == 50: # [2]   => Contains anomaly
-                    return 2
-                elif key == -1 and label == -1 and not last_label is None:
-                    return last_label
-                else:
-                    return get_label(image, None)
-            else:
-                return label
 
         # Used to convert image message to opencv image
         bridge = CvBridge()
@@ -206,8 +178,6 @@ def rosbag_to_tfrecord():
             colorspace = b"RGB"
             channels = 3
 
-            image_label = None
-
             start = time.time()
 
             with tqdm(desc="Writing TFRecord",
@@ -241,12 +211,6 @@ def rosbag_to_tfrecord():
 
                         _, encoded = cv2.imencode(".jpeg", cv_image)
 
-                        # Get the label     0: Unknown, 1: No anomaly, 2: Contains an anomaly
-                        image_label = get_label(cv_image, image_label)
-                        if image_label == None: # [esc]
-                            logger.warning("Interrupted!")
-                            return
-
                         # Create a new writer if we need one
                         if not tfWriter or per_bin_count >= images_per_bin:
                             if tfWriter:
@@ -270,8 +234,8 @@ def rosbag_to_tfrecord():
                             "metadata/location/rotation/x"      : _float_feature(euler[0]),
                             "metadata/location/rotation/y"      : _float_feature(euler[1]),
                             "metadata/location/rotation/z"      : _float_feature(euler[2]),
-                            "metadata/time"                     : _int64_feature(t.to_nsec()), # There were some serious problems saving to_sec as float...
-                            "metadata/label"                    : _int64_feature(image_label), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+                            "metadata/time"                     : _int64_feature(t.to_nsec()),
+                            "metadata/label"                    : _int64_feature(label), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
                             "metadata/rosbag"                   : _bytes_feature(bag_file),
                             "metadata/tfrecord"                 : _bytes_feature(output_file),
                             "image/height"      : _int64_feature(cv_image.shape[0]),

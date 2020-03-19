@@ -31,12 +31,13 @@ parser.add_argument("--tf_base_link", metavar="TF_B", dest="tf_base_link", type=
                     default="realsense_link",
                     help="TF camera frame (default: base_link)")
 
+parser.add_argument("--override", metavar="O", dest="override", type=bool,
+                    default=False,
+                    help="Override existing images (default: False)")
+
 parser.add_argument("--label", metavar="L", dest="label", type=int,
                     default=0,
-                    help="-2: labeling mode (show image and wait for input) [space]: No anomaly\n"
-                         "                                                  [tab]  : Contains anomaly\n"
-                         "-1: continuous labeling mode (show image for 10ms, keep label until change)\n"
-                         " 0: Unknown (default)\n"
+                    help=" 0: Unknown (default)\n"
                          " 1: No anomaly\n"
                          " 2: Contains an anomaly")
 
@@ -95,8 +96,8 @@ def rosbag_to_images():
         logger.error("Please specify tf frame names.")
         return
 
-    if -2 > label or label > 2:
-        logger.error("label has to be between -2 and 2.")
+    if 0 > label or label > 2:
+        logger.error("label has to be between 0 and 2.")
         return
 
     # Add progress bar if multiple files
@@ -112,31 +113,6 @@ def rosbag_to_images():
         logger.info("Extracting %s" % bag_file)
 
         bag_file_name = os.path.splitext(os.path.basename(bag_file))[0]
-
-        def get_label(image, last_label, auto_duration=10):
-            if label < 0: # Labeling mode (show image and wait for input)
-                image_cp = image.copy()
-
-                if label == -1 and not last_label is None:
-                    Visualize.image_write_label(image_cp, last_label)
-
-                cv2.imshow("Label image | [1]: No anomaly, [2]: Contains anomaly, [0]: Unknown", image_cp)
-                key = cv2.waitKey(0 if label == -2 or last_label == None else auto_duration)
-                
-                if key == 27:   # [esc] => Quit
-                    return None
-                elif key == 48: # [0]   => Unknown
-                    return 0
-                elif key == 49: # [1]   => No anomaly
-                    return 1
-                elif key == 50: # [2]   => Contains anomaly
-                    return 2
-                elif key == -1 and label == -1 and not last_label is None:
-                    return last_label
-                else:
-                    return get_label(image, None)
-            else:
-                return label
 
         # Used to convert image message to opencv image
         bridge = CvBridge()
@@ -165,67 +141,63 @@ def rosbag_to_images():
 
             skipped_count = 0       
 
-            image_label = None
-
-            with tqdm(desc="Writing images",
-                        total=expected_im_count,
-                        file=sys.stderr) as pbar:
+            with tqdm(desc="Writing images", total=expected_im_count, file=sys.stderr) as pbar:
                 for topic, msg, t in bag.read_messages(topics=image_topic):
-                    try:
-                        # Get translation and orientation
-                        msg_tf = tf_buffer.lookup_transform(tf_map, tf_base_link, t)#, rospy.Duration.from_sec(0.001))
-                        translation = msg_tf.transform.translation
-                        euler = ros_tf.transformations.euler_from_quaternion([msg_tf.transform.rotation.x, msg_tf.transform.rotation.y, msg_tf.transform.rotation.z, msg_tf.transform.rotation.w])
+                    output_file = os.path.join(output_dir, str(t.to_nsec()))
 
-                        # Get the image
-                        if msg._type == "sensor_msgs/CompressedImage":
-                            image_arr = np.fromstring(msg.data, np.uint8)
-                            cv_image = cv2.imdecode(image_arr, cv2.IMREAD_COLOR)
-                        elif msg._type == "sensor_msgs/Image":
-                            cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
-                        else:
-                            raise ValueError("Image topic type must be either \"sensor_msgs/Image\" or \"sensor_msgs/CompressedImage\".")
-                        
-                        # Crop the image
-                        if args.image_crop is not None:
-                            cv_image = cv_image[args.image_crop[1]:args.image_crop[1] + args.image_crop[3], # y:y+h
-                                                args.image_crop[0]:args.image_crop[0] + args.image_crop[2]] # x:x+w
-
-                        # Scale the image
-                        if args.image_scale != 1.0:
-                            cv_image = cv2.resize(cv_image, (int(cv_image.shape[1] * args.image_scale),
-                                                             int(cv_image.shape[0] * args.image_scale)), cv2.INTER_AREA)
-
-                        # Get the label     0: Unknown, 1: No anomaly, 2: Contains an anomaly
-                        image_label = get_label(cv_image, image_label)
-                        if image_label == None: # [esc]
-                            logger.warning("Interrupted!")
-                            return
-                        
-                        output_file = os.path.join(output_dir, str(t.to_nsec()))
-
-                        cv2.imwrite(output_file + ".jpg", cv_image)
-                        
-                        feature_dict = {
-                            "location/translation/x"   : translation.x,
-                            "location/translation/y"   : translation.y,
-                            "location/translation/z"   : translation.z,
-                            "location/rotation/x"      : euler[0],
-                            "location/rotation/y"      : euler[1],
-                            "location/rotation/z"      : euler[2],
-                            "time"                     : t.to_nsec(),
-                            "label"                    : image_label, # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-                            "rosbag"                   : bag_file
-                        }
-
-                        with open(output_file + ".yml", "w") as yaml_file:
-                            yaml.dump(feature_dict, yaml_file, default_flow_style=False)
-
-                    except KeyboardInterrupt:
-                        logger.info("Cancelled")
-                        return
-                    except tf2.ExtrapolationException:
+                    if not args.override and os.path.exists(output_file + ".jpg"):
                         skipped_count += 1
+                    else:
+                        try:
+                            # Get translation and orientation
+                            msg_tf = tf_buffer.lookup_transform(tf_map, tf_base_link, t)#, rospy.Duration.from_sec(0.001))
+                            translation = msg_tf.transform.translation
+                            euler = ros_tf.transformations.euler_from_quaternion([msg_tf.transform.rotation.x,
+                                                                                  msg_tf.transform.rotation.y,
+                                                                                  msg_tf.transform.rotation.z,
+                                                                                  msg_tf.transform.rotation.w])
+
+                            # Get the image
+                            if msg._type == "sensor_msgs/CompressedImage":
+                                image_arr = np.fromstring(msg.data, np.uint8)
+                                cv_image = cv2.imdecode(image_arr, cv2.IMREAD_COLOR)
+                            elif msg._type == "sensor_msgs/Image":
+                                cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+                            else:
+                                raise ValueError("Image topic type must be either \"sensor_msgs/Image\" or \"sensor_msgs/CompressedImage\".")
+                            
+                            # Crop the image
+                            if args.image_crop is not None:
+                                cv_image = cv_image[args.image_crop[1]:args.image_crop[1] + args.image_crop[3], # y:y+h
+                                                    args.image_crop[0]:args.image_crop[0] + args.image_crop[2]] # x:x+w
+
+                            # Scale the image
+                            if args.image_scale != 1.0:
+                                cv_image = cv2.resize(cv_image, (int(cv_image.shape[1] * args.image_scale),
+                                                                int(cv_image.shape[0] * args.image_scale)), cv2.INTER_AREA)
+
+                            cv2.imwrite(output_file + ".jpg", cv_image)
+                            
+                            feature_dict = {
+                                "location/translation/x"   : translation.x,
+                                "location/translation/y"   : translation.y,
+                                "location/translation/z"   : translation.z,
+                                "location/rotation/x"      : euler[0],
+                                "location/rotation/y"      : euler[1],
+                                "location/rotation/z"      : euler[2],
+                                "time"                     : t.to_nsec(),
+                                "label"                    : label, # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+                                "rosbag"                   : bag_file
+                            }
+
+                            with open(output_file + ".yml", "w") as yaml_file:
+                                yaml.dump(feature_dict, yaml_file, default_flow_style=False)
+
+                        except KeyboardInterrupt:
+                            logger.info("Cancelled")
+                            return
+                        except:# tf2.LookupException, tf2.ExtrapolationException:
+                            skipped_count += 1
                         
                     # Print progress
                     pbar.set_postfix({"Skipped": skipped_count})
