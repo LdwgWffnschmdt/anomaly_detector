@@ -106,6 +106,7 @@ class Visualize(object):
         self.feature_to_color_func = kwargs.get("feature_to_color_func", None)
         self.feature_to_text_func  = kwargs.get("feature_to_text_func", None)
         self.pause_func            = kwargs.get("pause_func", None)
+        self.key_func              = kwargs.get("key_func", None)
 
         self.index = 0
         self.pause = False
@@ -138,10 +139,6 @@ class Visualize(object):
         self.__draw__()
 
         while True:
-            if self.index >= self.features.shape[0] - 1:
-                self.index = self.features.shape[0] - 1
-                self.pause = True
-            
             key = cv2.waitKey(0 if self.pause else cv2.getTrackbarPos("delay", self.WINDOW_HANDLE))
             
             if key == 27:    # [esc] => Quit
@@ -162,6 +159,13 @@ class Visualize(object):
                 self.index -= 20
             elif key == -1:  # No input, continue
                 self.index += cv2.getTrackbarPos("skip", self.WINDOW_HANDLE)
+
+            if self.index >= self.features.shape[0] - 1:
+                self.index = self.features.shape[0] - 1
+                self.pause = True
+            
+            if self.key_func is not None:
+                self.key_func(self, key)
 
             # Update trackbar and thus trigger a draw
             cv2.setTrackbarPos("index", self.WINDOW_HANDLE, self.index)
@@ -298,7 +302,7 @@ class Visualize(object):
         image_new = self.image_add_trackbar(image_new, self.index, self.features)
         
         # Draw current label
-        self.image_write_label(image_new, feature_2d[0,0].label)
+        self.image_write_label(image_new, feature_2d[0, 0].label)
         cv2.imshow(self.WINDOW_HANDLE, image_new)
     
     def __index_update__(self, new_index=None):
