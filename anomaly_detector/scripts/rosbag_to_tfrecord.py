@@ -48,7 +48,7 @@ import sys
 import time
 from glob import glob
 
-from common import Visualize, utils, logger
+from common import utils, logger
 
 import rospy
 import rosbag
@@ -175,7 +175,7 @@ def rosbag_to_tfrecord():
             skipped_count = 0
             tfWriter = None        
 
-            colorspace = b"RGB"
+            colorspace = b"BGR"
             channels = 3
 
             start = time.time()
@@ -264,7 +264,6 @@ def rosbag_to_tfrecord():
 
                 if tfWriter:
                     tfWriter.close()
-    cv2.destroyAllWindows()
-
+                    
 if __name__ == "__main__":
     rosbag_to_tfrecord()
