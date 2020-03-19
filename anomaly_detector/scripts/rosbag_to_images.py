@@ -100,7 +100,7 @@ def rosbag_to_images():
         return
 
     # Add progress bar if multiple files
-    if len(bag_files > 1):
+    if len(bag_files) > 1:
         bag_files = tqdm(bag_files, desc="Bag files", file=sys.stderr)
 
     for bag_file in bag_files:
@@ -228,7 +228,7 @@ def rosbag_to_images():
                         skipped_count += 1
                         
                     # Print progress
-                    pbar.set_postfix("%i skipped" % skipped_count)
+                    pbar.set_postfix({"Skipped": skipped_count})
                     pbar.update()
     cv2.destroyAllWindows()
 

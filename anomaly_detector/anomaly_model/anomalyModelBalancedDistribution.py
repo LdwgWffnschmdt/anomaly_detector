@@ -95,7 +95,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
                     self._calculate_mean_and_covariance()
                 
                 # Print progress
-                pbar.set_postfix("%i vectors in Balanced Distribution" % len(self.balanced_distribution))
+                pbar.set_postfix({"Balanced Distribution": len(self.balanced_distribution)})
                 pbar.update()
 
         # Prune the distribution
@@ -116,7 +116,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
                     pruned += 1
 
                 # Print progress
-                pbar.set_postfix("%i vectors pruned" % pruned)
+                pbar.set_postfix({"Pruned": pruned})
                 pbar.update()
 
         self.balanced_distribution = self.balanced_distribution[prune_filter]

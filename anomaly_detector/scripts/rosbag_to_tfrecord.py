@@ -134,7 +134,7 @@ def rosbag_to_tfrecord():
         return
 
     # Add progress bar if multiple files
-    if len(bag_files > 1):
+    if len(bag_files) > 1:
         bag_files = tqdm(bag_files, desc="Bag files", file=sys.stderr)
 
     for bag_file in bag_files:
