@@ -1,20 +1,79 @@
 import os
-from cachetools import cached, LRUCache
-from cachetools.keys import hashkey
+from cachetools import cached, Cache, LRUCache
 
 import numpy as np
 import cv2
+import yaml
 
 import consts
+
+class FeatureProperty(object):
+    __cache__ = Cache(maxsize=9999999999)  # Least recently used cache for metadata
+    __changed__ = list()
+
+    def __init__(self, key):
+        self.key = key
+
+    @cached(__cache__, key=lambda self, time: time) # The cache should only be based on the timestamp
+    def __get_meta__(self, time):
+        # Load and decode metadata file
+        with open(self.__meta_file__(time), "r") as yaml_file:
+            return yaml.safe_load(yaml_file)
+    
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return None if not self.key in self.__get_meta__(obj.time).keys() else self.__get_meta__(obj.time)[self.key]
+
+    def __set__(self, obj, value):
+        # Get metadata
+        meta = self.__get_meta__(obj.time)
+        if meta[self.key] != value:
+            meta[self.key] = value
+
+            # Update the cache only. The metadata file is only updated on save()
+            self.__cache__[obj.time] = meta
+            self.__changed__.append(obj.time)
+    
+    @staticmethod
+    def __meta_file__(time):
+        res = os.path.join(consts.IMAGES_PATH, "%i.yml" % time)
+
+        if not os.path.exists(res) or not os.path.isfile(res):
+            raise ValueError("Could not find metadata file (%s)" % res)
+
+        return res
+
+    @staticmethod
+    def save(obj):
+        if not obj.time in FeatureProperty.__changed__:
+            return
+
+        # Get metadata from the cache
+        meta = FeatureProperty.__cache__.get(obj.time, None)
+
+        # If metadata for obj is not in the cache it was not loaded and thus not modified => do nothing
+        if meta is None:
+            return
+
+        # Update file with metadata from the cache
+        with open(FeatureProperty.__meta_file__(obj.time), "w") as yaml_file:
+            yaml.dump(meta, yaml_file, default_flow_style=False)
+            
+        FeatureProperty.__changed__.remove(obj.time)
 
 class Feature(np.ndarray):
     """A Feature is the output of a Feature Extractor (values) with metadata as attributes"""
 
-    def __new__(cls, input_array, x, y, w, h):
+    image_cache = LRUCache(maxsize=20*60*2)  # Least recently used cache for images
+
+    def __new__(cls, input_array, time, x, y, w, h):
         # Input array is an already formed ndarray instance
         # We first cast to be our class type
         obj = np.asarray(input_array).view(cls)
         
+        obj.time = time
+
         obj.x = x
         obj.y = y
         obj.w = w
@@ -26,6 +85,8 @@ class Feature(np.ndarray):
     def __array_finalize__(self, obj):
         if obj is None: return
         
+        self.time = getattr(obj, "time", None)
+
         # Patch position
         self.x = getattr(obj, "x", None)
         self.y = getattr(obj, "y", None)
@@ -34,11 +95,6 @@ class Feature(np.ndarray):
         self.w = getattr(obj, "w", None)
         self.h = getattr(obj, "h", None)
 
-        self.camera_location = None
-        self.time = None
-        self.label = None
-        self.rosbag = None
-        self.tfrecord = None
         self.feature_extractor = None
 
         # Will eventually be array [x, y]
@@ -47,15 +103,24 @@ class Feature(np.ndarray):
 
         self.__bins__ = {}
     
-    camera_position   = property(lambda self: None if self.camera_location is None else
-                                                np.array([self.camera_location[0],
-                                                          self.camera_location[1]]))
-    camera_rotation   = property(lambda self: None if self.camera_location is None else
-                                                self.camera_location[5])
+    label                 = FeatureProperty("label")
+    rosbag                = FeatureProperty("rosbag")
+    
+    _camera_rotation_x    = FeatureProperty("location/rotation/x")
+    _camera_rotation_y    = FeatureProperty("location/rotation/y")
+    _camera_rotation_z    = FeatureProperty("location/rotation/z")
 
-    image_cache = LRUCache(maxsize=20*60*2)  # Least recently used cache for images
+    _camera_translation_x = FeatureProperty("location/translation/x")
+    _camera_translation_y = FeatureProperty("location/translation/y")
+    _camera_translation_z = FeatureProperty("location/translation/z")
 
-    @cached(image_cache, key=lambda self, *args: hashkey(self.time)) # The cache should only be based on the timestamp
+    camera_position   = property(lambda self: np.array([_camera_translation_x, _camera_translation_y]))
+    camera_rotation   = _camera_rotation_z
+
+    def save_metadata(self):
+        FeatureProperty.save(self)
+
+    @cached(image_cache, key=lambda self, *args: self.time) # The cache should only be based on the timestamp
     def get_image(self, images_path=consts.IMAGES_PATH):
         return cv2.imread(os.path.join(images_path, "%i.jpg" % self.time))
 
@@ -84,5 +149,23 @@ class Feature(np.ndarray):
         return np.array(self, dtype=dtype)
 
 if __name__ == "__main__":
-    f = Feature(np.array([2,3,4]), 0, 0, 10, 10)
-    print f.w
+    f1 = Feature(np.array([2,3,4]), 1581005499270958533, 0, 0, 10, 10)
+    f2 = Feature(np.array([2,3,4]), 1581005499270958533, 1, 0, 10, 10)
+
+    print f1.w
+
+    l = f1.label
+    print l
+    print f2.label
+
+    f1.label = 2
+    print f1.label
+    print f2.label
+
+    f1.save_metadata()
+
+    f1.label = l
+    print f1.label
+    print f2.label
+    
+    f1.save_metadata()

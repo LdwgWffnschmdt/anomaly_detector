@@ -213,7 +213,7 @@ def rosbag_to_images():
                             "location/rotation/x"      : euler[0],
                             "location/rotation/y"      : euler[1],
                             "location/rotation/z"      : euler[2],
-                            "time"                     : t.to_nsec(), # There were some serious problems saving to_sec as float...
+                            "time"                     : t.to_nsec(),
                             "label"                    : image_label, # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
                             "rosbag"                   : bag_file
                         }

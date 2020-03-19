@@ -2,6 +2,7 @@ import os
 import time
 import sys
 import ast
+from glob import glob
 
 import numpy as np
 import h5py
@@ -27,45 +28,50 @@ class FeatureArray(np.ndarray):
 
         logger.info("Reading metadata and features from: %s" % filename)
 
-        # Check file extension
-        _, file_extension = os.path.splitext(filename)
-        if file_extension != ".h5":
-            raise ValueError("Filename has to be *.h5")
-        
-        with h5py.File(filename, "r") as hf:
-            attrs = dict(hf.attrs)
+        # Check if filename is path to images
+        if os.path.isdir(filename):
+            attrs = dict()
 
-            dt_str = h5py.string_dtype(encoding='ascii')
+            # Get all images
+            files = glob(os.path.join(filename, "*.jpg"))
 
-            features_raw      = np.array(hf["features"]        , dtype=np.float32)
-            camera_locations  = np.array(hf["camera_locations"], dtype=np.float32)
-            times             = np.array(hf["times"]           , dtype=np.uint64)
-            labels            = np.array(hf["labels"]          , dtype=np.int8)
-            rosbags           = np.array(hf["rosbags"]         , dtype=dt_str)
-            tfrecords         = np.array(hf["tfrecords"]       , dtype=dt_str)
-            feature_extractor = hf.attrs["Extractor"]
-
-            locations = hf.get("locations")
-            if locations is not None:
-                locations = np.array(locations)
+            features = np.empty(shape=(len(files), 1, 1), dtype=Feature)
             
-            total, h, w, _ = features_raw.shape
+            for i, f in enumerate(tqdm(files, desc="Loading empty features", file=sys.stderr)):
+                time = int(os.path.splitext(os.path.basename(f))[0])
+                feature = Feature(np.empty(()), time, 0, 0, 0, 0)
+                features[i, 0, 0] = feature
 
-            features = np.empty(shape=(total, h, w), dtype=Feature)
-            
-            for i, y, x in tqdm(np.ndindex(features.shape), desc="Loading features", total=np.prod(features.shape), file=sys.stderr):
-                feature = Feature(features_raw[i, y, x], x, y, w, h)
-                feature.camera_location = camera_locations[i]
-                feature.time = times[i]
-                feature.label = labels[i]
-                feature.rosbag = rosbags[i]
-                feature.tfrecord = tfrecords[i]
-                feature.feature_extractor = feature_extractor
-                
+        # Check if file is h5 file
+        elif os.path.splitext(filename)[1] == ".h5":
+            with h5py.File(filename, "r") as hf:
+                attrs = dict(hf.attrs)
+
+                dt_str = h5py.string_dtype(encoding='ascii')
+
+                features_raw      = np.array(hf["features"], dtype=np.float32)
+                times             = np.array(hf["times"]   , dtype=np.uint64)
+                feature_extractor = hf.attrs["Extractor"]
+
+                locations = hf.get("locations")
                 if locations is not None:
-                    feature.location = locations[i, y, x]
+                    locations = np.array(locations)
+                
+                total, h, w, _ = features_raw.shape
 
-                features[i, y, x] = feature
+                features = np.empty(shape=(total, h, w), dtype=Feature)
+                
+                for i, y, x in tqdm(np.ndindex(features.shape), desc="Loading features", total=np.prod(features.shape), file=sys.stderr):
+                    feature = Feature(features_raw[i, y, x], times[i], x, y, w, h)
+                    feature.feature_extractor = feature_extractor
+                    
+                    if locations is not None:
+                        feature.location = locations[i, y, x]
+
+                    features[i, y, x] = feature
+        
+        else:
+            raise ValueError("Filename has to be *.h5 or path to images with metadata files")
         
         obj = np.asarray(features).view(cls)
         obj.attrs = attrs
@@ -296,3 +302,14 @@ class FeatureArray(np.ndarray):
         features_flat = self.flatten()
         for i in range(len(features_flat)):
             features_flat[i] = np.append(features_flat[i], features_flat[i].location)
+
+if __name__ == "__main__":
+    import consts
+    import timeit
+
+    features = FeatureArray(consts.FEATURES_FILE)
+
+    def _test_meta_load():
+        x = features[0, 0, 0].label
+
+    print timeit.repeat(_test_meta_load, repeat=1, number=5)

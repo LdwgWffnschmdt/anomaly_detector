@@ -132,12 +132,8 @@ class FeatureExtractorBase(object):
             hf.attrs["Start"] = start
             
             # Create arrays to store output
-            feature_dataset     = None # We don't know the feature shape yet
-            locations_dataset   = np.empty((total, 6), dtype=np.float32)
-            time_dataset        = np.empty((total,),   dtype=np.uint64)
-            label_dataset       = np.empty((total,),   dtype=np.int8)
-            rosbag_dataset      = np.empty((total,),   dtype=np.str)
-            tfrecord_dataset    = np.empty((total,),   dtype=np.str)
+            feature_dataset = None # We don't know the feature shape yet
+            time_dataset    = np.empty((total,),   dtype=np.uint64)
             
             # Loop over the dataset
             with tqdm(desc="Extracting features (batch size: %i)" % batch_size, total=total, file=sys.stderr) as pbar:
@@ -152,31 +148,16 @@ class FeatureExtractorBase(object):
                         feature_dataset = np.empty((total,) + feature_batch[0].shape)
 
                     # Save the features and their metadata to the arrays
-                    feature_dataset[counter : counter + current_batch_size]   = feature_batch.numpy()
-                    locations_dataset[counter : counter + current_batch_size] = batch[1].numpy()
-                    time_dataset[counter : counter + current_batch_size]      = batch[2].numpy()
-                    label_dataset[counter : counter + current_batch_size]     = batch[3].numpy()
-                    rosbag_dataset[counter : counter + current_batch_size]    = batch[4].numpy()
-                    tfrecord_dataset[counter : counter + current_batch_size]  = batch[5].numpy()
+                    feature_dataset[counter : counter + current_batch_size] = feature_batch.numpy()
+                    time_dataset[counter : counter + current_batch_size]    = batch[2].numpy()
 
                     # Count and update progress bar
                     counter += current_batch_size
                     pbar.update(n=current_batch_size)
 
             # Save arrays to file
-            hf.create_dataset("features"        , data=feature_dataset   , dtype=np.float32,  compression=compression, compression_opts=compression_opts)
-            hf.create_dataset("camera_locations", data=locations_dataset , dtype=np.float32,  compression=compression, compression_opts=compression_opts)
-            hf["camera_locations"].attrs["Axes"] = ["translation/x",
-                                                    "translation/y",
-                                                    "translation/z",
-                                                    "rotation/x",
-                                                    "rotation/y",
-                                                    "rotation/z"]
-            hf.create_dataset("times"           , data=time_dataset      , dtype=np.uint64,   compression=compression, compression_opts=compression_opts)
-            hf.create_dataset("labels"          , data=label_dataset     , dtype=np.int8,     compression=compression, compression_opts=compression_opts)
-            dt_str = h5py.string_dtype(encoding='ascii')
-            hf.create_dataset("rosbags"         , data=rosbag_dataset    , dtype=dt_str,      compression=compression, compression_opts=compression_opts)
-            hf.create_dataset("tfrecords"       , data=tfrecord_dataset  , dtype=dt_str,      compression=compression, compression_opts=compression_opts)
+            hf.create_dataset("features", data=feature_dataset, dtype=np.float32, compression=compression, compression_opts=compression_opts)
+            hf.create_dataset("times",    data=time_dataset,    dtype=np.uint64,  compression=compression, compression_opts=compression_opts)
         except:
             exc = traceback.format_exc()
             logger.error(exc)

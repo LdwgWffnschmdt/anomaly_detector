@@ -4,11 +4,11 @@
 import consts
 import argparse
 
-parser = argparse.ArgumentParser(description="Change labels in the supplied h5 files and .",
+parser = argparse.ArgumentParser(description="Change labels.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.FEATURES_FILES,
-                    help="The feature file(s). Read from first, write labels to all. Supports \"path/to/*.h5\"")
+parser.add_argument("--images", metavar="F", dest="images", type=str, nargs='*', default=consts.IMAGES_PATH,
+                    help="Path to images (Default: %s)" % consts.IMAGES_PATH)
 
 args = parser.parse_args()
 
@@ -18,6 +18,7 @@ import time
 import traceback
 from glob import glob
 import numpy as np
+from tqdm import tqdm
 
 from common import utils, logger, FeatureArray, Visualize
 
@@ -25,32 +26,13 @@ last_index = 0
 label = -1
 
 def relabel():
-    ################
-    #  Parameters  #
-    ################
-    files       = args.files
-
     # Check parameters
-    if not files or len(files) < 1 or files[0] == "":
-        raise ValueError("Please specify at least one filename (%s)" % files)
-    
-    if isinstance(files, basestring):
-        files = [files]
-        
-    # Expand wildcards
-    files_expanded = []
-    for s in files:
-        files_expanded += glob(s)
-    files = list(set(files_expanded)) # Remove duplicates
-
-    # Check parameters
-    features_file = files[1]
-    if features_file == "" or not os.path.exists(features_file) or not os.path.isfile(features_file):
-        logger.error("Specified feature file does not exist (%s)" % features_file)
+    if args.images == "" or not os.path.exists(args.images) or not os.path.isdir(args.images):
+        logger.error("Specified path does not exist (%s)" % args.images)
         return
 
     # Load the file
-    features = FeatureArray(features_file)
+    features = FeatureArray(args.images)
 
     # Visualize
     vis = Visualize(features)
@@ -85,9 +67,10 @@ def relabel():
         indices = range(last_index, v.index)
         last_index = v.index
         
-        # Label recent frames with the old label
-        for i in indices:
-            features[i, 0, 0].label = label
+        if label != -1:
+            # Label recent frames with the old label
+            for i in indices:
+                features[i, 0, 0].label = label
 
         label = new_label
 
@@ -95,9 +78,9 @@ def relabel():
 
     vis.show()
 
-    labels = np.array([x.label for x in features[:, 0, 0]])
-    
-    # TODO: Save these labels
+    # Save labels
+    for i in tqdm(range(features.shape[0]), desc="Saving labels", file=sys.stderr):
+        features[i, 0, 0].save_metadata()
 
 if __name__ == "__main__":
     relabel()
