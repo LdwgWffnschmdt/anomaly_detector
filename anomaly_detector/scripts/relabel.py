@@ -143,9 +143,8 @@ def relabel():
 
     vis.show()
 
-    # Save labels
-    for i in tqdm(range(features.shape[0]), desc="Saving labels", file=sys.stderr):
-        features[i, 0, 0].save_metadata()
+    # Save metadata
+    features.save_metadata()
 
 if __name__ == "__main__":
     relabel()

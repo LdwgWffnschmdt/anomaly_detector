@@ -15,12 +15,6 @@ class FeatureProperty(object):
         self.key = key
         self.default = default
 
-    @cached(__cache__, key=lambda self, obj: obj.time) # The cache should only be based on the timestamp
-    def __get_meta__(self, obj):
-        # Load and decode metadata file
-        with open(self.__meta_file__(obj), "r") as yaml_file:
-            return yaml.safe_load(yaml_file)
-    
     def __get__(self, obj, objtype=None):
         if obj is None:
             return self
@@ -37,6 +31,13 @@ class FeatureProperty(object):
             self.__changed__.append(obj.time)
     
     @staticmethod
+    @cached(__cache__, key=lambda obj: obj.time) # The cache should only be based on the timestamp
+    def __get_meta__(obj):
+        # Load and decode metadata file
+        with open(FeatureProperty.__meta_file__(obj), "r") as yaml_file:
+            return yaml.safe_load(yaml_file)
+    
+    @staticmethod
     def __meta_file__(obj):
         res = os.path.join(obj.images_path, "%i.yml" % obj.time)
 
@@ -46,22 +47,30 @@ class FeatureProperty(object):
         return res
 
     @staticmethod
-    def save(obj):
+    def changed(obj):
         if not obj.time in FeatureProperty.__changed__:
-            return
+            return False
 
         # Get metadata from the cache
         meta = FeatureProperty.__cache__.get(obj.time, None)
 
         # If metadata for obj is not in the cache it was not loaded and thus not modified => do nothing
         if meta is None:
-            return
+            return False
+
+        return True
+    
+    @staticmethod
+    def save(obj):
+        if not FeatureProperty.changed(obj):
+            return False
 
         # Update file with metadata from the cache
         with open(FeatureProperty.__meta_file__(obj), "w") as yaml_file:
             yaml.dump(meta, yaml_file, default_flow_style=False)
             
         FeatureProperty.__changed__.remove(obj.time)
+        return True
 
 class Feature(np.ndarray):
     """A Feature is the output of a Feature Extractor (values) with metadata as attributes"""
@@ -123,8 +132,13 @@ class Feature(np.ndarray):
     camera_position   = property(lambda self: np.array([_camera_translation_x, _camera_translation_y]))
     camera_rotation   = _camera_rotation_z
 
+    metadata_changed  = property(lambda self: FeatureProperty.changed(self))
+
+    def preload_metadata(self):
+        return FeatureProperty.__get_meta__(self)
+
     def save_metadata(self):
-        FeatureProperty.save(self)
+        return FeatureProperty.save(self)
 
     @cached(image_cache, key=lambda self, *args: self.time) # The cache should only be based on the timestamp
     def get_image(self, images_path=None):

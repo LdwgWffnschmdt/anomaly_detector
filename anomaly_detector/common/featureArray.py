@@ -114,6 +114,16 @@ class FeatureArray(np.ndarray):
     def round_number(self, round_number):
         return self[[f[0,0].round_number == round_number for f in self]]
 
+    metadata_changed = property(lambda self: self[[f[0,0].metadata_changed for f in self]])
+
+    def save_metadata(self):
+        for f in tqdm(self.metadata_changed.flatten(), desc="Saving metadata to file", file=sys.stderr):
+            f.save_metadata()
+
+    def preload_metadata(self):
+        for f in tqdm(self.flatten(), desc="Preloading metadata", file=sys.stderr):
+            f.preload_metadata()
+
     def bin(self, bin, cell_size):
         """ Get a view of only the features that are in a specific bin
 
