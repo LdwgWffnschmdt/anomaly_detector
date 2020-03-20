@@ -8,7 +8,10 @@ parser = argparse.ArgumentParser(description="Change labels.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
 parser.add_argument("images", metavar="F", type=str, default=consts.IMAGES_PATH,
-                    help="Path to images (Default: %s)" % consts.IMAGES_PATH)
+                    help="Path to images (default: %s)" % consts.IMAGES_PATH)
+
+parser.add_argument("--single", metavar="S", type=bool, default=False,
+                    help="Only label single frames (default: True)")
 
 args = parser.parse_args()
 
@@ -64,6 +67,10 @@ def relabel():
             features[v.index, 0, 0].label = new_label
             v.__draw__()
         
+        # Stop here if we just want to label single images
+        if args.single:
+            return
+
         indices = range(last_index, v.index)
         last_index = v.index
         
