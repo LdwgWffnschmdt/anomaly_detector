@@ -11,8 +11,9 @@ class FeatureProperty(object):
     __cache__ = Cache(maxsize=9999999999)  # Least recently used cache for metadata
     __changed__ = list()
 
-    def __init__(self, key):
+    def __init__(self, key, default=None):
         self.key = key
+        self.default = default
 
     @cached(__cache__, key=lambda self, obj: obj.time) # The cache should only be based on the timestamp
     def __get_meta__(self, obj):
@@ -23,12 +24,12 @@ class FeatureProperty(object):
     def __get__(self, obj, objtype=None):
         if obj is None:
             return self
-        return None if not self.key in self.__get_meta__(obj).keys() else self.__get_meta__(obj)[self.key]
+        return self.__get_meta__(obj).get(self.key, self.default)
 
     def __set__(self, obj, value):
         # Get metadata
         meta = self.__get_meta__(obj)
-        if meta[self.key] != value:
+        if meta.get(self.key, self.default) != value:
             meta[self.key] = value
 
             # Update the cache only. The metadata file is only updated on save()
@@ -105,7 +106,10 @@ class Feature(np.ndarray):
 
         self.__bins__ = {}
     
-    label                 = FeatureProperty("label")
+    direction             = FeatureProperty("direction", 0)     # 0: Unknown, 1: CCW, 2: CW
+    round_number          = FeatureProperty("round_number", 0)  # 0: Unknown, >=0: Round index (zero based)
+
+    label                 = FeatureProperty("label", 0)         # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
     rosbag                = FeatureProperty("rosbag")
     
     _camera_rotation_x    = FeatureProperty("location/rotation/x")

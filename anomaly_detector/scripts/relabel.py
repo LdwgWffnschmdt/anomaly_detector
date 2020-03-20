@@ -13,6 +13,9 @@ parser.add_argument("images", metavar="F", type=str, default=consts.IMAGES_PATH,
 parser.add_argument("--single", dest="single", action="store_true",
                     help="Only label single frames (default: True)")
 
+parser.add_argument("--mode", metavar="M", dest="mode", type=str, default="label",
+                    help="Set \"label\" or \"direction_and_round\" (default: \"label\")")
+
 args = parser.parse_args()
 
 import os
@@ -27,6 +30,8 @@ from common import utils, logger, FeatureArray, Visualize
 
 last_index = 0
 label = -1
+direction = 0
+round_number = 0
 
 def relabel():
     # Check parameters
@@ -41,7 +46,7 @@ def relabel():
     vis = Visualize(features, images_path=args.images)
     vis.pause = True
 
-    def _key_func(v, key):
+    def _key_func_label(v, key):
         global last_index, label
 
         # Get the new label from now on
@@ -81,7 +86,60 @@ def relabel():
 
         label = new_label
 
-    vis.key_func = _key_func
+    def _key_func_dir_round(v, key):
+        global last_index, direction, round_number
+
+        # Get the new label from now on
+        
+        if key == 44:   # [,]   => Direction is CCW
+            new_direction = 1
+        elif key == 46: # [.]   => Direction is CW
+            new_direction = 2
+        elif key == 35: # [#]   => Direction unknown
+            new_direction = 0
+        elif key == 43: # [+]   => Increase round number by 1
+            round_number += 1
+            new_direction = direction
+        elif key == 45: # [-]   => Decrease round number by 1
+            round_number -= 1
+            new_direction = direction
+        else:
+            new_direction = direction
+        
+        if new_direction == None:
+            v.pause = True
+            return
+
+        # If we skipped back
+        if v.index < last_index:
+            last_index = v.index
+        else:
+            # Set the metadata for this frame
+            features[v.index, 0, 0].direction   = new_direction
+            features[v.index, 0, 0].round_number = round_number
+            v.__draw__()
+        
+        # Stop here if we just want to label single images
+        if args.single:
+            return
+
+        indices = range(last_index, v.index)
+        last_index = v.index
+        
+        if direction != -1:
+            # Set recent frames with the old metadata
+            for i in indices:
+                features[i, 0, 0].direction   = direction
+                features[i, 0, 0].round_number = round_number
+
+        direction = new_direction
+
+    if args.mode == "label":
+        vis.key_func = _key_func_label
+    elif args.mode == "direction_and_round":
+        vis.key_func = _key_func_dir_round
+    else:
+        raise ValueError("Mode not supported")
 
     vis.show()
 

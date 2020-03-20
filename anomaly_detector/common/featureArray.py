@@ -101,10 +101,19 @@ class FeatureArray(np.ndarray):
     files      = property(__get_property__("Files"))
     batch_size = property(__get_property__("Batch size"))
     
-    # As of right now one image has one label, so we just look at the top left patch
-    no_anomaly = property(lambda self: self[[f[0,0].label == 1 for f in self]])
-    anomaly    = property(lambda self: self[[f[0,0].label == 2 for f in self]])
+    ### Often used views for convenience
+    unknown_anomaly = property(lambda self: self[[f[0,0].label == 0 for f in self]])
+    no_anomaly      = property(lambda self: self[[f[0,0].label == 1 for f in self]])
+    anomaly         = property(lambda self: self[[f[0,0].label == 2 for f in self]])
     
+    direction_unknown = property(lambda self: self[[f[0,0].direction == 0 for f in self]])
+    direction_ccw     = property(lambda self: self[[f[0,0].direction == 1 for f in self]])
+    direction_cw      = property(lambda self: self[[f[0,0].direction == 2 for f in self]])
+    
+    round_number_unknown = property(lambda self: self[[f[0,0].round_number == 0 for f in self]])
+    def round_number(self, round_number):
+        return self[[f[0,0].round_number == round_number for f in self]]
+
     def bin(self, bin, cell_size):
         """ Get a view of only the features that are in a specific bin
 

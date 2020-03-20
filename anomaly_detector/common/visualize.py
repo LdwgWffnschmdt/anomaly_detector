@@ -9,8 +9,32 @@ from common import utils, logger, ImageLocationUtility
 class Visualize(object):
     WINDOW_HANDLE = "visualize_image"
 
+    LABEL_TEXTS = {
+        0: "Unknown",
+        1: "No anomaly",
+        2: "Contains anomaly"
+    }
+
+    LABEL_COLORS = {
+        0: (255,255,255),   # Unknown
+        1: (0, 204, 0),     # No anomaly
+        2: (0, 0, 255)      # Contains anomaly
+    }
+
+    DIRECTION_TEXTS = {
+        0: "Unknown",
+        1: "CCW",
+        2: "CW"
+    }
+
+    DIRECTION_COLORS = {
+        0: (255,255,255),   # Unknown
+        1: (100, 0, 0),     # CCW
+        2: (100, 100, 0)      # CW
+    }
+
     @staticmethod
-    def image_write_label(image, label):
+    def image_write_label(image, feature):
         """Write the specified label on an image for debug purposes
         (0: Unknown, 1: No anomaly, 2: Contains an anomaly)
         
@@ -18,36 +42,53 @@ class Visualize(object):
             image (Image)
         """
         
-        text = {
-            0: "Unknown",
-            1: "No anomaly",
-            2: "Contains anomaly"
-        }
-
-        colors = {
-            0: (255,255,255),   # Unknown
-            1: (0, 204, 0),     # No anomaly
-            2: (0, 0, 255)      # Contains anomaly
-        }
-
         font                   = cv2.FONT_HERSHEY_SIMPLEX
-        bottomLeftCornerOfText = (10,50)
         fontScale              = 0.5
         thickness              = 1
 
         cv2.putText(image,"Label: ",
-            bottomLeftCornerOfText,
+            (10,50), # bottomLeftCornerOfText
             font,
             fontScale,
             (255,255,255),
             thickness, lineType=cv2.LINE_AA)
         
-        cv2.putText(image, text.get(label, 0),
-            (bottomLeftCornerOfText[0] + 50, bottomLeftCornerOfText[1]),
+        cv2.putText(image, Visualize.LABEL_TEXTS.get(feature.label, 0),
+            (60, 50),
             font,
             fontScale,
-            colors.get(label, 0),
+            Visualize.LABEL_COLORS.get(feature.label, 0),
             thickness, lineType=cv2.LINE_AA)
+
+        if feature.direction != 0:
+            cv2.putText(image,"Direction: ",
+                (10,80), # bottomLeftCornerOfText
+                font,
+                fontScale,
+                (255,255,255),
+                thickness, lineType=cv2.LINE_AA)
+            
+            cv2.putText(image, Visualize.DIRECTION_TEXTS.get(feature.direction, 0),
+                (90, 80),
+                font,
+                fontScale,
+                Visualize.DIRECTION_COLORS.get(feature.direction, 0),
+                thickness, lineType=cv2.LINE_AA)
+
+        if feature.round_number != 0:
+            cv2.putText(image,"Round: ",
+                (10,110), # bottomLeftCornerOfText
+                font,
+                fontScale,
+                (255,255,255),
+                thickness, lineType=cv2.LINE_AA)
+            
+            cv2.putText(image, str(feature.round_number),
+                (60, 110),
+                font,
+                fontScale,
+                (255,255,255),
+                thickness, lineType=cv2.LINE_AA)
 
     @staticmethod
     def image_add_trackbar(image, index, features):
@@ -59,29 +100,56 @@ class Visualize(object):
             features (FeatureArray)
         """
         
-        colors = {
-            0: (255,255,255),   # Unknown
-            1: (0, 204, 0),     # No anomaly
-            2: (0, 0, 255)      # Contains anomaly
-        }
-
         width = image.shape[1]
 
-        trackbar = np.zeros((width, 3), dtype=np.uint8)
+        # LABELS
+        trackbar_labels = np.zeros((width, 3), dtype=np.uint8)
 
         factor = features.shape[0] / float(width)
 
         for i in range(width):
             # Get label
             label = features[int(i * factor), 0, 0].label
-            trackbar[i,:] = colors[label]
+            trackbar_labels[i,:] = Visualize.LABEL_COLORS[label]
 
-        trackbar[int(index / factor),:] = (255, 0, 0)
+        trackbar_labels[int(index / factor),:] = (255, 0, 0)
 
         # Repeat vertically
-        trackbar = np.expand_dims(trackbar, axis=0).repeat(15, axis=0)
+        trackbar_labels = np.expand_dims(trackbar_labels, axis=0).repeat(15, axis=0)
 
-        return np.concatenate((image, trackbar), axis=0)
+        # DIRECTION
+        trackbar_direction = np.zeros((width, 3), dtype=np.uint8)
+
+        factor = features.shape[0] / float(width)
+
+        for i in range(width):
+            # Get label
+            direction = features[int(i * factor), 0, 0].direction
+            trackbar_direction[i,:] = Visualize.DIRECTION_COLORS[direction]
+
+        trackbar_direction[int(index / factor),:] = (255, 0, 0)
+
+        # Repeat vertically
+        trackbar_direction = np.expand_dims(trackbar_direction, axis=0).repeat(15, axis=0)
+
+
+        # ROUND
+        trackbar_round = np.zeros((width, 3), dtype=np.uint8)
+
+        factor = features.shape[0] / float(width)
+
+        for i in range(width):
+            # Get label
+            round_number = features[int(i * factor), 0, 0].round_number
+            trackbar_round[i,:] = (0, 100, (round_number % 2) * 100)
+
+        trackbar_round[int(index / factor),:] = (255, 0, 0)
+
+        # Repeat vertically
+        trackbar_round = np.expand_dims(trackbar_round, axis=0).repeat(15, axis=0)
+
+
+        return np.concatenate((image, trackbar_labels, trackbar_direction, trackbar_round), axis=0)
 
     def __init__(self, features, **kwargs):
         """Visualize features on the source image
@@ -302,7 +370,7 @@ class Visualize(object):
         image_new = self.image_add_trackbar(image_new, self.index, self.features)
         
         # Draw current label
-        self.image_write_label(image_new, feature_2d[0, 0].label)
+        self.image_write_label(image_new, feature_2d[0, 0])
         cv2.imshow(self.WINDOW_HANDLE, image_new)
     
     def __index_update__(self, new_index=None):
@@ -314,7 +382,7 @@ class Visualize(object):
 
 if __name__ == "__main__":
     from common import FeatureArray
-    features = FeatureArray(consts.FEATURES_FILE)
+    features = FeatureArray(consts.IMAGES_PATH)
 
     vis = Visualize(features)
     vis.show()
