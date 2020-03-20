@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser(description="Change labels.",
 parser.add_argument("images", metavar="F", type=str, default=consts.IMAGES_PATH,
                     help="Path to images (default: %s)" % consts.IMAGES_PATH)
 
-parser.add_argument("--single", metavar="S", type=bool, default=False,
+parser.add_argument("--single", dest="single", action="store_true",
                     help="Only label single frames (default: True)")
 
 args = parser.parse_args()

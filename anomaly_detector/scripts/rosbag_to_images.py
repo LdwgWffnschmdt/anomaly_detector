@@ -31,8 +31,7 @@ parser.add_argument("--tf_base_link", metavar="TF_B", dest="tf_base_link", type=
                     default="realsense_link",
                     help="TF camera frame (default: base_link)")
 
-parser.add_argument("--override", metavar="O", dest="override", type=bool,
-                    default=False,
+parser.add_argument("--override", dest="override", action="store_true",
                     help="Override existing images (default: False)")
 
 parser.add_argument("--label", metavar="L", dest="label", type=int,
