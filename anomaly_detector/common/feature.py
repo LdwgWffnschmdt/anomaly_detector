@@ -14,20 +14,20 @@ class FeatureProperty(object):
     def __init__(self, key):
         self.key = key
 
-    @cached(__cache__, key=lambda self, time: time) # The cache should only be based on the timestamp
-    def __get_meta__(self, time):
+    @cached(__cache__, key=lambda self, obj: obj.time) # The cache should only be based on the timestamp
+    def __get_meta__(self, obj):
         # Load and decode metadata file
-        with open(self.__meta_file__(time), "r") as yaml_file:
+        with open(self.__meta_file__(obj), "r") as yaml_file:
             return yaml.safe_load(yaml_file)
     
     def __get__(self, obj, objtype=None):
         if obj is None:
             return self
-        return None if not self.key in self.__get_meta__(obj.time).keys() else self.__get_meta__(obj.time)[self.key]
+        return None if not self.key in self.__get_meta__(obj).keys() else self.__get_meta__(obj)[self.key]
 
     def __set__(self, obj, value):
         # Get metadata
-        meta = self.__get_meta__(obj.time)
+        meta = self.__get_meta__(obj)
         if meta[self.key] != value:
             meta[self.key] = value
 
@@ -36,8 +36,8 @@ class FeatureProperty(object):
             self.__changed__.append(obj.time)
     
     @staticmethod
-    def __meta_file__(time):
-        res = os.path.join(consts.IMAGES_PATH, "%i.yml" % time)
+    def __meta_file__(obj):
+        res = os.path.join(obj.images_path, "%i.yml" % obj.time)
 
         if not os.path.exists(res) or not os.path.isfile(res):
             raise ValueError("Could not find metadata file (%s)" % res)
@@ -57,7 +57,7 @@ class FeatureProperty(object):
             return
 
         # Update file with metadata from the cache
-        with open(FeatureProperty.__meta_file__(obj.time), "w") as yaml_file:
+        with open(FeatureProperty.__meta_file__(obj), "w") as yaml_file:
             yaml.dump(meta, yaml_file, default_flow_style=False)
             
         FeatureProperty.__changed__.remove(obj.time)
@@ -97,6 +97,8 @@ class Feature(np.ndarray):
 
         self.feature_extractor = None
 
+        self.images_path = consts.IMAGES_PATH # Can be overwritten
+
         # Will eventually be array [x, y]
         # (call FeatureArray.calculate_locations)
         self.location = None
@@ -121,7 +123,8 @@ class Feature(np.ndarray):
         FeatureProperty.save(self)
 
     @cached(image_cache, key=lambda self, *args: self.time) # The cache should only be based on the timestamp
-    def get_image(self, images_path=consts.IMAGES_PATH):
+    def get_image(self, images_path=None):
+        if images_path is None: images_path = self.images_path
         return cv2.imread(os.path.join(images_path, "%i.jpg" % self.time))
 
     def get_bin(self, cell_size, extent=None):

@@ -204,7 +204,7 @@ class Visualize(object):
         cv2.setWindowTitle(self.WINDOW_HANDLE, str(feature_2d[0, 0].time))
 
         # Get the image
-        image = cv2.cvtColor(feature_2d[0, 0].get_image(self.images_path), cv2.COLOR_BGR2RGB)
+        image = feature_2d[0, 0].get_image()
 
         # Update parameters
         if self.has_locations:

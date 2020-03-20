@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Change labels.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("--images", metavar="F", dest="images", type=str, nargs='*', default=consts.IMAGES_PATH,
+parser.add_argument("images", metavar="F", type=str, default=consts.IMAGES_PATH,
                     help="Path to images (Default: %s)" % consts.IMAGES_PATH)
 
 args = parser.parse_args()
@@ -35,7 +35,7 @@ def relabel():
     features = FeatureArray(args.images)
 
     # Visualize
-    vis = Visualize(features)
+    vis = Visualize(features, images_path=args.images)
     vis.pause = True
 
     def _key_func(v, key):

@@ -10,11 +10,12 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from common import utils, logger, Feature, ImageLocationUtility
+import consts
 
 class FeatureArray(np.ndarray):
     """Array with metadata."""
 
-    def __new__(cls, filename):
+    def __new__(cls, filename, **kwargs):
         """Reads metadata and features from a HDF5 file.
         
         Args:
@@ -40,11 +41,14 @@ class FeatureArray(np.ndarray):
             for i, f in enumerate(tqdm(files, desc="Loading empty features", file=sys.stderr)):
                 time = int(os.path.splitext(os.path.basename(f))[0])
                 feature = Feature(np.empty(()), time, 0, 0, 0, 0)
+                feature.images_path = filename
                 features[i, 0, 0] = feature
 
         # Check if file is h5 file
         elif os.path.splitext(filename)[1] == ".h5":
             with h5py.File(filename, "r") as hf:
+                images_path = kwargs.get("images_path", consts.IMAGES_PATH)
+
                 attrs = dict(hf.attrs)
 
                 dt_str = h5py.string_dtype(encoding='ascii')
@@ -64,6 +68,7 @@ class FeatureArray(np.ndarray):
                 for i, y, x in tqdm(np.ndindex(features.shape), desc="Loading features", total=np.prod(features.shape), file=sys.stderr):
                     feature = Feature(features_raw[i, y, x], times[i], x, y, w, h)
                     feature.feature_extractor = feature_extractor
+                    feature.images_path = images_path
                     
                     if locations is not None:
                         feature.location = locations[i, y, x]
