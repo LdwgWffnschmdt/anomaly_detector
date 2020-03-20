@@ -13,6 +13,5 @@ psutil
 gputil
 XlsxWriter
 
-rospkg
 opencv-python
 pillow
