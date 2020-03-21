@@ -51,11 +51,8 @@ class FeatureProperty(object):
         if not obj.time in FeatureProperty.__changed__:
             return False
 
-        # Get metadata from the cache
-        meta = FeatureProperty.__cache__.get(obj.time, None)
-
         # If metadata for obj is not in the cache it was not loaded and thus not modified => do nothing
-        if meta is None:
+        if FeatureProperty.__cache__.get(obj.time, None) is None:
             return False
 
         return True
@@ -64,6 +61,9 @@ class FeatureProperty(object):
     def save(obj):
         if not FeatureProperty.changed(obj):
             return False
+
+        # Get metadata from the cache
+        meta = FeatureProperty.__cache__.get(obj.time, None)
 
         # Update file with metadata from the cache
         with open(FeatureProperty.__meta_file__(obj), "w") as yaml_file:
