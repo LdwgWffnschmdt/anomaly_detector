@@ -18,7 +18,7 @@ class Visualize(object):
     }
 
     LABEL_COLORS = {
-        0: (255,255,255),   # Unknown
+        0: (255,255,255),     # Unknown
         1: (80, 175, 76),     # No anomaly
         2: (54, 67, 244)      # Contains anomaly
     }
@@ -30,7 +30,7 @@ class Visualize(object):
     }
 
     DIRECTION_COLORS = {
-        0: (255,255,255),   # Unknown
+        0: (255,255,255),     # Unknown
         1: (136, 150, 0),     # CCW
         2: (0, 152, 255)      # CW
     }
@@ -109,7 +109,7 @@ class Visualize(object):
         for i in range(width):
             # Get label
             label = features[int(i * factor), 0, 0].label
-            image[210:225, i, :] = Visualize.LABEL_COLORS[label]
+            if label != 0: image[210:225, i, :] = Visualize.LABEL_COLORS[label]
 
         image[210:225, int(index / factor), :] = (1, 1, 1)
 
@@ -117,7 +117,7 @@ class Visualize(object):
         for i in range(width):
             # Get label
             direction = features[int(i * factor), 0, 0].direction
-            image[255:270, i, :] = Visualize.DIRECTION_COLORS[direction]
+            if direction != 0: image[255:270, i, :] = Visualize.DIRECTION_COLORS[direction]
 
         image[255:270, int(index / factor), :] = (1, 1, 1)
 
@@ -308,7 +308,6 @@ class Visualize(object):
                 if self.mode == 1:
                     self._label = -1
                     self._direction = -1
-                    self._round_number = -1
                     self.__draw__()
 
             # Update trackbar and thus trigger a draw
