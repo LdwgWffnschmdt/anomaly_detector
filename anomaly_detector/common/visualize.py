@@ -462,8 +462,8 @@ class Visualize(object):
             # self._ax.plot(feature_2d[-1, -1].location[0], feature_2d[-1, -1].location[1], "r+", markersize=2, linewidth=2)
             
             # Draw camera position
-            self._ax.plot(feature_2d[0, 0].camera_position[0], 
-                          feature_2d[0, 0].camera_position[1], "bo")
+            self._ax.plot(feature_2d[0, 0].camera_translation_x, 
+                          feature_2d[0, 0].camera_translation_y, "bo")
             
             self._fig.canvas.draw()
         
@@ -503,7 +503,7 @@ class Visualize(object):
         
         # Draw grid
         if self.show_grid:
-            relative_grid = self._ilu.absolute_to_relative(self._absolute_locations, feature_2d[0,0].camera_position, feature_2d[0,0].camera_rotation)
+            relative_grid = self._ilu.absolute_to_relative(self._absolute_locations, feature_2d[0,0].camera_translation, feature_2d[0,0].camera_rotation)
             image_grid = self._ilu.relative_to_image(relative_grid, image.shape[1], image.shape[0])
         
             for a in range(image_grid.shape[0]):

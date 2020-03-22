@@ -142,14 +142,14 @@ class ImageLocationUtility(object):
         else:
             raise ValueError("Input has to be a an array of shape (w, h, 2) or (2,)")
 
-    def relative_to_absolute(self, relative_location, camera_position, camera_rotation):
+    def relative_to_absolute(self, relative_location, camera_translation, camera_rotation):
         """Transform a relative location to an absolute location
 
         Args:
             relative_location (array): Array of shape (w, h, 2) or (2,)
                                        containing the location(s)
                                        relative to the camera
-            camera_position (array): [x, y] array with the camera location
+            camera_translation (array): [x, y] array with the camera location
             camera_rotation (float): Camera rotation around z-axis
 
         Returns:
@@ -164,7 +164,7 @@ class ImageLocationUtility(object):
                       [_s,  _c]])
 
         def _to_absolute(p):
-            return camera_position + R.dot(p)
+            return camera_translation + R.dot(p)
 
         if len(relative_location.shape) == 3:
             return np.apply_along_axis(_to_absolute, 2, relative_location)
@@ -173,13 +173,13 @@ class ImageLocationUtility(object):
         else:
             raise ValueError("Input has to be a an array of shape (w, h, 2) or (2,)")
 
-    def absolute_to_relative(self, absolute_location, camera_position, camera_rotation):
+    def absolute_to_relative(self, absolute_location, camera_translation, camera_rotation):
         """Transform an absolute location to a relative location
 
         Args:
             absolute_location (array): Array of shape (w, h, 2) or (2,)
                                        containing the absolute location(s)
-            camera_position (array): [x, y] array with the camera location
+            camera_translation (array): [x, y] array with the camera location
             camera_rotation (float): Camera rotation around z-axis
 
         Returns:
@@ -196,7 +196,7 @@ class ImageLocationUtility(object):
                           [-_s, _c]])
 
         def _to_relative(p):
-            return R_inv.dot(p - camera_position)
+            return R_inv.dot(p - camera_translation)
 
         if len(absolute_location.shape) == 3:
             return np.apply_along_axis(_to_relative, 2, absolute_location)

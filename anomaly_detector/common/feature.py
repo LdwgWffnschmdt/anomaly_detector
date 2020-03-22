@@ -121,18 +121,25 @@ class Feature(np.ndarray):
     label                 = FeatureProperty("label", 0)         # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
     rosbag                = FeatureProperty("rosbag")
     
-    _camera_rotation_x    = FeatureProperty("location/rotation/x")
-    _camera_rotation_y    = FeatureProperty("location/rotation/y")
-    _camera_rotation_z    = FeatureProperty("location/rotation/z")
+    camera_rotation_x    = FeatureProperty("location/rotation/x")
+    camera_rotation_y    = FeatureProperty("location/rotation/y")
+    camera_rotation_z    = FeatureProperty("location/rotation/z")
 
-    _camera_translation_x = FeatureProperty("location/translation/x")
-    _camera_translation_y = FeatureProperty("location/translation/y")
-    _camera_translation_z = FeatureProperty("location/translation/z")
+    camera_translation_x = FeatureProperty("location/translation/x")
+    camera_translation_y = FeatureProperty("location/translation/y")
+    camera_translation_z = FeatureProperty("location/translation/z")
 
-    camera_position   = property(lambda self: np.array([_camera_translation_x, _camera_translation_y]))
-    camera_rotation   = _camera_rotation_z
+    camera_location = property(lambda self: np.array([camera_translation_x,
+                                                      camera_translation_y,
+                                                      camera_translation_z,
+                                                      camera_rotation_x,
+                                                      camera_rotation_y,
+                                                      camera_rotation_z]))
 
-    metadata_changed  = property(lambda self: FeatureProperty.changed(self))
+    camera_translation = property(lambda self: np.array([camera_translation_x, camera_translation_y]))
+    camera_rotation    = _camera_rotation_z
+
+    metadata_changed = property(lambda self: FeatureProperty.changed(self))
 
     def preload_metadata(self):
         return FeatureProperty.__get_meta__(self)
