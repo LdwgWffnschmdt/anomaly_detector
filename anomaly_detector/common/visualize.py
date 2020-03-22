@@ -163,12 +163,6 @@ class Visualize(object):
         self.index = 0
         self.pause = False
         
-        self.mode = 0 # 0: don't edit, 1: single, 2: continuous
-        self._label = -1
-        self._direction = -1
-        self._round_number = -1
-        self._last_index = 0
-
         self.has_locations = features[0,0,0].location is not None
 
         if self.has_locations:
@@ -193,9 +187,16 @@ class Visualize(object):
         self._assets_path = os.path.join(os.path.dirname(__file__), "assets")
 
         self._window_set_up = False
-        self._mouse_down = False
 
     def show(self):
+        self.mode = 0 # 0: don't edit, 1: single, 2: continuous
+        self._label = -1
+        self._direction = -1
+        self._round_number = -1
+        self._last_index = 0
+        self._exiting = False
+        self._mouse_down = False
+
         self.__setup_window__()
         self.__draw__()
 
@@ -203,6 +204,21 @@ class Visualize(object):
             key = cv2.waitKey(0 if self.pause else cv2.getTrackbarPos("delay", self.WINDOWS_CONTROLS))
             
             if key == 27:    # [esc] => Quit
+                if self._exiting:
+                    self._exiting = False
+                    self.__draw__()
+                elif len(self.orig_features.metadata_changed) > 0:
+                    self.pause = True
+                    self._exiting = True
+                    self.__draw__()
+                else:
+                    cv2.destroyAllWindows()
+                    return
+            elif key == 121 and self._exiting: # [y] => save changes
+                self.orig_features.save_metadata()
+                cv2.destroyAllWindows()
+                return
+            elif key == 110 and self._exiting: # [n] => save changes
                 cv2.destroyAllWindows()
                 return
             elif key == 32:  # [space] => Pause
@@ -364,6 +380,10 @@ class Visualize(object):
             self._mouse_down = False
 
     def __draw_controls__(self):
+        if self._exiting:
+            cv2.imshow(self.WINDOWS_CONTROLS, cv2.imread(os.path.join(self._assets_path, "Controls_save.jpg")))
+            return
+
         if self.index < 0 or self.features.shape[0] <= 0:
             cv2.imshow(self.WINDOWS_CONTROLS, cv2.imread(os.path.join(self._assets_path, "Controls_no_frames.jpg")))
             return
