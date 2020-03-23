@@ -8,6 +8,7 @@ import numpy as np
 import h5py
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import cv2
 
 from common import utils, logger, Feature, ImageLocationUtility
 import consts
@@ -50,8 +51,6 @@ class FeatureArray(np.ndarray):
                 images_path = kwargs.get("images_path", consts.IMAGES_PATH)
 
                 attrs = dict(hf.attrs)
-
-                dt_str = h5py.string_dtype(encoding='ascii')
 
                 features_raw      = np.array(hf["features"], dtype=np.float32)
                 times             = np.array(hf["times"]   , dtype=np.uint64)
@@ -339,6 +338,31 @@ class FeatureArray(np.ndarray):
 
     def mean(self):
         return np.mean(self.array_flat, axis=0, dtype=np.float64)
+
+    #################
+    #      Misc     #
+    #################
+    
+    def to_dataset(self, preprocess_function=None):
+        import tensorflow as tf
+
+        def _gen():
+            for f in self[:, 0, 0]:
+                rgb = cv2.cvtColor(f.get_image(), cv2.COLOR_BGR2RGB)
+                yield (np.array(rgb), f.time)
+
+        raw_dataset = tf.data.Dataset.from_generator(
+            _gen,
+            output_types=(tf.uint8, tf.int64),
+            output_shapes=((None, None, None), ()))
+
+        if preprocess_function is not None:
+            raw_dataset = raw_dataset.map(lambda image, time:
+            (preprocess_function(image), time),
+                                          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+        return raw_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    
 
 if __name__ == "__main__":
     import consts

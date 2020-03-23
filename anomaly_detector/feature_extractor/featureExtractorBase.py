@@ -20,6 +20,7 @@ class FeatureExtractorBase(object):
     # OVERRIDE THESE WITH THE RESPECTIVE IMPLEMENTATION
     IMG_SIZE   = 224
     BATCH_SIZE = consts.DEFAULT_BATCH_SIZE # Change this per network so it best utilizes resources
+    TEMPORAL_BATCH_SIZE = 1
 
     def extract_batch(self, batch): # Should be implemented by child class
         """Extract the features of batch of images"""
@@ -45,21 +46,30 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_files(self, files=consts.EXTRACT_FILES, output_file="", batch_size=None, compression="lzf", compression_opts=None):
+    def extract_feature_array(self, features, **kwargs):
         """Loads a set of files, extracts the features and saves them to file
         Args:
-            files (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
-            output_file (str): Filename and path of the output file
-            batch_size (str): Size of image batches fed to the extractor. Set to 0 for no batching. (Default: self.BATCH_SIZE)
-            compression (str): Output file compression, set to None for no compression (Default: "lzf"), gzip can be extremely slow combined with HDF5
-            compression_opts (str): Compression level, set to None for no compression (Default: None)
+            features (FeatureArray): Should be a feature array created with the images path only
+            For **kwargs see extract_datset
 
         Returns:
             success (bool)
         """
 
-        files_inp = str(files)
+        dataset = features.to_dataset(preprocess_function=self.format_image)
+        total = features.shape[0]
 
+        return self.extract_datset(dataset, total, **kwargs)
+
+    def extract_files(self, files=consts.EXTRACT_FILES, **kwargs):
+        """Loads a set of files, extracts the features and saves them to file
+        Args:
+            files (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
+            For **kwargs see extract_datset
+
+        Returns:
+            success (bool)
+        """
         if isinstance(files, basestring):
             files = [files]
             
@@ -72,16 +82,6 @@ class FeatureExtractorBase(object):
         # Check parameters
         if not files or len(files) < 1 or files[0] == "":
             raise ValueError("Please specify at least one filename (%s)" % files)
-            
-        if output_file == "":
-            output_dir = os.path.join(os.path.abspath(os.path.dirname(files[0])), "Features")
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-            output_file = os.path.join(output_dir, self.NAME + ".h5")
-            logger.info("Output file set to %s" % output_file)
-        
-        if batch_size is None:
-            batch_size = self.BATCH_SIZE
 
         # Load dataset
         if files[0].endswith(".tfrecord"):
@@ -102,7 +102,32 @@ class FeatureExtractorBase(object):
             total = len(files)
         else:
             raise ValueError("Supported file types are *.tfrecord and *.jpg")
+
+        return self.extract_datset(dataset, total, **kwargs)
+    
+    def extract_datset(self, dataset, total, output_file="", batch_size=None, compression="lzf", compression_opts=None):
+        """Loads a set of files, extracts the features and saves them to file
+        Args:
+            dataset (tf.data.Dataset): Dataset containing the input data
+            totla (int): Number of items in Dataset
+            output_file (str): Filename and path of the output file
+            batch_size (str): Size of image batches fed to the extractor. Set to 0 for no batching. (Default: self.BATCH_SIZE)
+            compression (str): Output file compression, set to None for no compression (Default: "lzf"), gzip can be extremely slow combined with HDF5
+            compression_opts (str): Compression level, set to None for no compression (Default: None)
+
+        Returns:
+            success (bool)
+        """
+
+        if output_file == "":
+            output_dir = consts.FEATURES_PATH
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            output_file = os.path.join(output_dir, self.NAME + ".h5")
+            logger.info("Output file set to %s" % output_file)
         
+        if batch_size is None:
+            batch_size = self.BATCH_SIZE
 
         # Get batches (seems to be better performance wise than extracting individual images)
         if batch_size > 0:
@@ -114,13 +139,11 @@ class FeatureExtractorBase(object):
         try:
             # Add metadata to the output file
             hf.attrs["Extractor"]                 = self.NAME
-            hf.attrs["Files"]                     = files_inp
             hf.attrs["Batch size"]                = batch_size
             hf.attrs["Compression"]               = compression
             if compression_opts is not None:
                 hf.attrs["Compression options"]   = compression_opts
-            if hasattr(self, "TEMPORAL_BATCH_SIZE"):
-                hf.attrs["Temporal batch size"]   = self.TEMPORAL_BATCH_SIZE
+            hf.attrs["Temporal batch size"]   = self.TEMPORAL_BATCH_SIZE
 
             computer_info = utils.getComputerInfo()
             for key, value in computer_info.items():
@@ -149,7 +172,7 @@ class FeatureExtractorBase(object):
 
                     # Save the features and their metadata to the arrays
                     feature_dataset[counter : counter + current_batch_size] = feature_batch.numpy()
-                    time_dataset[counter : counter + current_batch_size]    = batch[2].numpy()
+                    time_dataset[counter : counter + current_batch_size]    = batch[1].numpy()
 
                     # Count and update progress bar
                     counter += current_batch_size
