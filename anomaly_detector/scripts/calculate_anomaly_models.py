@@ -37,7 +37,7 @@ def calculate_anomaly_models():
     files_expanded = []
     for s in files:
         files_expanded += glob(s)
-    files = list(set(files_expanded)) # Remove duplicates
+    files = sorted(list(set(files_expanded))) # Remove duplicates
 
     for features_file in tqdm(files, file=sys.stderr):
         # Check parameters

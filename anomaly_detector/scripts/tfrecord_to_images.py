@@ -35,7 +35,7 @@ def tfrecord_to_images():
     files_expanded = []
     for s in files:
         files_expanded += glob(s)
-    files = list(set(files_expanded)) # Remove duplicates
+    files = sorted(list(set(files_expanded))) # Remove duplicates
 
     # Check parameters
     if not files or len(files) < 1 or files[0] == "":

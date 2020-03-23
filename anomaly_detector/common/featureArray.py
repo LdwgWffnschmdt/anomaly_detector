@@ -34,7 +34,7 @@ class FeatureArray(np.ndarray):
             attrs = dict()
 
             # Get all images
-            files = glob(os.path.join(filename, "*.jpg"))
+            files = sorted(glob(os.path.join(filename, "*.jpg")))
 
             features = np.empty(shape=(len(files), 1, 1), dtype=Feature)
             

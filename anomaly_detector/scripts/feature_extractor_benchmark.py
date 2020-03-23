@@ -57,7 +57,7 @@ def feature_extractor_benchmark():
     files_expanded = []
     for s in args.files:
         files_expanded += glob(s)
-    files = list(set(files_expanded)) # Remove duplicates
+    files = sorted(list(set(files_expanded))) # Remove duplicates
 
     # Check parameters
     if not files or len(files) < 1 or files[0] == "":

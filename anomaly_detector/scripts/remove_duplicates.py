@@ -32,7 +32,7 @@ def remove_duplicates():
         return
 
     # Get all images
-    files = glob(os.path.join(args.images, "*.jpg"))
+    files = sorted(glob(os.path.join(args.images, "*.jpg")))
 
     # Checksums
     last_checksum = None

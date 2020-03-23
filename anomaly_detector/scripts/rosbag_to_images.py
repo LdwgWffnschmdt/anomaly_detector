@@ -79,7 +79,7 @@ def rosbag_to_images():
     bag_files_expanded = []
     for s in bag_files:
         bag_files_expanded += glob(s)
-    bag_files = list(set(bag_files_expanded)) # Remove duplicates
+    bag_files = sorted(list(set(bag_files_expanded))) # Remove duplicates
 
     if output_dir is None or output_dir == "" or not os.path.exists(output_dir) or not os.path.isdir(output_dir):
         output_dir = os.path.join(os.path.abspath(os.path.dirname(bag_files[0])), "Images")
