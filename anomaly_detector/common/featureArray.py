@@ -315,7 +315,7 @@ class FeatureArray(np.ndarray):
 
         for i, y, x in tqdm(np.ndindex(self.shape), desc="Calculating locations", total=np.prod(self.shape), file=sys.stderr):
             feature = self[i, y, x]
-            feature.location = ilu.relative_to_absolute(relative_locations[x, y], feature.camera_translation, feature.camera_rotation)
+            feature.location = ilu.relative_to_absolute(relative_locations[x, y], feature.camera_translation, feature.camera_rotation_z)
 
     def add_location_as_feature_dimension(self):
         """Act as if the location of a feature would be two additional feature dimensions"""

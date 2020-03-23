@@ -184,6 +184,9 @@ class Visualize(object):
             self.show_grid = False
             self.show_map = False
 
+        self._prev_gray = None
+        self._cur_glitch = None
+
         self._assets_path = os.path.join(os.path.dirname(__file__), "assets")
 
         self._window_set_up = False
@@ -354,12 +357,16 @@ class Visualize(object):
                self.feature_to_color_func is not None:
                 cv2.createTrackbar("overlay", self.WINDOWS_CONTROLS, 40, 100, self.__draw__)
 
+            cv2.createTrackbar("optical_flow", self.WINDOWS_CONTROLS, 0, 1, self.__draw__)
+
             cv2.createTrackbar("label", self.WINDOWS_CONTROLS, -1,  2, self.__change_features__)
             cv2.setTrackbarMin("label", self.WINDOWS_CONTROLS, -1)
             cv2.setTrackbarPos("label", self.WINDOWS_CONTROLS, -1)
+
             cv2.createTrackbar("direction", self.WINDOWS_CONTROLS, -1,  2, self.__change_features__)
             cv2.setTrackbarMin("direction", self.WINDOWS_CONTROLS, -1)
             cv2.setTrackbarPos("direction", self.WINDOWS_CONTROLS, -1)
+
             cv2.createTrackbar("round_number", self.WINDOWS_CONTROLS, -1,  30, self.__change_features__)
             cv2.setTrackbarMin("round_number", self.WINDOWS_CONTROLS, -1)
             cv2.setTrackbarPos("round_number", self.WINDOWS_CONTROLS, -1)
@@ -408,7 +415,41 @@ class Visualize(object):
         # Draw Trackbar
         self.image_add_trackbar(image, self.index, self.features)
         cv2.imshow(self.WINDOWS_CONTROLS, image)
-        
+    
+    
+    def __draw_flow__(self, img, flow, step=16):
+        h, w = img.shape[:2]
+        y, x = np.mgrid[step/2:h:step, step/2:w:step].reshape(2,-1).astype(int)
+        fx, fy = flow[y,x].T
+        lines = np.vstack([x, y, x+fx, y+fy]).T.reshape(-1, 2, 2)
+        lines = np.int32(lines + 0.5)
+        vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        cv2.polylines(vis, lines, 0, (0, 255, 0))
+        for (x1, y1), (_x2, _y2) in lines:
+            cv2.circle(vis, (x1, y1), 1, (0, 255, 0), -1)
+        return vis
+
+    def __draw_hsv__(self, flow):
+        h, w = flow.shape[:2]
+        fx, fy = flow[:,:,0], flow[:,:,1]
+        ang = np.arctan2(fy, fx) + np.pi
+        v = np.sqrt(fx*fx+fy*fy)
+        hsv = np.zeros((h, w, 3), np.uint8)
+        hsv[...,0] = ang*(180/np.pi/2)
+        hsv[...,1] = 255
+        hsv[...,2] = np.minimum(v*4, 255)
+        bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        return bgr
+
+    def __warp_flow__(self, img, flow):
+        h, w = flow.shape[:2]
+        flow = -flow
+        flow[:,:,0] += np.arange(w)
+        flow[:,:,1] += np.arange(h)[:,np.newaxis]
+        res = cv2.remap(img, flow, None, cv2.INTER_LINEAR)
+        return res
+
+
     def __draw__(self, x=None):
         total, height, width = self.features.shape
 
@@ -431,6 +472,25 @@ class Visualize(object):
 
         # Get the image
         image = feature_2d[0, 0].get_image()
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        if self._cur_glitch is None:
+            self._cur_glitch = image.copy()
+        
+        # Calculate optical flow
+        if bool(cv2.getTrackbarPos("optical_flow", self.WINDOWS_CONTROLS)) and self._prev_gray is not None:
+            hsv = np.zeros_like(image)
+            hsv[..., 1] = 255
+
+            flow = cv2.calcOpticalFlowFarneback(self._prev_gray,
+                                                gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+
+            image = self.__draw_flow__(gray, flow)
+            cv2.imshow('flow HSV', self.__draw_hsv__(flow))
+            # self._cur_glitch = self.__warp_flow__(self._cur_glitch, flow)
+            # cv2.imshow('glitch', self._cur_glitch)
+
+        self._prev_gray = gray
 
         # Update parameters
         if self.has_locations:
@@ -503,7 +563,7 @@ class Visualize(object):
         
         # Draw grid
         if self.show_grid:
-            relative_grid = self._ilu.absolute_to_relative(self._absolute_locations, feature_2d[0,0].camera_translation, feature_2d[0,0].camera_rotation)
+            relative_grid = self._ilu.absolute_to_relative(self._absolute_locations, feature_2d[0,0].camera_translation, feature_2d[0,0].camera_rotation_z)
             image_grid = self._ilu.relative_to_image(relative_grid, image.shape[1], image.shape[0])
         
             for a in range(image_grid.shape[0]):
@@ -565,7 +625,7 @@ class Visualize(object):
 
 if __name__ == "__main__":
     from common import FeatureArray
-    features = FeatureArray(consts.IMAGES_PATH + "Test/")
+    features = FeatureArray(consts.IMAGES_PATH)
 
     vis = Visualize(features)
     vis.show()

@@ -137,7 +137,6 @@ class Feature(np.ndarray):
                                                       camera_rotation_z]))
 
     camera_translation = property(lambda self: np.array([camera_translation_x, camera_translation_y]))
-    camera_rotation    = _camera_rotation_z
 
     metadata_changed = property(lambda self: FeatureProperty.changed(self))
 
