@@ -32,16 +32,7 @@ def load_tfrecords(filenames, batch_size=64, preprocess_function=None):
 
     # Create a dictionary describing the features.
     feature_description = {
-        "metadata/location/translation/x"   : tf.io.FixedLenFeature([], tf.float32),
-        "metadata/location/translation/y"   : tf.io.FixedLenFeature([], tf.float32),
-        "metadata/location/translation/z"   : tf.io.FixedLenFeature([], tf.float32),
-        "metadata/location/rotation/x"      : tf.io.FixedLenFeature([], tf.float32),
-        "metadata/location/rotation/y"      : tf.io.FixedLenFeature([], tf.float32),
-        "metadata/location/rotation/z"      : tf.io.FixedLenFeature([], tf.float32),
-        "metadata/time"                     : tf.io.FixedLenFeature([], tf.int64), # TODO: Change to int64
-        "metadata/label"                    : tf.io.FixedLenFeature([], tf.int64),   # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-        "metadata/rosbag"                   : tf.io.FixedLenFeature([], tf.string),
-        "metadata/tfrecord"                 : tf.io.FixedLenFeature([], tf.string),
+        "metadata/time"     : tf.io.FixedLenFeature([], tf.int64), # TODO: Change to int64
         "image/height"      : tf.io.FixedLenFeature([], tf.int64),
         "image/width"       : tf.io.FixedLenFeature([], tf.int64),
         "image/channels"    : tf.io.FixedLenFeature([], tf.int64),
@@ -56,19 +47,10 @@ def load_tfrecords(filenames, batch_size=64, preprocess_function=None):
 
     def _decode_function(example):
         image = tf.image.decode_jpeg(example["image/encoded"], channels=3)
-        location = [example["metadata/location/translation/x"],
-                    example["metadata/location/translation/y"],
-                    example["metadata/location/translation/z"],
-                    example["metadata/location/rotation/x"],
-                    example["metadata/location/rotation/y"],
-                    example["metadata/location/rotation/z"]]
-        time      = example["metadata/time"]
-        label     = example["metadata/label"]
-        rosbag    = example["metadata/rosbag"]
-        tfrecord  = example["metadata/tfrecord"]
+        time = example["metadata/time"]
         if preprocess_function is not None:
             image = preprocess_function(image)
-        return image, location, time, label, rosbag, tfrecord
+        return image, time
 
     return raw_dataset.batch(batch_size) \
                       .map(_parse_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
@@ -95,18 +77,7 @@ def load_jpgs(filenames, preprocess_function=None):
         # Load and decode metadata file
         with open(str(yml.numpy()), "r") as file:
             meta = yaml.safe_load(file)
-
-            location = [meta["location/translation/x"],
-                        meta["location/translation/y"],
-                        meta["location/translation/z"],
-                        meta["location/rotation/x"],
-                        meta["location/rotation/y"],
-                        meta["location/rotation/z"]]
-            time      = meta["time"]
-            label     = meta["label"]
-            rosbag    = meta["rosbag"]
-            tfrecord  = tf.constant("", dtype=tf.string) # Nuffin
-        return location, time, label, rosbag, tfrecord
+        return meta["time"]
 
     def _decode_function(file_path):
         # Load and decode image
@@ -116,15 +87,11 @@ def load_jpgs(filenames, preprocess_function=None):
         # Get the metadata file path
         yml = tf.strings.regex_replace(file_path, ".jpg", ".yml")
 
-        location, time, label, rosbag, tfrecord = tf.py_function(_load_metadata, [yml], [tf.float32,
-                                                                                         tf.int64,
-                                                                                         tf.int8,
-                                                                                         tf.string,
-                                                                                         tf.string])
+        time = tf.py_function(_load_metadata, [yml], [tf.int64])
 
         if preprocess_function is not None:
             image = preprocess_function(image)
-        return image, location, time, label, rosbag, tfrecord
+        return image, time
 
     return raw_dataset.map(_decode_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
                       .cache() \

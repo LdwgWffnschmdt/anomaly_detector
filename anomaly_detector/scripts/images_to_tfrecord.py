@@ -12,6 +12,10 @@ parser.add_argument("files", metavar="F", type=str, nargs='*',
 parser.add_argument("--output_dir", metavar="OUT", dest="output_dir", type=str,
                     help="Output directory (default: {bag_file}/TFRecord)")
 
+parser.add_argument("--images_per_bin", metavar="MAX", type=int,
+                    default=10000,
+                    help="Maximum number of images per TFRecord file (default: 10000)")
+
 args = parser.parse_args()
 
 import os
@@ -55,6 +59,7 @@ def _bytes_feature(value):
 def images_to_tfrecord():
     files = args.files
     output_dir = args.output_dir
+    images_per_bin = args.images_per_bin
 
     # Expand wildcards
     files_expanded = []
@@ -72,11 +77,20 @@ def images_to_tfrecord():
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         logger.info("Output directory set to %s" % output_dir)
-
+    
+    if images_per_bin is None or images_per_bin < 1:
+        logger.error("images_per_bin has to be greater than 1.")
+        return
+    
     parsed_dataset = utils.load_jpgs(files)
 
     # Get number of examples in dataset
     total = sum(1 for record in tqdm(parsed_dataset, desc="Loading dataset"))
+
+    number_of_bins = total // images_per_bin + 1
+
+    total_saved_count = 0
+    per_bin_count = 0
 
     tfWriter = None        
 
@@ -92,10 +106,10 @@ def images_to_tfrecord():
                 tfWriter.close()
             
             if number_of_bins == 1:
-                output_filename = "%s.tfrecord" % bag_file_name
+                output_filename = "Images.tfrecord"
             else:
                 bin_number = total_saved_count // images_per_bin + 1
-                output_filename = "%s.%.5d-of-%.5d.tfrecord" % (bag_file_name, bin_number, number_of_bins)
+                output_filename = "Images.%.5d-of-%.5d.tfrecord" % (bin_number, number_of_bins)
                 
             output_file = os.path.join(output_dir, output_filename)
             tfWriter = tf.io.TFRecordWriter(output_file)
@@ -103,16 +117,7 @@ def images_to_tfrecord():
 
         # Add image and position to TFRecord
         feature_dict = {
-            "metadata/location/translation/x"   : _float_feature(float(x[1].numpy()[0])),
-            "metadata/location/translation/y"   : _float_feature(float(x[1].numpy()[1])),
-            "metadata/location/translation/z"   : _float_feature(float(x[1].numpy()[2])),
-            "metadata/location/rotation/x"      : _float_feature(float(x[1].numpy()[3])),
-            "metadata/location/rotation/y"      : _float_feature(float(x[1].numpy()[4])),
-            "metadata/location/rotation/z"      : _float_feature(float(x[1].numpy()[5])),
-            "metadata/time"                     : _int64_feature(int(x[2].numpy())),
-            "metadata/label"                    : _int64_feature(int(x[3].numpy())), # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-            "metadata/rosbag"                   : _bytes_feature(str(x[4].numpy())),
-            "metadata/tfrecord"                 : _bytes_feature(output_file),
+            "metadata/time"     : _int64_feature(int(x[1].numpy())),
             "image/height"      : _int64_feature(x[0].numpy().shape[0]),
             "image/width"       : _int64_feature(x[0].numpy().shape[1]),
             "image/channels"    : _int64_feature(channels),
