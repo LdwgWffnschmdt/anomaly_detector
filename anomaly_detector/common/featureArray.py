@@ -89,19 +89,16 @@ class FeatureArray(np.ndarray):
         self.filename = getattr(obj, "filename", None)
 
         self.__extent__ = None
+        self.__array_flat__ = None
 
         # Dict with cell size as key
         # - cell size
         self.__rasterizations__ = {}
-
-    def __get_property__(key):
-        return lambda self: None if self.attrs is None or not key in self.attrs.keys() else self.attrs[key]
-
-    extractor  = property(__get_property__("Extractor"))
-    files      = property(__get_property__("Files"))
-    batch_size = property(__get_property__("Batch size"))
     
-    ### Often used views for convenience
+    #################
+    #     Views     #
+    #################
+    
     unknown_anomaly = property(lambda self: self[[f[0,0].label == 0 for f in self]])
     no_anomaly      = property(lambda self: self[[f[0,0].label == 1 for f in self]])
     anomaly         = property(lambda self: self[[f[0,0].label == 2 for f in self]])
@@ -116,6 +113,14 @@ class FeatureArray(np.ndarray):
 
     metadata_changed = property(lambda self: self[[f[0,0].metadata_changed for f in self]])
 
+    #################
+    #    Metadata   #
+    #################
+    
+    extractor  = property(lambda self: self.attrs.get("Extractor", None))
+    files      = property(lambda self: self.attrs.get("Files", None))
+    batch_size = property(lambda self: self.attrs.get("Batch size", None))
+    
     def save_metadata(self):
         for f in tqdm(self.metadata_changed.flatten(), desc="Saving metadata to file", file=sys.stderr):
             f.save_metadata()
@@ -123,6 +128,10 @@ class FeatureArray(np.ndarray):
     def preload_metadata(self):
         for f in tqdm(self.flatten(), desc="Preloading metadata", file=sys.stderr):
             f.preload_metadata()
+
+    #################
+    # Spatial stuff #
+    #################
 
     def bin(self, bin, cell_size):
         """ Get a view of only the features that are in a specific bin
@@ -250,24 +259,6 @@ class FeatureArray(np.ndarray):
         
         return (x_min, y_min, x_max, y_max)
 
-    def __get_array_flat__(self):
-        if hasattr(self, "__array_flat__"):
-            return self.__array_flat__
-        flat = self.flatten()
-        self.__array_flat__ = np.concatenate(flat).reshape(flat.shape + flat[0].shape)
-        return self.__array_flat__
-
-    array_flat = property(__get_array_flat__)
-
-    def var(self):
-        return np.var(self.array_flat, axis=0, dtype=np.float64)
-
-    def cov(self):
-        return np.cov(self.array_flat, rowvar=False)
-
-    def mean(self):
-        return np.mean(self.array_flat, axis=0, dtype=np.float64)
-
     def save_locations_to_file(self, filename=None):
         """ Save the locations of every patch to filename """
 
@@ -326,6 +317,28 @@ class FeatureArray(np.ndarray):
         features_flat = self.flatten()
         for i in range(len(features_flat)):
             features_flat[i] = np.append(features_flat[i], features_flat[i].location)
+
+    #################
+    # Calculations  #
+    #################
+    
+    def __get_array_flat__(self):
+        if self.__array_flat__ is not None:
+            return self.__array_flat__
+        flat = self.flatten()
+        self.__array_flat__ = np.concatenate(flat).reshape(flat.shape + flat[0].shape)
+        return self.__array_flat__
+
+    array_flat = property(__get_array_flat__)
+
+    def var(self):
+        return np.var(self.array_flat, axis=0, dtype=np.float64)
+
+    def cov(self):
+        return np.cov(self.array_flat, rowvar=False)
+
+    def mean(self):
+        return np.mean(self.array_flat, axis=0, dtype=np.float64)
 
 if __name__ == "__main__":
     import consts
