@@ -129,14 +129,14 @@ class Feature(np.ndarray):
     camera_translation_y = FeatureProperty("location/translation/y")
     camera_translation_z = FeatureProperty("location/translation/z")
 
-    camera_location = property(lambda self: np.array([camera_translation_x,
-                                                      camera_translation_y,
-                                                      camera_translation_z,
-                                                      camera_rotation_x,
-                                                      camera_rotation_y,
-                                                      camera_rotation_z]))
+    camera_location = property(lambda self: np.array([self.camera_translation_x,
+                                                      self.camera_translation_y,
+                                                      self.camera_translation_z,
+                                                      self.camera_rotation_x,
+                                                      self.camera_rotation_y,
+                                                      self.camera_rotation_z]))
 
-    camera_translation = property(lambda self: np.array([camera_translation_x, camera_translation_y]))
+    camera_translation = property(lambda self: np.array([self.camera_translation_x, self.camera_translation_y]))
 
     metadata_changed = property(lambda self: FeatureProperty.changed(self))
 
