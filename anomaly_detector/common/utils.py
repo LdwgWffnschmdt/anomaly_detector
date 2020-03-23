@@ -73,21 +73,15 @@ def load_jpgs(filenames, preprocess_function=None):
     
     raw_dataset = tf.data.Dataset.list_files(filenames)
 
-    def _load_metadata(yml):
-        # Load and decode metadata file
-        with open(str(yml.numpy()), "r") as file:
-            meta = yaml.safe_load(file)
-        return meta["time"]
-
     def _decode_function(file_path):
         # Load and decode image
         image = tf.io.read_file(file_path)
         image = tf.image.decode_jpeg(image, channels=3)
 
-        # Get the metadata file path
-        yml = tf.strings.regex_replace(file_path, ".jpg", ".yml")
-
-        time = tf.py_function(_load_metadata, [yml], [tf.int64])
+        # Get the time from the file path
+        time = tf.strings.split(file_path, '/')[-1]
+        time = tf.strings.split(time, ".")[0]
+        time = tf.cast(time, tf.int32)
 
         if preprocess_function is not None:
             image = preprocess_function(image)
