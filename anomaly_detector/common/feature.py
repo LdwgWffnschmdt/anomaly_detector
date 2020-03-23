@@ -115,6 +115,10 @@ class Feature(np.ndarray):
 
         self.__bins__ = {}
     
+    #################
+    #    Metadata   #
+    #################
+    
     direction             = FeatureProperty("direction", 0)     # 0: Unknown, 1: CCW, 2: CW
     round_number          = FeatureProperty("round_number", 0)  # 0: Unknown, >=0: Round index (zero based)
 
@@ -138,6 +142,8 @@ class Feature(np.ndarray):
 
     camera_translation = property(lambda self: np.array([self.camera_translation_x, self.camera_translation_y]))
 
+    image_file = property(lambda self: os.path.join(images_path, "%i.jpg" % self.time))
+
     metadata_changed = property(lambda self: FeatureProperty.changed(self))
 
     def preload_metadata(self):
@@ -146,10 +152,18 @@ class Feature(np.ndarray):
     def save_metadata(self):
         return FeatureProperty.save(self)
 
+    #################
+    #     Image     #
+    #################
+    
     @cached(image_cache, key=lambda self, *args: self.time) # The cache should only be based on the timestamp
     def get_image(self, images_path=None):
         if images_path is None: images_path = self.images_path
-        return cv2.imread(os.path.join(images_path, "%i.jpg" % self.time))
+        return cv2.imread(self.image_file)
+
+    #################
+    # Spatial stuff #
+    #################
 
     def get_bin(self, cell_size, extent=None):
         """Gets the indices for the bin the given feature belongs to
