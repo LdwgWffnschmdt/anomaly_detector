@@ -14,7 +14,7 @@ class FeatureExtractorResNet50V2_Block6_LargeImage(FeatureExtractorResNet50V2):
 
     def __init__(self):
         FeatureExtractorResNet50V2.__init__(self)
-        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer("conv4_block6_out").output)   
+        self.model = tf.keras.Model(self.model.inputs, self.model.get_layer("conv4_block6_out").output)   
         self.model.trainable = False
 
 # Only for tests
