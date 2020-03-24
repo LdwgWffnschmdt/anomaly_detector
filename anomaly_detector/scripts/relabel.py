@@ -33,9 +33,6 @@ def relabel():
     vis.pause = True
     vis.show()
 
-    # Save metadata
-    features.save_metadata()
-
 if __name__ == "__main__":
     relabel()
     pass
