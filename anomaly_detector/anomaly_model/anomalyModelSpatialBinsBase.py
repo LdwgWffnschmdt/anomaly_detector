@@ -29,7 +29,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         m = create_anomaly_model_func()
         self.NAME = "SpatialBin/%s/%.2f" % (m.__class__.__name__.replace("AnomalyModel", ""), cell_size)
     
-    def classify(self, metadata, feature_vector, threshold=None):
+    def classify(self, feature, threshold=None):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
         and the single variate Gaussian distribution along each dimension.
         """
@@ -131,4 +131,4 @@ if __name__ == "__main__":
         # model.calculate_mahalobis_distances()
         # model.show_mahalanobis_distribution()
 
-        model.visualize(20)
+        model.visualize()
