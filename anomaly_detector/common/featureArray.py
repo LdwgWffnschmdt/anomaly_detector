@@ -4,6 +4,7 @@ import sys
 import ast
 from glob import glob
 
+from datetime import datetime
 import numpy as np
 import h5py
 from tqdm import tqdm
@@ -32,6 +33,23 @@ class FeatureArray(np.ndarray):
 
         images_path = kwargs.get("images_path", consts.IMAGES_PATH)
         files = None
+
+        # Load metadata cache if there is one
+        # metadata_cache = None
+        # metadata_cache_file = os.path.join(images_path, "metadata_cache.h5")
+        # if os.path.exists(metadata_cache_file):
+        #     with h5py.File(metadata_cache_file, "r") as hf:
+        #         metadata_cache = dict()
+        #         metadata_cache["camera_translation_x"] = np.array(hf["location/translation/x"], dtype=np.float32)
+        #         metadata_cache["camera_translation_y"] = np.array(hf["location/translation/y"], dtype=np.float32)
+        #         metadata_cache["camera_translation_z"] = np.array(hf["location/translation/z"], dtype=np.float32)
+        #         metadata_cache["camera_rotation_x"]    = np.array(hf["location/rotation/x"],    dtype=np.float32)
+        #         metadata_cache["camera_rotation_y"]    = np.array(hf["location/rotation/y"],    dtype=np.float32)
+        #         metadata_cache["camera_rotation_z"]    = np.array(hf["location/rotation/z"],    dtype=np.float32)
+        #         metadata_cache["time"]                 = np.array(hf["times"],        dtype=np.uint64)
+        #         metadata_cache["label"]                = np.array(hf["label"],        dtype=np.int8)
+        #         metadata_cache["direction"]            = np.array(hf["direction"],    dtype=np.int8)
+        #         metadata_cache["round_number"]         = np.array(hf["round_number"], dtype=np.int8)
 
         # Check if filename is path to images
         if isinstance(filename, str) and os.path.isdir(filename):
@@ -94,12 +112,14 @@ class FeatureArray(np.ndarray):
         obj = np.asarray(features).view(cls)
         obj.attrs = attrs
         obj.filename = filename
+        obj.images_path = images_path
         return obj
     
     def __array_finalize__(self, obj):
         if obj is None: return
         self.attrs = getattr(obj, "attrs", None)
         self.filename = getattr(obj, "filename", None)
+        self.images_path = getattr(obj, "images_path", consts.IMAGES_PATH)
 
         self.__extent__ = None
         self.__array_flat__ = None
@@ -141,6 +161,24 @@ class FeatureArray(np.ndarray):
     def preload_metadata(self):
         for f in tqdm(self.flatten(), desc="Preloading metadata", file=sys.stderr):
             f.preload_metadata()
+
+    def create_metadata_cache(self, filename=None):
+        if filename is None:
+            filename = os.path.join(self.images_path, "metadata_cache.h5")
+        self.preload_metadata()
+        flat = self.flatten()
+        with h5py.File(filename, "w") as hf:
+            hf.attrs["Created"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
+            hf.create_dataset("location/translation/x", data=[f.camera_translation_x for f in flat], dtype=np.float32)
+            hf.create_dataset("location/translation/y", data=[f.camera_translation_y for f in flat], dtype=np.float32)
+            hf.create_dataset("location/translation/z", data=[f.camera_translation_z for f in flat], dtype=np.float32)
+            hf.create_dataset("location/rotation/x",    data=[f.camera_rotation_x    for f in flat], dtype=np.float32)
+            hf.create_dataset("location/rotation/y",    data=[f.camera_rotation_x    for f in flat], dtype=np.float32)
+            hf.create_dataset("location/rotation/z",    data=[f.camera_rotation_x    for f in flat], dtype=np.float32)
+            hf.create_dataset("times"       , data=[f.time         for f in flat], dtype=np.uint64)
+            hf.create_dataset("labels"      , data=[f.label        for f in flat], dtype=np.int8)
+            hf.create_dataset("direction"   , data=[f.direction    for f in flat], dtype=np.int8)
+            hf.create_dataset("round_number", data=[f.round_number for f in flat], dtype=np.int8)
 
     #################
     # Spatial stuff #
