@@ -21,6 +21,7 @@ from glob import glob
 from tqdm import tqdm
 
 from common import utils, logger, FeatureArray
+import anomaly_model
 
 def calculate_locations():
     ################
@@ -41,24 +42,29 @@ def calculate_locations():
         files_expanded += glob(s)
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
-    for features_file in tqdm(files, file=sys.stderr):
-        # Check parameters
-        if features_file == "" or not os.path.exists(features_file) or not os.path.isfile(features_file):
-            logger.error("Specified feature file does not exist (%s)" % features_file)
-            return
+    with tqdm(total=len(files), file=sys.stderr) as pbar:
+        for features_file in files:
+            pbar.set_description(os.path.basename(features_file))
+            # Check parameters
+            if features_file == "" or not os.path.exists(features_file) or not os.path.isfile(features_file):
+                logger.error("Specified feature file does not exist (%s)" % features_file)
+                return
+            
+            try:
+                # Load the file
+                features = FeatureArray(features_file)
+                features.preload_metadata()
 
-        logger.info("Calculating locations for %s" % features_file)
-        
-        try:
-            # Load the file
-            features = FeatureArray(features_file)
+                # Calculate and save the locations
+                features.save_locations_to_file()
 
-            # Calculate and save the locations
-            features.save_locations_to_file()
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except:
-            logger.error("%s: %s" % (features_file, traceback.format_exc()))
+                # Calculate anomaly models
+                # anomaly_model.
+                
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except:
+                logger.error("%s: %s" % (features_file, traceback.format_exc()))
 
 if __name__ == "__main__":
     calculate_locations()
