@@ -119,19 +119,19 @@ class Feature(np.ndarray):
     #    Metadata   #
     #################
     
-    direction             = FeatureProperty("direction", 0)     # 0: Unknown, 1: CCW, 2: CW
-    round_number          = FeatureProperty("round_number", 0)  # 0: Unknown, >=0: Round index (zero based)
+    direction            = FeatureProperty("direction", 0)     # 0: Unknown, 1: CCW, 2: CW
+    round_number         = FeatureProperty("round_number", 0)  # 0: Unknown, >=0: Round index (zero based)
 
-    label                 = FeatureProperty("label", 0)         # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-    rosbag                = FeatureProperty("rosbag")
+    label                = FeatureProperty("label", 0)         # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+    rosbag               = FeatureProperty("rosbag")
     
-    camera_rotation_x    = FeatureProperty("location/rotation/x")
-    camera_rotation_y    = FeatureProperty("location/rotation/y")
-    camera_rotation_z    = FeatureProperty("location/rotation/z")
-
     camera_translation_x = FeatureProperty("location/translation/x")
     camera_translation_y = FeatureProperty("location/translation/y")
     camera_translation_z = FeatureProperty("location/translation/z")
+
+    camera_rotation_x    = FeatureProperty("location/rotation/x")
+    camera_rotation_y    = FeatureProperty("location/rotation/y")
+    camera_rotation_z    = FeatureProperty("location/rotation/z")
 
     camera_location = property(lambda self: np.array([self.camera_translation_x,
                                                       self.camera_translation_y,
