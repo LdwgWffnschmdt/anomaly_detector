@@ -234,7 +234,7 @@ class AnomalyModelBase(object):
             def _default_feature_to_color(v, feature):
                 b = 0#100 if feature in self.normal_distribution else 0
                 g = 0
-                threhold = v.get_trackbar("threshold")
+                threshold = v.get_trackbar("threshold")
                 if v.get_trackbar("show_thresh"):
                     r = 100 if self._mahalanobis_distance(feature) > threshold else 0
                 elif t == 0:
