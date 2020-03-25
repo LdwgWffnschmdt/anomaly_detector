@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Benchmark the specified feature extractors.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("--files", metavar="F", dest="files", type=str, default=consts.EXTRACT_FILES,
+parser.add_argument("--files", metavar="F", dest="files", type=str, default=consts.EXTRACT_FILES_TEST,
                     help="File(s) to use for benchmarks (*.tfrecord, *.jpg)")
 
 parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', type=str,
@@ -137,12 +137,15 @@ def feature_extractor_benchmark():
     
             # Load dataset
             if files[0].endswith(".tfrecord"):
-                dataset = utils.load_tfrecords(files, preprocess_function=extractor.format_image)
+                dataset = utils.load_tfrecords(files)
             elif files[0].endswith(".jpg"):
-                dataset = utils.load_jpgs(files, preprocess_function=extractor.format_image)
+                dataset = utils.load_jpgs(files)
             else:
                 raise ValueError("Supported file types are *.tfrecord and *.jpg")
             
+            dataset = dataset.map(lambda image, time: (extractor.format_image(image), time),
+                                  num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
             # Call internal transformations (eg. temporal windowing for 3D networks)
             dataset = extractor.__transform_dataset__(dataset)
 

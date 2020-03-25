@@ -11,12 +11,42 @@ import tensorflow as tf
 import numpy as np
 import h5py
 import cv2
+from tqdm import tqdm
+from glob import glob
 
 ###############
 #  Images IO  #
 ###############
 
-def load_tfrecords(filenames, batch_size=64, preprocess_function=None):
+def load_dataset(files):
+    if isinstance(files, basestring):
+        files = [files]
+        
+    # Check parameters
+    if not files or len(files) < 1 or files[0] == "":
+        raise ValueError("Please specify at least one filename (%s)" % files)
+
+    # Load dataset
+    if files[0].endswith(".tfrecord"):
+        dataset = load_tfrecords(files)
+
+        # Get number of examples in dataset
+        total = sum(1 for record in tqdm(dataset, desc="Loading dataset", file=sys.stderr))
+
+    elif files[0].endswith(".jpg"):
+        dataset = load_jpgs(files)
+
+        # Expand wildcards
+        files_expanded = []
+        for s in files:
+            files_expanded += glob(s)
+        total = len(list(set(files_expanded))) # Remove duplicates
+    else:
+        raise ValueError("Supported file types are *.tfrecord and *.jpg")
+
+    return dataset, total
+
+def load_tfrecords(filenames, batch_size=64):
     """Loads a set of TFRecord files
     Args:
         filenames (str / str[]): TFRecord file(s) extracted
@@ -48,18 +78,15 @@ def load_tfrecords(filenames, batch_size=64, preprocess_function=None):
     def _decode_function(example):
         image = tf.image.decode_jpeg(example["image/encoded"], channels=3)
         time = example["metadata/time"]
-        if preprocess_function is not None:
-            image = preprocess_function(image)
         return image, time
 
     return raw_dataset.batch(batch_size) \
                       .map(_parse_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
                       .unbatch() \
                       .map(_decode_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
-                      .cache() \
                       .prefetch(tf.data.experimental.AUTOTUNE)
 
-def load_jpgs(filenames, preprocess_function=None):
+def load_jpgs(filenames):
     """Loads a set of TFRecord files
     Args:
         filenames (str / str[]): JPEG file(s) extracted
@@ -81,14 +108,10 @@ def load_jpgs(filenames, preprocess_function=None):
         # Get the time from the file path
         time = tf.strings.split(file_path, '/')[-1]
         time = tf.strings.split(time, ".")[0]
-        time = tf.cast(time, tf.int32)
-
-        if preprocess_function is not None:
-            image = preprocess_function(image)
+        time = tf.strings.to_number(time, out_type=tf.dtypes.int64)
         return image, time
 
     return raw_dataset.map(_decode_function, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
-                      .cache() \
                       .prefetch(tf.data.experimental.AUTOTUNE)
 
 #################

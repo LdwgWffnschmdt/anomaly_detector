@@ -1,5 +1,4 @@
 import tensorflow as tf
-import tensorflow_hub as hub
 
 from featureExtractorBase import FeatureExtractorBase
 
@@ -28,12 +27,14 @@ class FeatureExtractorC3D(FeatureExtractorBase):
         self.model = tf.keras.Model(model_full.inputs, output)
         self.model.trainable = False
     
-    def __transform_dataset__(self, dataset):
+    def __transform_dataset__(self, dataset, total):
+        total = total - self.TEMPORAL_BATCH_SIZE + 1
+
         temporal_image_windows = dataset.map(lambda image, *args: image).window(self.TEMPORAL_BATCH_SIZE, 1, 1, True)
         temporal_image_windows = temporal_image_windows.flat_map(lambda window: window.batch(self.TEMPORAL_BATCH_SIZE))
 
         matching_meta_stuff    = dataset.map(lambda image, *args: args).skip(self.TEMPORAL_BATCH_SIZE - 1)
-        return tf.data.Dataset.zip((temporal_image_windows, matching_meta_stuff)).map(lambda image, meta: (image,) + meta)
+        return tf.data.Dataset.zip((temporal_image_windows, matching_meta_stuff)).map(lambda image, meta: (image,) + meta), total
 
     def extract_batch(self, batch):
         return tf.squeeze(self.model(batch))
@@ -41,5 +42,5 @@ class FeatureExtractorC3D(FeatureExtractorBase):
 # Only for tests
 if __name__ == "__main__":
     extractor = FeatureExtractorC3D()
-    extractor.plot_model(extractor.model)
+    # extractor.plot_model(extractor.model)
     extractor.extract_files()

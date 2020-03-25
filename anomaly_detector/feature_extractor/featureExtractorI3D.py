@@ -19,10 +19,12 @@ class FeatureExtractorI3D(FeatureExtractorBase):
 
         self.model = tf.keras.Model(inputs=inputs, outputs=layer)
     
-    def __transform_dataset__(self, dataset):
+    def __transform_dataset__(self, dataset, total):
+        total = total - self.TEMPORAL_BATCH_SIZE + 1
+
         temporal_image_windows = dataset.map(lambda image, *args: image).window(self.TEMPORAL_BATCH_SIZE, 1, 1, True)
         matching_meta_stuff    = dataset.map(lambda image, *args: args).skip(self.TEMPORAL_BATCH_SIZE - 1)
-        return tf.data.Dataset.zip((temporal_image_windows, matching_meta_stuff)).map(lambda image, meta: (image,) + meta)
+        return tf.data.Dataset.zip((temporal_image_windows, matching_meta_stuff)).map(lambda image, meta: (image,) + meta), total
 
     def extract_batch(self, batch):
         tensor = tf.constant(list(batch.as_numpy_iterator()))

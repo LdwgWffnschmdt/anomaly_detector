@@ -13,6 +13,12 @@ parser.add_argument("--list", dest="list", action="store_true",
 parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.EXTRACT_FILES,
                     help="File(s) to use (*.tfrecord, *.jpg)")
 
+parser.add_argument("--filter", metavar="FI", dest="filter", type=str,# default="direction_ccw",
+                    help="Filter only works with *.jpg files (\"no_anomaly\", \"anomaly\", \"round_number\", \"direction_ccw\", ...)")
+
+parser.add_argument("--filter_argument", metavar="FIA", dest="filter_argument", type=int,
+                    help="Use with --filter=\"round_number\"")
+
 parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', type=str,
                     help="Extractor name. Leave empty for all extractors (default: \"\")")
 
@@ -20,16 +26,24 @@ args = parser.parse_args()
 
 import os
 import time
-from common import logger
+from tqdm import tqdm
+from common import utils, logger, FeatureArray
 import traceback
+
 
 def extract_features():
     if not args.list and len(args.files) == 0:
         logger.error("No input file specified.")
         return
 
+    import tensorflow as tf
     import inspect
     import feature_extractor as feature_extractor
+
+    # Add before any TF calls (https://github.com/tensorflow/tensorflow/issues/29931#issuecomment-504217770)
+    # Initialize the keras global outside of any tf.functions
+    temp = tf.zeros([4, 32, 32, 3])
+    tf.keras.applications.vgg16.preprocess_input(temp)
 
     # Get all the available feature extractor names
     extractor_names = map(lambda e: e[0], inspect.getmembers(feature_extractor, inspect.isclass))
@@ -42,14 +56,37 @@ def extract_features():
     if args.extractor is None:
         args.extractor = extractor_names
 
+    if isinstance(args.files, basestring):
+        args.files = [args.files]
+        
+    dataset = None
+    total = 0
+
+    if args.files[0].endswith(".jpg") and args.filter is not None:
+        features = FeatureArray(args.files)
+        features.preload_metadata()
+        features = getattr(features, args.filter, None)
+        assert features is not None, "The filter was not valid."
+        if args.filter_argument is not None:
+            features = features(args.filter_argument)
+            assert features is not None, "The filter argument was not valid."
+        dataset = features.to_dataset()
+        total = features.shape[0]
+    else:
+        dataset, total = utils.load_dataset(args.files)
+
     module = __import__("feature_extractor")
     
+    # Add progress bar if multiple extractors
+    if len(args.extractor) > 1:
+        args.extractor = tqdm(args.extractor, desc="Extractors", file=sys.stderr)
+
     for extractor_name in args.extractor:
         logger.info("Instantiating %s" % extractor_name)
         try:
             # Get an instance
             extractor = getattr(module, extractor_name)()
-            extractor.extract_files(args.files)
+            extractor.extract_dataset(dataset, total, filter=args.filter)
         except KeyboardInterrupt:
             logger.info("Terminated by CTRL-C")
             return

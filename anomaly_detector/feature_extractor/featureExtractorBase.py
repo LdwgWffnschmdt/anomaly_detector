@@ -4,7 +4,6 @@ from common import utils, logger
 import sys
 import time
 import traceback
-from glob import glob
 
 import tensorflow as tf
 import tensorflow_hub as hub
@@ -32,9 +31,9 @@ class FeatureExtractorBase(object):
         image = tf.image.resize(image, (self.IMG_SIZE, self.IMG_SIZE))
         return image
 
-    def __transform_dataset__(self, dataset):
+    def __transform_dataset__(self, dataset, total):
         """Do any transformations necessary (eg. temporal windowing for 3D networks)"""
-        return dataset # Nothing by default
+        return dataset, total # Nothing by default
 
     ########################
     # Common functionality #
@@ -50,62 +49,30 @@ class FeatureExtractorBase(object):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             features (FeatureArray): Should be a feature array created with the images path only
-            For **kwargs see extract_datset
+            For **kwargs see extract_dataset
 
         Returns:
             success (bool)
         """
 
-        dataset = features.to_dataset(preprocess_function=self.format_image)
+        dataset = features.to_dataset()
         total = features.shape[0]
 
-        return self.extract_datset(dataset, total, **kwargs)
+        return self.extract_dataset(dataset, total, **kwargs)
 
     def extract_files(self, files=consts.EXTRACT_FILES, **kwargs):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             files (str / str[]): TFRecord file(s) extracted by rosbag_to_tfrecord
-            For **kwargs see extract_datset
+            For **kwargs see extract_dataset
 
         Returns:
             success (bool)
         """
-        if isinstance(files, basestring):
-            files = [files]
-            
-        # Expand wildcards
-        files_expanded = []
-        for s in files:
-            files_expanded += glob(s)
-        files = sorted(list(set(files_expanded))) # Remove duplicates
-
-        # Check parameters
-        if not files or len(files) < 1 or files[0] == "":
-            raise ValueError("Please specify at least one filename (%s)" % files)
-
-        # Load dataset
-        if files[0].endswith(".tfrecord"):
-            dataset = utils.load_tfrecords(files, preprocess_function=self.format_image)
-
-            # Call internal transformations (eg. temporal windowing for 3D networks)
-            dataset = self.__transform_dataset__(dataset)
-
-            # Get number of examples in dataset
-            total = sum(1 for record in tqdm(dataset, desc="Loading dataset", file=sys.stderr))
-
-        elif files[0].endswith(".jpg"):
-            dataset = utils.load_jpgs(files, preprocess_function=self.format_image)
-            
-            # Call internal transformations (eg. temporal windowing for 3D networks)
-            dataset = self.__transform_dataset__(dataset)
-            
-            total = len(files)
-        else:
-            raise ValueError("Supported file types are *.tfrecord and *.jpg")
-
-        return self.extract_datset(dataset, total, **kwargs)
+        dataset, total = utils.load_dataset(files)
+        return self.extract_dataset(dataset, total, **kwargs)
     
-    def extract_datset(self, dataset, total, output_file="", batch_size=None, compression="lzf", compression_opts=None):
+    def extract_dataset(self, dataset, total, output_file="", batch_size=None, compression="lzf", compression_opts=None, **kwargs):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             dataset (tf.data.Dataset): Dataset containing the input data
@@ -114,6 +81,7 @@ class FeatureExtractorBase(object):
             batch_size (str): Size of image batches fed to the extractor. Set to 0 for no batching. (Default: self.BATCH_SIZE)
             compression (str): Output file compression, set to None for no compression (Default: "lzf"), gzip can be extremely slow combined with HDF5
             compression_opts (str): Compression level, set to None for no compression (Default: None)
+            **kwargs: Additional arguments will be saved to the output file as h5 attributes
 
         Returns:
             success (bool)
@@ -128,6 +96,13 @@ class FeatureExtractorBase(object):
         
         if batch_size is None:
             batch_size = self.BATCH_SIZE
+
+        # Preprocess images
+        dataset = dataset.map(lambda image, time: (self.format_image(image), time),
+                              num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+        # Call internal transformations (eg. temporal windowing for 3D networks)
+        dataset, total = self.__transform_dataset__(dataset, total)
 
         # Get batches (seems to be better performance wise than extracting individual images)
         if batch_size > 0:
@@ -145,6 +120,10 @@ class FeatureExtractorBase(object):
                 hf.attrs["Compression options"]   = compression_opts
             hf.attrs["Temporal batch size"]   = self.TEMPORAL_BATCH_SIZE
 
+            for key, value in kwargs.items():
+                if value is not None:
+                    hf.attrs[key] = value
+            
             computer_info = utils.getComputerInfo()
             for key, value in computer_info.items():
                 hf.attrs[key] = value
@@ -156,7 +135,11 @@ class FeatureExtractorBase(object):
             
             # Create arrays to store output
             feature_dataset = None # We don't know the feature shape yet
-            time_dataset    = np.empty((total,),   dtype=np.uint64)
+            time_dataset    = hf.create_dataset("times",
+                                                shape=(total,),
+                                                dtype=np.uint64,
+                                                compression=compression,
+                                                compression_opts=compression_opts)
             
             # Loop over the dataset
             with tqdm(desc="Extracting features (batch size: %i)" % batch_size, total=total, file=sys.stderr) as pbar:
@@ -168,7 +151,12 @@ class FeatureExtractorBase(object):
 
                     if feature_dataset is None:
                         # Create the array to store the features now
-                        feature_dataset = np.empty((total,) + feature_batch[0].shape)
+                        feature_dataset = hf.create_dataset("features",
+                                                            shape=(total,) + tuple(feature_batch[0].shape),
+                                                            chunks=(1,) + tuple(feature_batch[0].shape),
+                                                            dtype=np.float32,
+                                                            compression=compression,
+                                                            compression_opts=compression_opts)
 
                     # Save the features and their metadata to the arrays
                     feature_dataset[counter : counter + current_batch_size] = feature_batch.numpy()
@@ -178,9 +166,42 @@ class FeatureExtractorBase(object):
                     counter += current_batch_size
                     pbar.update(n=current_batch_size)
 
-            # Save arrays to file
-            hf.create_dataset("features", data=feature_dataset, dtype=np.float32, compression=compression, compression_opts=compression_opts)
-            hf.create_dataset("times",    data=time_dataset,    dtype=np.uint64,  compression=compression, compression_opts=compression_opts)
+            ## Variant where we first store everything in RAM
+            # feature_dataset = None # We don't know the feature shape yet
+            # time_dataset    = np.empty((total,),   dtype=np.uint64)
+            
+            # # Loop over the dataset
+            # with tqdm(desc="Extracting features (batch size: %i)" % batch_size, total=total, file=sys.stderr) as pbar:
+            #     for batch in dataset:
+            #         # Extract features
+            #         feature_batch = self.extract_batch(batch[0]) # This is where the magic happens
+
+            #         current_batch_size = len(feature_batch)
+
+            #         if feature_dataset is None:
+            #             # Create the array to store the features now
+            #             feature_dataset = np.empty((total,) + feature_batch[0].shape, dtype=np.float32)
+
+            #         # Save the features and their metadata to the arrays
+            #         feature_dataset[counter : counter + current_batch_size] = feature_batch.numpy()
+            #         time_dataset[counter : counter + current_batch_size]    = batch[1].numpy()
+
+            #         # Count and update progress bar
+            #         counter += current_batch_size
+            #         pbar.update(n=current_batch_size)
+
+            # # Save arrays to file
+            # hf.create_dataset("features",
+            #                   data=feature_dataset,
+            #                   dtype=np.float32,
+            #                   compression=compression,
+            #                   compression_opts=compression_opts)
+            # hf.create_dataset("times",
+            #                   data=time_dataset,
+            #                   chunks=(1,) + tuple(feature_batch[0].shape),
+            #                   dtype=np.uint64,
+            #                   compression=compression,
+            #                   compression_opts=compression_opts)
         except:
             exc = traceback.format_exc()
             logger.error(exc)

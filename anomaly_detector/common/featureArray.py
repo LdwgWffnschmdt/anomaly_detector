@@ -30,30 +30,42 @@ class FeatureArray(np.ndarray):
 
         logger.info("Reading metadata and features from: %s" % filename)
 
-        # Check if filename is path to images
-        if os.path.isdir(filename):
-            attrs = dict()
+        images_path = kwargs.get("images_path", consts.IMAGES_PATH)
+        files = None
 
+        # Check if filename is path to images
+        if isinstance(filename, str) and os.path.isdir(filename):
             # Get all images
             files = sorted(glob(os.path.join(filename, "*.jpg")))
+        
+        elif isinstance(filename, str) and filename.endswith(".jpg"):
+            # Get all images
+            files = sorted(glob(filename))
+
+        elif isinstance(filename, list):
+            files_expanded = []
+            for s in filename:
+                files_expanded += glob(s)
+            files = sorted(list(set(files_expanded))) # Remove duplicates
+
+        if files is not None:
+            attrs = dict()
 
             features = np.empty(shape=(len(files), 1, 1), dtype=Feature)
             
             for i, f in enumerate(tqdm(files, desc="Loading empty features", file=sys.stderr)):
                 time = int(os.path.splitext(os.path.basename(f))[0])
                 feature = Feature(np.empty(()), time, 0, 0, 0, 0)
-                feature.images_path = filename
+                feature.images_path = os.path.dirname(f)
                 features[i, 0, 0] = feature
 
         # Check if file is h5 file
         elif os.path.splitext(filename)[1] == ".h5":
             with h5py.File(filename, "r") as hf:
-                images_path = kwargs.get("images_path", consts.IMAGES_PATH)
-
                 attrs = dict(hf.attrs)
 
-                features_raw      = np.array(hf["features"], dtype=np.float32)
-                times             = np.array(hf["times"]   , dtype=np.uint64)
+                features_raw      = hf["features"]
+                times             = hf["times"]
                 feature_extractor = hf.attrs["Extractor"]
 
                 locations = hf.get("locations")
@@ -65,7 +77,9 @@ class FeatureArray(np.ndarray):
                 features = np.empty(shape=(total, h, w), dtype=Feature)
                 
                 for i, y, x in tqdm(np.ndindex(features.shape), desc="Loading features", total=np.prod(features.shape), file=sys.stderr):
-                    feature = Feature(features_raw[i, y, x], times[i], x, y, w, h)
+                    feature_map = features_raw[i, y, x]
+                    time = times[i]
+                    feature = Feature(feature_map, time, x, y, w, h)
                     feature.feature_extractor = feature_extractor
                     feature.images_path = images_path
                     
@@ -343,7 +357,7 @@ class FeatureArray(np.ndarray):
     #      Misc     #
     #################
     
-    def to_dataset(self, preprocess_function=None):
+    def to_dataset(self):
         import tensorflow as tf
 
         def _gen():
@@ -356,11 +370,6 @@ class FeatureArray(np.ndarray):
             output_types=(tf.uint8, tf.int64),
             output_shapes=((None, None, None), ()))
 
-        if preprocess_function is not None:
-            raw_dataset = raw_dataset.map(lambda image, time:
-            (preprocess_function(image), time),
-                                          num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
         return raw_dataset.prefetch(tf.data.experimental.AUTOTUNE)
     
 
@@ -370,7 +379,7 @@ if __name__ == "__main__":
 
     features = FeatureArray(consts.FEATURES_FILE)
 
-    def _test_meta_load():
-        x = features[0, 0, 0].label
+    # def _test_meta_load():
+    #     _ = features[0, 0, 0].label
 
-    print timeit.repeat(_test_meta_load, repeat=1, number=5)
+    # print timeit.repeat(_test_meta_load, repeat=1, number=5)
