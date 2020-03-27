@@ -98,7 +98,7 @@ def load_jpgs(filenames):
     if not filenames or len(filenames) < 1 or filenames[0] == "":
         raise ValueError("Please specify at least one filename (%s)" % filenames)
     
-    raw_dataset = tf.data.Dataset.list_files(filenames)
+    raw_dataset = tf.data.Dataset.list_files(filenames, shuffle=False)
 
     def _decode_function(file_path):
         # Load and decode image
