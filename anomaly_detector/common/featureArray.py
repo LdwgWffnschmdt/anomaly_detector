@@ -173,8 +173,8 @@ class FeatureArray(np.ndarray):
             hf.create_dataset("camera_translation_y", data=[f.camera_translation_y for f in flat], dtype=np.float32)
             hf.create_dataset("camera_translation_z", data=[f.camera_translation_z for f in flat], dtype=np.float32)
             hf.create_dataset("camera_rotation_x",    data=[f.camera_rotation_x    for f in flat], dtype=np.float32)
-            hf.create_dataset("camera_rotation_y",    data=[f.camera_rotation_x    for f in flat], dtype=np.float32)
-            hf.create_dataset("camera_rotation_z",    data=[f.camera_rotation_x    for f in flat], dtype=np.float32)
+            hf.create_dataset("camera_rotation_y",    data=[f.camera_rotation_y    for f in flat], dtype=np.float32)
+            hf.create_dataset("camera_rotation_z",    data=[f.camera_rotation_z    for f in flat], dtype=np.float32)
             hf.create_dataset("time"       , data=[f.time         for f in flat], dtype=np.uint64)
             hf.create_dataset("label"      , data=[f.label        for f in flat], dtype=np.int8)
             hf.create_dataset("direction"   , data=[f.direction    for f in flat], dtype=np.int8)
@@ -415,7 +415,8 @@ if __name__ == "__main__":
     import consts
     import timeit
 
-    features = FeatureArray(consts.FEATURES_FILE)
+    features = FeatureArray(consts.IMAGES_PATH)
+    features.create_metadata_cache()
 
     # def _test_meta_load():
     #     _ = features[0, 0, 0].label
