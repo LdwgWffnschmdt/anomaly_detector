@@ -103,35 +103,24 @@ class Visualize(object):
         """
         
         width = image.shape[1]
-        factor = patches.shape[0] / float(width)
+        # factor = patches.shape[0] / float(width)
         
-        # LABELS
-        for i in range(width):
-            # Get label
-            label = patches[int(i * factor), 0, 0].labels
-            if label != 0: image[210:225, i, :] = Visualize.LABEL_COLORS[label]
+        slots, factor = np.linspace(0, patches.shape[0], num=width, endpoint=False, dtype=np.int, retstep=True)
+
+        def _get_round_number_color(round_number):
+            if round_number <= 0:
+                return (255, 255, 255)
+            elif round_number % 2 == 0:
+                return (181, 81, 63)
+            elif round_number % 2 == 1:
+                return (203, 134, 121)
+
+        image[210:225, ...] = np.array(np.vectorize(Visualize.LABEL_COLORS.get)(patches[slots, 0, 0].labels)).T
+        image[255:270, ...] = np.array(np.vectorize(Visualize.DIRECTION_COLORS.get)(patches[slots, 0, 0].directions)).T
+        image[300:315, ...] = np.array(np.vectorize(_get_round_number_color)(patches[slots, 0, 0].round_numbers)).T
 
         image[210:225, int(index / factor), :] = (1, 1, 1)
-
-        # DIRECTION
-        for i in range(width):
-            # Get label
-            direction = patches[int(i * factor), 0, 0].directions
-            if direction != 0: image[255:270, i, :] = Visualize.DIRECTION_COLORS[direction]
-
         image[255:270, int(index / factor), :] = (1, 1, 1)
-
-        # ROUND
-        for i in range(width):
-            # Get label
-            round_number = patches[int(i * factor), 0, 0].round_numbers
-            if round_number <= 0:
-                continue
-            elif round_number % 2 == 0:
-                image[300:315, i, :] = (181, 81, 63)
-            elif round_number % 2 == 1:
-                image[300:315, i, :] = (203, 134, 121)
-
         image[300:315, int(index / factor), :] = (1, 1, 1)
 
     def __init__(self, patches, **kwargs):
@@ -456,7 +445,6 @@ class Visualize(object):
         res = cv2.remap(img, flow, None, cv2.INTER_LINEAR)
         return res
 
-    # @profile
     def __draw__(self, x=None):
         self.__draw_controls__()
 
