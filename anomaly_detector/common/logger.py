@@ -82,7 +82,7 @@ class Logger(object):
         self.logger.error(msg)
 
 # Redirect
-sys.stdout = TqdmFile(sys.stdout)
+# sys.stdout = TqdmFile(sys.stdout)
 
 logger = Logger()
 
@@ -117,5 +117,5 @@ if __name__ == "__main__":
             from feature_extractor import FeatureExtractorEfficientNetB0
             extractor = FeatureExtractorEfficientNetB0()
         if i == 50:
-            extractor.extract_files(consts.EXTRACT_FILES_TEST)
+            extractor.extract_files(consts.EXTRACT_FILES_TEST, output_file="/tmp/test.h5")
         time.sleep(0.1)
