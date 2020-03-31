@@ -145,13 +145,13 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         self._calculate_mean_and_covariance()
         return True
     
-    def save_model_to_file(self, h5file):
+    def __save_model_to_file__(self, h5file):
         """Save the model to disk"""
-        h5ffile.create_dataset("balanced_distribution",        data=self.balanced_distribution, dtype=np.float64)
-        h5ffile.attrs["initial_normal_features"]    = self.initial_normal_features
-        h5ffile.attrs["threshold_learning"]         = self.threshold_learning
-        h5ffile.attrs["threshold_classification"]   = self.threshold_classification
-        h5ffile.attrs["pruning_parameter"]          = self.pruning_parameter
+        h5file.create_dataset("balanced_distribution", data=self.balanced_distribution, dtype=np.float64)
+        h5file.attrs["initial_normal_features"]    = self.initial_normal_features
+        h5file.attrs["threshold_learning"]         = self.threshold_learning
+        h5file.attrs["threshold_classification"]   = self.threshold_classification
+        h5file.attrs["pruning_parameter"]          = self.pruning_parameter
         return True
 
 # Only for tests
