@@ -25,6 +25,7 @@ parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', t
 args = parser.parse_args()
 
 import os
+import sys
 import time
 from tqdm import tqdm
 from common import utils, logger, PatchArray
