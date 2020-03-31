@@ -72,14 +72,14 @@ class FeatureExtractorBase(object):
         dataset, total = utils.load_dataset(files)
         return self.extract_dataset(dataset, total, **kwargs)
     
-    def extract_dataset(self, dataset, total, output_file="", batch_size=None, compression="lzf", compression_opts=None, **kwargs):
+    def extract_dataset(self, dataset, total, output_file="", batch_size=None, compression=None, compression_opts=None, **kwargs):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             dataset (tf.data.Dataset): Dataset containing the input data
             totla (int): Number of items in Dataset
             output_file (str): Filename and path of the output file
             batch_size (str): Size of image batches fed to the extractor. Set to 0 for no batching. (Default: self.BATCH_SIZE)
-            compression (str): Output file compression, set to None for no compression (Default: "lzf"), gzip can be extremely slow combined with HDF5
+            compression (str): Output file compression, set to None for no compression (Default: None), lzf is feasable, gzip can be extremely slow combined with HDF5
             compression_opts (str): Compression level, set to None for no compression (Default: None)
             **kwargs: Additional arguments will be saved to the output file as h5 attributes
 
@@ -113,12 +113,11 @@ class FeatureExtractorBase(object):
     
         try:
             # Add metadata to the output file
-            hf.attrs["Extractor"]                 = self.NAME
-            hf.attrs["Batch size"]                = batch_size
-            hf.attrs["Compression"]               = compression
-            if compression_opts is not None:
-                hf.attrs["Compression options"]   = compression_opts
-            hf.attrs["Temporal batch size"]   = self.TEMPORAL_BATCH_SIZE
+            hf.attrs["Extractor"]           = self.NAME
+            hf.attrs["Batch size"]          = batch_size
+            hf.attrs["Compression"]         = str(compression)
+            hf.attrs["Compression options"] = str(compression_opts)
+            hf.attrs["Temporal batch size"] = self.TEMPORAL_BATCH_SIZE
 
             for key, value in kwargs.items():
                 if value is not None:
