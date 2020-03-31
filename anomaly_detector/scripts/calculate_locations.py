@@ -20,7 +20,7 @@ from glob import glob
 
 from tqdm import tqdm
 
-from common import utils, logger, FeatureArray
+from common import utils, logger, PatchArray
 import anomaly_model
 
 def calculate_locations():
@@ -52,11 +52,10 @@ def calculate_locations():
             
             try:
                 # Load the file
-                features = FeatureArray(features_file)
-                features.preload_metadata()
+                patches = PatchArray(features_file)
 
                 # Calculate and save the locations
-                features.save_locations_to_file()
+                patches.save_locations_to_file()
 
                 # Calculate anomaly models
                 # anomaly_model.

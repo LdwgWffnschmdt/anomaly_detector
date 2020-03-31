@@ -9,15 +9,14 @@ class AnomalyModelBalancedDistributionPos(AnomalyModelBalancedDistribution):
     Reference: https://www.mdpi.com/2076-3417/9/4/757
     """
     
-    def __generate_model__(self, features):
+    def __generate_model__(self, patches):
         # Add location to features
-        features.add_location_as_feature_dimension()
-        AnomalyModelBalancedDistribution.__generate_model__(self, features)
+        AnomalyModelBalancedDistribution.__generate_model__(self, patches.add_location_as_feature_dimension())
 
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelBalancedDistributionPos()
-    if model.load_or_generate(load_features=True):
+    if model.load_or_generate(load_patches=True):
         # model.calculate_mahalobis_distances()
         # model.show_mahalanobis_distribution()
         model.visualize(threshold=200)

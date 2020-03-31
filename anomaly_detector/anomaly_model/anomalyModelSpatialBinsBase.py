@@ -10,8 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 from anomalyModelBase import AnomalyModelBase
-from common import utils, logger
-from common import FeatureArray
+from common import utils, logger, PatchArray
 
 class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     """ Base for anomaly models that create one model per spatial bin (grid cell) """
@@ -29,47 +28,52 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         m = create_anomaly_model_func()
         self.NAME = "SpatialBin/%s/%.2f" % (m.__class__.__name__.replace("AnomalyModel", ""), cell_size)
     
-    def classify(self, feature, threshold=None):
+    def classify(self, patch, threshold=None):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
         and the single variate Gaussian distribution along each dimension.
         """
-        assert feature.location is not None, "The feature needs a location to find its bins"
+        assert patch.cell_size != self.CELL_SIZE, "The patch needs bins computed in the correct cell size"
 
-        model = self.get_model(feature.get_bin(self.CELL_SIZE))
+        model = self.get_model(patch.bins)
         if model is None:
-            logger.warning("No model available for this bin (%i, %i)" % feature.get_bin(self.CELL_SIZE))
+            logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
             return 0 # Unknown
         
-        return model.classify(feature)
+        return model.classify(patch)
     
-    def _mahalanobis_distance(self, feature):
+    def __mahalanobis_distance__(self, patch):
         """Calculate the Mahalanobis distance between the input and the model"""
-        assert feature.location is not None, "The feature needs a location to find its bins"
-        
-        model = self.get_model(feature.get_bin(self.CELL_SIZE))
+        assert patch.cell_size != self.CELL_SIZE, "The patch needs bins computed in the correct cell size"
+
+        model = self.get_model(patch.bins)
         if model is None:
-            logger.warning("No model available for this bin (%i, %i)" % feature.get_bin(self.CELL_SIZE))
+            logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
             return -1 # TODO: What should we do?
         
-        return model._mahalanobis_distance(feature)
+        return model.__mahalanobis_distance__(patch)
 
-    def __generate_model__(self, features):
+    def __generate_model__(self, patches):
         # Ensure locations are calculated
-        features.ensure_locations()
+        patches.ensure_locations()
         
-        shape = features.calculate_rasterization(self.CELL_SIZE)
+        shape = patches.calculate_rasterization(self.CELL_SIZE)
 
         # Empty grid that will contain the model for each bin
         self.models = np.empty(shape=shape, dtype=object)
+        models_created = 0
 
-        for bin in tqdm(np.ndindex(shape), desc="Generating models", total=np.prod(shape), file=sys.stderr):
-            bin_features_flat = features.bin(bin, self.CELL_SIZE)
-            
-            if len(bin_features_flat) > 0:
-                # Create a new model
-                model = self.CREATE_ANOMALY_MODEL_FUNC() # Instantiate a new model
-                model.__generate_model__(bin_features_flat)  # The model only gets flattened features
-                self.models[bin] = model                # Store the model
+        with tqdm(desc="Generating models", total=np.prod(shape), file=sys.stderr) as pbar:
+            for bin in np.ndindex(shape):
+                bin_features_flat = patches.bin(bin, self.CELL_SIZE)
+                
+                if len(bin_features_flat) > 0:
+                    # Create a new model
+                    model = self.CREATE_ANOMALY_MODEL_FUNC()    # Instantiate a new model
+                    model.__generate_model__(bin_features_flat) # The model only gets flattened features
+                    self.models[bin] = model                    # Store the model
+                    models_created += 1
+                    pbar.set_postfix({"Models": models_created})
+                pbar.update()
         return True
     
     def get_model(self, bin):
@@ -90,17 +94,17 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
 
         with tqdm(desc="Loading models", total=h5file.attrs["Num models"], file=sys.stderr) as pbar:
             def _add_model(name, g):
-                if "u" in g.attrs.keys() and "v" in g.attrs.keys():
-                    u = g.attrs["u"]
+                if "v" in g.attrs.keys() and "u" in g.attrs.keys():
                     v = g.attrs["v"]
-                    self.models[u, v] = self.CREATE_ANOMALY_MODEL_FUNC()
-                    self.models[u, v].__load_model_from_file__(g)
+                    u = g.attrs["u"]
+                    self.models[v, u] = self.CREATE_ANOMALY_MODEL_FUNC()
+                    self.models[v, u].__load_model_from_file__(g)
                     pbar.update()
 
             h5file.visititems(_add_model)
         
-        if isinstance(self.features, FeatureArray):
-            self.features.calculate_rasterization(self.CELL_SIZE)
+        if isinstance(self.patches, PatchArray):
+            self.patches.calculate_rasterization(self.CELL_SIZE)
 
         return True
     
@@ -110,12 +114,12 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         h5file.attrs["Num models"] = sum(x is not None for x in self.models.flatten())
         h5file.attrs["Models shape"] = self.models.shape
         
-        for u, v in tqdm(np.ndindex(self.models.shape), desc="Saving models", total=np.prod(self.models.shape), file=sys.stderr):
-            model = self.get_model((u, v))
+        for v, u in tqdm(np.ndindex(self.models.shape), desc="Saving models", total=np.prod(self.models.shape), file=sys.stderr):
+            model = self.get_model((v, u))
             if model is not None:
-                g = h5file.create_group("%i/%i" % (u, v))
-                g.attrs["u"] = u
+                g = h5file.create_group("%i/%i" % (v, u))
                 g.attrs["v"] = v
+                g.attrs["u"] = u
                 model.__save_model_to_file__(g)
         return True
     	
@@ -123,12 +127,15 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     from anomalyModelSVG import AnomalyModelSVG
-    
-    model = AnomalyModelSpatialBinsBase(AnomalyModelSVG)
-    if model.load_or_generate(load_features=True):
-        # model.show_spatial_histogram()
+    import consts
 
-        # model.calculate_mahalobis_distances()
-        # model.show_mahalanobis_distribution()
+    patches = PatchArray(consts.FEATURES_FILE)
+
+    model = AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=1.0)
+    if model.load_or_generate(patches):
+        patches.show_spatial_histogram(model.CELL_SIZE)
+
+        model.calculate_mahalobis_distances()
+        model.show_mahalanobis_distribution()
 
         model.visualize()

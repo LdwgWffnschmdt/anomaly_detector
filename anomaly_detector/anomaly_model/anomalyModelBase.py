@@ -8,30 +8,34 @@ import numpy as np
 from tqdm import tqdm
 
 import consts
-from common import FeatureArray, Visualize, utils, logger
+from common import PatchArray, Visualize, utils, logger
 
 class AnomalyModelBase(object):
     
     def __init__(self):
         self.NAME = self.__class__.__name__.replace("AnomalyModel", "")
-        self.features = None
+        self.patches = None
     
-    def __generate_model__(self, features):
+    def __generate_model__(self, patches):
         """Generate a model based on the features and metadata
         
         Args:
-            features (FeatureArray): Array of features as extracted by a FeatureExtractor
+            patches (PatchArray): Array of patches with features as extracted by a FeatureExtractor
 
         Returns:
             h5py.group that will be saved to the features file
         """
         raise NotImplementedError()
         
-    def classify(self, feature):
+    def __mahalanobis_distance__(self, patch):
+        """Calculate the Mahalanobis distance between the input and the model"""
+        raise NotImplementedError()
+        
+    def classify(self, patch):
         """Classify a single feature based on the loaded model
         
         Args:
-            feature (Feature): A single feature
+            patch (np.record): A single patch (with feature)
 
         Returns:
             A label
@@ -54,48 +58,50 @@ class AnomalyModelBase(object):
     # Common functionality #
     ########################
     
-    def load_or_generate(self, features=consts.FEATURES_FILE,
-                               load_features=False, load_mahalanobis_distances=False):
+    def load_or_generate(self, patches=consts.FEATURES_FILE,
+                               load_patches=False, load_mahalanobis_distances=False):
         """Load a model from file or generate it based on the features
         
         Args:
-            features (str, FeatureArray) : HDF5 file containing metadata and features (see feature_extractor for details)
+            patches (str, PatchArray) : HDF5 file containing features (see feature_extractor for details)
         """
         
-        # Load features if necessary
-        if isinstance(features, basestring):
-            if features == "" or not os.path.exists(features) or not os.path.isfile(features):
-                raise ValueError("Specified file does not exist (%s)" % features)
+        # Load patches if necessary
+        if isinstance(patches, basestring):
+            if patches == "" or not os.path.exists(patches) or not os.path.isfile(patches):
+                raise ValueError("Specified file does not exist (%s)" % patches)
             
             # Try loading
-            loaded = self.load_from_file(features, load_features=load_features, load_mahalanobis_distances=load_mahalanobis_distances)
+            loaded = self.load_from_file(patches, load_patches=load_patches, load_mahalanobis_distances=load_mahalanobis_distances)
             if loaded:
                 return True
 
             # Read file
-            if not isinstance(self.features, FeatureArray):
-                features = FeatureArray(features)
-        elif isinstance(features, FeatureArray):
+            if not isinstance(self.patches, PatchArray):
+                patches = PatchArray(patches)
+        elif isinstance(patches, PatchArray):
             # Try loading
-            loaded = self.load_from_file(features.filename, load_features=load_features, load_mahalanobis_distances=load_mahalanobis_distances)
+            loaded = self.load_from_file(patches.filename, load_patches=load_patches, load_mahalanobis_distances=load_mahalanobis_distances)
             if loaded:
                 return True
         else:
-            raise ValueError("features must be a path to a file or a FeatureArray.")
+            raise ValueError("patches must be a path to a file or a PatchArray.")
         
-        self.features = features
+        assert patches.contains_features, "patches must contain features to calculate an anomaly model."
+
+        self.patches = patches
 
         start = time.time()
 
         # Generate model
-        if self.__generate_model__(self.features.no_anomaly) == False:
+        if self.__generate_model__(self.patches.no_anomaly) == False:
             logger.info("Could not generate model.")
             return False
 
         end = time.time()
 
-        logger.info("Writing model to: %s" % self.features.filename)
-        with h5py.File(self.features.filename, "a") as hf:
+        logger.info("Writing model to: %s" % self.patches.filename)
+        with h5py.File(self.patches.filename, "a") as hf:
             g = hf.get(self.NAME)
 
             if g is not None:
@@ -104,7 +110,7 @@ class AnomalyModelBase(object):
             g = hf.create_group(self.NAME)
 
             # Add metadata to the output file
-            g.attrs["Number of features used"]   = len(self.features.flatten())
+            g.attrs["Number of features used"]   = len(self.patches.ravel())
 
             computer_info = utils.getComputerInfo()
             for key, value in computer_info.items():
@@ -116,14 +122,14 @@ class AnomalyModelBase(object):
             g.attrs["Duration (formatted)"] = utils.format_duration(end - start)
 
             self.__save_model_to_file__(g)
-        logger.info("Successfully written model to: %s" % self.features.filename)
+        logger.info("Successfully written model to: %s" % self.patches.filename)
 
         if load_mahalanobis_distances:
             self.calculate_mahalobis_distances()
 
         return True
 
-    def load_from_file(self, model_file, load_features=False, load_mahalanobis_distances=False):
+    def load_from_file(self, model_file, load_patches=False, load_mahalanobis_distances=False):
         """ Load a model from file """
         logger.info("Reading model from: %s" % model_file)
         with h5py.File(model_file, "r") as hf:
@@ -132,8 +138,8 @@ class AnomalyModelBase(object):
             if g is None:
                 return False
 
-            if load_features:
-                self.features = FeatureArray(model_file)
+            if load_patches:
+                self.patches = PatchArray(model_file)
 
             if load_mahalanobis_distances:
                 self.load_mahalanobis_distances()
@@ -142,18 +148,18 @@ class AnomalyModelBase(object):
     
     def calculate_mahalobis_distances(self):
         """ Calculate all the Mahalanobis distances """
-        if self.features is None:
-            raise ValueError("No features loaded.")
+        if self.patches is None:
+            raise ValueError("No patches loaded.")
         
         # Try loading
         if self.load_mahalanobis_distances():
             return True
 
         logger.info("Calculating Mahalanobis distances of %i features with and %i features without anomalies" % \
-            (len(self.features.no_anomaly.flatten()), len(self.features.anomaly.flatten())))
+            (len(self.patches.no_anomaly.ravel()), len(self.patches.anomaly.ravel())))
 
-        self.mahalanobis_no_anomaly = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.no_anomaly.flatten(), desc="No anomaly  ", file=sys.stderr)))) # 75.49480115577167
-        self.mahalanobis_anomaly    = np.array(list(map(self._mahalanobis_distance, tqdm(self.features.anomaly.flatten(), desc="With anomaly", file=sys.stderr))))    # 76.93620254133627
+        self.mahalanobis_no_anomaly = np.array(list(map(self.__mahalanobis_distance__, tqdm(np.nditer(self.patches.no_anomaly), desc="No anomaly  ", file=sys.stderr)))) # 75.49480115577167
+        self.mahalanobis_anomaly    = np.array(list(map(self.__mahalanobis_distance__, tqdm(np.nditer(self.patches.anomaly), desc="With anomaly", file=sys.stderr))))    # 76.93620254133627
 
         self.mahalanobis_no_anomaly_max = np.nanmax(self.mahalanobis_no_anomaly) if len(self.mahalanobis_no_anomaly) > 0 else np.nan
         self.mahalanobis_anomaly_max    = np.nanmax(self.mahalanobis_anomaly) if len(self.mahalanobis_anomaly) > 0 else np.nan
@@ -167,7 +173,7 @@ class AnomalyModelBase(object):
 
     def load_mahalanobis_distances(self):
         """ Load the mahalanobis distances from file """
-        with h5py.File(self.features.filename, "r") as hf:
+        with h5py.File(self.patches.filename, "r") as hf:
             g = hf.get(self.NAME)
             
             if g is None:
@@ -189,7 +195,7 @@ class AnomalyModelBase(object):
 
     def save_mahalanobis_distances(self):
         """ Save the mahalanobis distances from file """
-        with h5py.File(self.features.filename, "r+") as hf:
+        with h5py.File(self.patches.filename, "r+") as hf:
             g = hf.get(self.NAME)
 
             if g is None:
@@ -212,10 +218,10 @@ class AnomalyModelBase(object):
         
         fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 
-        ax1.set_title("No anomaly (%i)" % len(self.features.no_anomaly.flatten()))
+        ax1.set_title("No anomaly (%i)" % len(self.patches.no_anomaly.ravel()))
         ax1.hist(self.mahalanobis_no_anomaly, bins=50)
 
-        ax2.set_title("Anomaly (%i)" % len(self.features.anomaly.flatten()))
+        ax2.set_title("Anomaly (%i)" % len(self.patches.anomaly.ravel()))
         ax2.hist(self.mahalanobis_anomaly, bins=50)
 
         fig.suptitle("Mahalanobis distances")
@@ -230,26 +236,26 @@ class AnomalyModelBase(object):
                 self.calculate_mahalobis_distances()
             kwargs["threshold"] = self.mahalanobis_max * 0.9
         
-        if "feature_to_color_func" not in kwargs:
-            def _default_feature_to_color(v, feature):
+        if "patch_to_color_func" not in kwargs:
+            def _default_patch_to_color(v, feature):
                 b = 0#100 if feature in self.normal_distribution else 0
                 g = 0
                 threshold = v.get_trackbar("threshold")
                 if v.get_trackbar("show_thresh"):
-                    r = 100 if self._mahalanobis_distance(feature) > threshold else 0
-                elif t == 0:
+                    r = 100 if self.__mahalanobis_distance__(feature) > threshold else 0
+                elif threshold == 0:
                     r = 0
                 else:
-                    r = min(255, int(self._mahalanobis_distance(feature) * (255 / threshold)))
+                    r = min(255, int(self.__mahalanobis_distance__(feature) * (255 / threshold)))
                 return (b, g, r)
-            kwargs["feature_to_color_func"] = _default_feature_to_color
+            kwargs["patch_to_color_func"] = _default_patch_to_color
 
-        if "feature_to_text_func" not in kwargs:
-            def _default_feature_to_text(v, feature):
-                return round(self._mahalanobis_distance(feature), 2)
-            kwargs["feature_to_text_func"] = _default_feature_to_text
+        if "patch_to_text_func" not in kwargs:
+            def _default_patch_to_text(v, feature):
+                return round(self.__mahalanobis_distance__(feature), 2)
+            kwargs["patch_to_text_func"] = _default_patch_to_text
 
-        vis = Visualize(self.features, **kwargs)
+        vis = Visualize(self.patches, **kwargs)
 
         vis.create_trackbar("threshold", kwargs["threshold"], kwargs["threshold"] * 3)
         vis.create_trackbar("show_thresh", 1, 1)

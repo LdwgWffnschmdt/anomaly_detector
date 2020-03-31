@@ -9,15 +9,14 @@ class AnomalyModelSVGPos(AnomalyModelSVG):
     Reference: https://www.mdpi.com/1424-8220/16/11/1904/htm
     """
     
-    def __generate_model__(self, features):
+    def __generate_model__(self, patches):
         # Add location to features
-        features.add_location_as_feature_dimension()
-        AnomalyModelSVG.__generate_model__(self, features)
+        AnomalyModelSVG.__generate_model__(self, patches.add_location_as_feature_dimension())
 
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelSVGPos()
-    if model.load_or_generate(load_features=True):
+    if model.load_or_generate(load_patches=True):
         # model.calculate_mahalobis_distances()
         # model.show_mahalanobis_distribution()
         model.visualize(threshold=200)

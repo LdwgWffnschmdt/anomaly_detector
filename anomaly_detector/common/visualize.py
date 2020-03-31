@@ -36,7 +36,7 @@ class Visualize(object):
     }
 
     @staticmethod
-    def image_write_label(image, feature):
+    def image_write_label(image, frame):
         """Write the specified label on an image for debug purposes
         (0: Unknown, 1: No anomaly, 2: Contains an anomaly)
         
@@ -55,14 +55,14 @@ class Visualize(object):
             (255,255,255),
             thickness, lineType=cv2.LINE_AA)
         
-        cv2.putText(image, Visualize.LABEL_TEXTS.get(feature.label, 0),
+        cv2.putText(image, Visualize.LABEL_TEXTS.get(frame.labels, 0),
             (60, 50),
             font,
             fontScale,
-            Visualize.LABEL_COLORS.get(feature.label, 0),
+            Visualize.LABEL_COLORS.get(frame.labels, 0),
             thickness, lineType=cv2.LINE_AA)
 
-        if feature.direction != 0:
+        if frame.directions != 0:
             cv2.putText(image,"Direction: ",
                 (10,80), # bottomLeftCornerOfText
                 font,
@@ -70,14 +70,14 @@ class Visualize(object):
                 (255,255,255),
                 thickness, lineType=cv2.LINE_AA)
             
-            cv2.putText(image, Visualize.DIRECTION_TEXTS.get(feature.direction, 0),
+            cv2.putText(image, Visualize.DIRECTION_TEXTS.get(frame.directions, 0),
                 (90, 80),
                 font,
                 fontScale,
-                Visualize.DIRECTION_COLORS.get(feature.direction, 0),
+                Visualize.DIRECTION_COLORS.get(frame.directions, 0),
                 thickness, lineType=cv2.LINE_AA)
 
-        if feature.round_number != 0:
+        if frame.round_numbers != 0:
             cv2.putText(image,"Round: ",
                 (10,110), # bottomLeftCornerOfText
                 font,
@@ -85,7 +85,7 @@ class Visualize(object):
                 (255,255,255),
                 thickness, lineType=cv2.LINE_AA)
             
-            cv2.putText(image, str(feature.round_number),
+            cv2.putText(image, str(frame.round_numbers),
                 (65, 110),
                 font,
                 fontScale,
@@ -93,22 +93,22 @@ class Visualize(object):
                 thickness, lineType=cv2.LINE_AA)
 
     @staticmethod
-    def image_add_trackbar(image, index, features):
+    def image_add_trackbar(image, index, patches):
         """Add trackbar to image
         
         Args:
             image (Image)
             index (int): Current index
-            features (FeatureArray)
+            patches (PatchArray)
         """
         
         width = image.shape[1]
-        factor = features.shape[0] / float(width)
-
+        factor = patches.shape[0] / float(width)
+        
         # LABELS
         for i in range(width):
             # Get label
-            label = features[int(i * factor), 0, 0].label
+            label = patches[int(i * factor), 0, 0].labels
             if label != 0: image[210:225, i, :] = Visualize.LABEL_COLORS[label]
 
         image[210:225, int(index / factor), :] = (1, 1, 1)
@@ -116,7 +116,7 @@ class Visualize(object):
         # DIRECTION
         for i in range(width):
             # Get label
-            direction = features[int(i * factor), 0, 0].direction
+            direction = patches[int(i * factor), 0, 0].directions
             if direction != 0: image[255:270, i, :] = Visualize.DIRECTION_COLORS[direction]
 
         image[255:270, int(index / factor), :] = (1, 1, 1)
@@ -124,7 +124,7 @@ class Visualize(object):
         # ROUND
         for i in range(width):
             # Get label
-            round_number = features[int(i * factor), 0, 0].round_number
+            round_number = patches[int(i * factor), 0, 0].round_numbers
             if round_number <= 0:
                 continue
             elif round_number % 2 == 0:
@@ -134,49 +134,48 @@ class Visualize(object):
 
         image[300:315, int(index / factor), :] = (1, 1, 1)
 
-    def __init__(self, features, **kwargs):
-        """Visualize features on the source image
+    def __init__(self, patches, **kwargs):
+        """Visualize patches
 
         Args:
-            features (FeatureArray): Array of features as extracted by a FeatureExtractor
+            patches (PatchArray): Array of patches
             images_path (str): Path to jpgs (Default: consts.IMAGES_PATH)
             show_grid (bool): Overlay real world coordinate grid (Default: False)
             show_map (bool): Update the position on the map every frame (Default: False)
             show_values (bool): Show values on each patch (Default: False)
-            feature_to_color_func (function): Function converting a feature to a color (b, g, r)
-            feature_to_text_func (function): Function converting a feature to a string
-            pause_func (function): Function converting a feature to a boolean that pauses the video
+            patch_to_color_func (function): Function converting a patch to a color (b, g, r)
+            patch_to_text_func (function): Function converting a patch to a string
+            pause_func (function): Function converting patch info to a boolean that pauses the video
         """
-        self.orig_features = features
-        self.features      = features
+        self.orig_patches = patches
+        self.patches      = patches
         self.images_path = kwargs.get("images_path", consts.IMAGES_PATH)
 
         self.show_grid = kwargs.get("show_grid", False)
         self.show_map  = kwargs.get("show_map", False)
         self.show_values  = kwargs.get("show_values", False)
         
-        self.feature_to_color_func = kwargs.get("feature_to_color_func", None)
-        self.feature_to_text_func  = kwargs.get("feature_to_text_func", None)
+        self.patch_to_color_func = kwargs.get("patch_to_color_func", None)
+        self.patch_to_text_func  = kwargs.get("patch_to_text_func", None)
         self.pause_func            = kwargs.get("pause_func", None)
         self.key_func              = kwargs.get("key_func", None)
 
         self.index = 0
         self.pause = False
         
-        self.has_locations = features[0,0,0].location is not None
-
-        if self.has_locations:
-            # Calculate grid overlay
-            self._ilu = ImageLocationUtility()
-            self._absolute_locations = self._ilu.span_grid(60, 60, 1, -30, -30)
-
+        if self.patches.contains_locations:
             # Setup map display
-            self.extent = features.get_extent()
+            self.extent = patches.get_extent()
             
             self._fig = plt.figure()
             self._ax = self._fig.add_subplot(111)
             self._ax.set_xlim([self.extent[0], self.extent[2]])
             self._ax.set_ylim([self.extent[1], self.extent[3]])
+
+            # Calculate grid overlay
+            self._ilu = ImageLocationUtility()
+            self._absolute_locations = self._ilu.span_grid(self.extent[3] - self.extent[1], self.extent[2] - self.extent[0],
+                                                                   offset_y=self.extent[1],         offset_x=self.extent[0])
 
             plt.ion()
             self._fig.show()
@@ -190,6 +189,13 @@ class Visualize(object):
         self._assets_path = os.path.join(os.path.dirname(__file__), "assets")
 
         self._window_set_up = False
+        self.mode = 0 # 0: don't edit, 1: single, 2: continuous
+        self._label = -1
+        self._direction = -1
+        self._round_number = -1
+        self._last_index = 0
+        self._exiting = False
+        self._mouse_down = False
 
     def show(self):
         self.mode = 0 # 0: don't edit, 1: single, 2: continuous
@@ -210,7 +216,7 @@ class Visualize(object):
                 if self._exiting:
                     self._exiting = False
                     self.__draw__()
-                elif len(self.orig_features.metadata_changed) > 0:
+                elif len(self.orig_patches.metadata_changed) > 0:
                     self.pause = True
                     self._exiting = True
                     self.__draw__()
@@ -218,7 +224,7 @@ class Visualize(object):
                     cv2.destroyAllWindows()
                     return
             elif key == 121 and self._exiting: # [y] => save changes
-                self.orig_features.save_metadata()
+                self.orig_patches.save_metadata()
                 cv2.destroyAllWindows()
                 return
             elif key == 110 and self._exiting: # [n] => save changes
@@ -240,8 +246,8 @@ class Visualize(object):
             elif key == -1:  # No input, continue
                 self.index += cv2.getTrackbarPos("skip", self.WINDOWS_CONTROLS)
 
-            if self.index >= self.features.shape[0] - 1:
-                self.index = self.features.shape[0] - 1
+            if self.index >= self.patches.shape[0] - 1:
+                self.index = self.patches.shape[0] - 1
                 self.pause = True
             elif self.index <= 0:
                 self.index = 0
@@ -290,23 +296,23 @@ class Visualize(object):
                 indices = range(self._last_index, self.index + 1)
                 self._last_index = self.index
                 
-                # Label the last features if in continuous mode
+                # Label the last frames if in continuous mode
                 if self.mode == 2:
                     for i in indices:
                         if self._label != -1:
-                            self.features[i, 0, 0].label = self._label
+                            self.patches[i, 0, 0].labels = self._label
                         
                         if self._direction != -1:
-                            self.features[i, 0, 0].direction = self._direction
+                            self.patches[i, 0, 0].directions = self._direction
 
                         if self._round_number != -1:
-                            self.features[i, 0, 0].round_number = self._round_number
+                            self.patches[i, 0, 0].round_numbers = self._round_number
 
                 if key == 48 or key == 49 or key == 50:
                     if new_label == self._label:
                         new_label = -1
                     elif new_label != -1:
-                        self.features[self.index, 0, 0].label = new_label
+                        self.patches[self.index, 0, 0].labels = new_label
                     self._label = new_label
                     self.__draw__()
                     
@@ -314,13 +320,13 @@ class Visualize(object):
                     if new_direction == self._direction:
                         new_direction = -1
                     elif new_direction != -1:
-                        self.features[self.index, 0, 0].direction = new_direction
+                        self.patches[self.index, 0, 0].directions = new_direction
                     self._direction = new_direction
                     self.__draw__()
                     
                 if key == 43 or key == 45 or key == 120:
                     if new_round_number != -1:
-                        self.features[self.index, 0, 0].round_number = new_round_number
+                        self.patches[self.index, 0, 0].round_numbers = new_round_number
                     self._round_number = new_round_number
                     self.__draw__()
                 
@@ -346,34 +352,35 @@ class Visualize(object):
             cv2.setMouseCallback(self.WINDOWS_CONTROLS, self.__mouse__)
 
             # Create trackbars
-            if self.has_locations:
+            if self.patches.contains_locations:
                 cv2.createTrackbar("show_grid", self.WINDOWS_CONTROLS, int(self.show_grid), 1, self.__draw__)
                 cv2.createTrackbar("show_map",  self.WINDOWS_CONTROLS, int(self.show_map),  1, self.__draw__)
             
-            if self.feature_to_text_func is not None:
+            if self.patch_to_text_func is not None:
                 cv2.createTrackbar("show_values", self.WINDOWS_CONTROLS, int(self.show_values), 1, self.__draw__)
             
-            if self.feature_to_text_func is not None or \
-               self.feature_to_color_func is not None:
+            if self.patch_to_text_func is not None or \
+               self.patch_to_color_func is not None or \
+               self.patches.contains_locations:
                 cv2.createTrackbar("overlay", self.WINDOWS_CONTROLS, 40, 100, self.__draw__)
 
             cv2.createTrackbar("optical_flow", self.WINDOWS_CONTROLS, 0, 1, self.__draw__)
 
-            cv2.createTrackbar("label", self.WINDOWS_CONTROLS, -1,  2, self.__change_features__)
+            cv2.createTrackbar("label", self.WINDOWS_CONTROLS, -1,  2, self.__change_frames__)
             cv2.setTrackbarMin("label", self.WINDOWS_CONTROLS, -1)
             cv2.setTrackbarPos("label", self.WINDOWS_CONTROLS, -1)
 
-            cv2.createTrackbar("direction", self.WINDOWS_CONTROLS, -1,  2, self.__change_features__)
+            cv2.createTrackbar("direction", self.WINDOWS_CONTROLS, -1,  2, self.__change_frames__)
             cv2.setTrackbarMin("direction", self.WINDOWS_CONTROLS, -1)
             cv2.setTrackbarPos("direction", self.WINDOWS_CONTROLS, -1)
 
-            cv2.createTrackbar("round_number", self.WINDOWS_CONTROLS, -1,  30, self.__change_features__)
+            cv2.createTrackbar("round_number", self.WINDOWS_CONTROLS, -1,  30, self.__change_frames__)
             cv2.setTrackbarMin("round_number", self.WINDOWS_CONTROLS, -1)
             cv2.setTrackbarPos("round_number", self.WINDOWS_CONTROLS, -1)
 
             cv2.createTrackbar("delay", self.WINDOWS_CONTROLS, 1,  1000, self.__draw__)
             cv2.createTrackbar("skip",  self.WINDOWS_CONTROLS, 1,  1000, lambda x: None)
-            cv2.createTrackbar("index", self.WINDOWS_CONTROLS, 0,  self.features.shape[0] - 1, self.__index_update__)
+            cv2.createTrackbar("index", self.WINDOWS_CONTROLS, 0,  self.patches.shape[0] - 1, self.__index_update__)
             
             cv2.namedWindow(self.WINDOWS_IMAGE)
 
@@ -382,7 +389,7 @@ class Visualize(object):
     def __mouse__(self, event, x, y, flags, param):
         if (event == cv2.EVENT_LBUTTONDOWN and y > 180) or (event == cv2.EVENT_MOUSEMOVE and self._mouse_down):
             self._mouse_down = True
-            cv2.setTrackbarPos("index", self.WINDOWS_CONTROLS, self.features.shape[0] * x / 640)
+            cv2.setTrackbarPos("index", self.WINDOWS_CONTROLS, self.patches.shape[0] * x / 640)
         elif event == cv2.EVENT_LBUTTONUP:
             self._mouse_down = False
 
@@ -391,7 +398,7 @@ class Visualize(object):
             cv2.imshow(self.WINDOWS_CONTROLS, cv2.imread(os.path.join(self._assets_path, "Controls_save.jpg")))
             return
 
-        if self.index < 0 or self.features.shape[0] <= 0:
+        if self.index < 0 or self.patches.shape[0] <= 0:
             cv2.imshow(self.WINDOWS_CONTROLS, cv2.imread(os.path.join(self._assets_path, "Controls_no_frames.jpg")))
             return
         
@@ -413,7 +420,7 @@ class Visualize(object):
             thickness, lineType=cv2.LINE_AA)
         
         # Draw Trackbar
-        self.image_add_trackbar(image, self.index, self.features)
+        self.image_add_trackbar(image, self.index, self.patches)
         cv2.imshow(self.WINDOWS_CONTROLS, image)
     
     
@@ -449,13 +456,11 @@ class Visualize(object):
         res = cv2.remap(img, flow, None, cv2.INTER_LINEAR)
         return res
 
-
+    # @profile
     def __draw__(self, x=None):
-        total, height, width = self.features.shape
-
         self.__draw_controls__()
 
-        if self.index < 0 or self.features.shape[0] <= 0:
+        if self.index < 0 or self.patches.shape[0] <= 0:
             image = np.zeros((480, 640, 3), dtype=np.uint8)
             cv2.putText(image,"No frames to show",
                 (10,50),
@@ -467,11 +472,11 @@ class Visualize(object):
             cv2.imshow(self.WINDOWS_IMAGE, image)
             return
         
-        feature_2d = self.features[self.index,...]
-        cv2.setWindowTitle(self.WINDOWS_IMAGE, str(feature_2d[0, 0].time))
+        frame = self.patches[self.index, ...]
+        cv2.setWindowTitle(self.WINDOWS_IMAGE, str(frame.times[0, 0]))
 
         # Get the image
-        image = feature_2d[0, 0].get_image()
+        image = frame[0, 0].get_image()
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         if self._cur_glitch is None:
@@ -493,99 +498,106 @@ class Visualize(object):
         self._prev_gray = gray
 
         # Update parameters
-        if self.has_locations:
+        if self.patches.contains_locations:
             self.show_grid = bool(cv2.getTrackbarPos("show_grid", self.WINDOWS_CONTROLS))
             self.show_map  = bool(cv2.getTrackbarPos("show_map", self.WINDOWS_CONTROLS))
+
+            # Update map
+            if self.show_map:
+                self._ax.clear()
+                self._ax.set_xlim([self.extent[0], self.extent[2]])
+                self._ax.set_ylim([self.extent[1], self.extent[3]])
+
+                # Draw FOV polygon
+                self._ax.fill([frame[0 ,  0].locations.x,
+                               frame[-1,  0].locations.x,
+                               frame[-1, -1].locations.x,
+                               frame[0 , -1].locations.x],
+                              [frame[0 ,  0].locations.y,
+                               frame[-1,  0].locations.y,
+                               frame[-1, -1].locations.y,
+                               frame[0 , -1].locations.y])
+
+                self._ax.plot(frame[0 ,  0].locations.x, frame[0 ,  0].locations.y, "g+", markersize=2, linewidth=2)
+                self._ax.plot(frame[-1,  0].locations.x, frame[-1,  0].locations.y, "b+", markersize=2, linewidth=2)
+                self._ax.plot(frame[0 , -1].locations.x, frame[0 , -1].locations.y, "r+", markersize=2, linewidth=2)
+                self._ax.plot(frame[-1, -1].locations.x, frame[-1, -1].locations.y, "y+", markersize=2, linewidth=2)
+                
+                # Draw camera position
+                self._ax.plot(frame.camera_locations[0, 0].translation.x, 
+                              frame.camera_locations[0, 0].translation.y, "bo")
+                
+                self._fig.canvas.draw()
+            
         
         self.show_values = bool(cv2.getTrackbarPos("show_values", self.WINDOWS_CONTROLS))
         self.show_thresh = bool(cv2.getTrackbarPos("show_thresh", self.WINDOWS_CONTROLS))
-
-        # Update map
-        if self.show_map:
-            self._ax.clear()
-            self._ax.set_xlim([self.extent[0], self.extent[2]])
-            self._ax.set_ylim([self.extent[1], self.extent[3]])
-
-            # Draw FOV polygon
-            self._ax.fill([feature_2d[0 ,  0].location[0],
-                          feature_2d[-1,  0].location[0],
-                          feature_2d[-1, -1].location[0],
-                          feature_2d[0 , -1].location[0]],
-                         [feature_2d[0 ,  0].location[1],
-                          feature_2d[-1,  0].location[1],
-                          feature_2d[-1, -1].location[1],
-                          feature_2d[0 , -1].location[1]])
-
-            # self._ax.plot(feature_2d[0 ,  0].location[0], feature_2d[0 ,  0].location[1], "r+", markersize=2, linewidth=2)
-            # self._ax.plot(feature_2d[-1,  0].location[0], feature_2d[-1,  0].location[1], "r+", markersize=2, linewidth=2)
-            # self._ax.plot(feature_2d[0 , -1].location[0], feature_2d[0 , -1].location[1], "r+", markersize=2, linewidth=2)
-            # self._ax.plot(feature_2d[-1, -1].location[0], feature_2d[-1, -1].location[1], "r+", markersize=2, linewidth=2)
-            
-            # Draw camera position
-            self._ax.plot(feature_2d[0, 0].camera_translation_x, 
-                          feature_2d[0, 0].camera_translation_y, "bo")
-            
-            self._fig.canvas.draw()
-        
         font      = cv2.FONT_HERSHEY_SIMPLEX
         fontScale = 0.25
         thickness = 1
 
         overlay = image.copy()
-
-        patch_size = (image.shape[1] / float(width), image.shape[0] / float(height))
         
-        # Loop over all feature maps
-        if self.feature_to_color_func is not None or \
-            (self.feature_to_text_func is not None and self.show_values) or \
-            self.pause_func is not None:
-            for x in range(width):
-                for y in range(height):
-                    feature = feature_2d[y,x]
+        # Loop over all patches
+        if self.patches.contains_features and ( \
+             self.patch_to_color_func is not None or \
+            (self.patch_to_text_func is not None and self.show_values) or \
+             self.pause_func is not None):
+             
+            patch_size = (float(image.shape[0]) / float(frame.shape[0]),
+                          float(image.shape[1]) / float(frame.shape[1]))
 
-                    p1 = (int(x * patch_size[0]), int(y * patch_size[1]))
-                    p2 = (int(p1[0] + patch_size[0]), int(p1[1] + patch_size[1]))
-                    
-                    if self.feature_to_color_func is not None:
-                        cv2.rectangle(overlay, p1, p2, self.feature_to_color_func(self, feature), -1)
+            for y, x in np.ndindex(frame.shape):
+                patch = frame[y, x]
 
-                    if self.feature_to_text_func is not None and self.show_values:
-                        text = str(self.feature_to_text_func(self, feature))
-                        cv2.putText(overlay, text,
-                            (p1[0] + 2, p1[1] + patch_size[1] - 2),
-                            font,
-                            fontScale,
-                            (0, 0, 255),
-                            thickness, lineType=cv2.LINE_AA)
-                    
-                    if self.pause_func is not None and self.pause_func(self, feature):
-                        self.pause = True
+                p1 = (int(x * patch_size[1]), int(y * patch_size[0]))               # (x, y)
+                p2 = (int(p1[0] + patch_size[1]), int(p1[1] + patch_size[0]))       # (x, y)
+                
+                if self.patch_to_color_func is not None:
+                    cv2.rectangle(overlay, p1, p2, self.patch_to_color_func(self, patch), -1)
+
+                if self.patch_to_text_func is not None and self.show_values:
+                    text = str(self.patch_to_text_func(self, patch))
+                    cv2.putText(overlay, "%i, %i" % (x, y),# text,
+                        (p1[0] + 2, p1[1] + int(patch_size[0]) - 2),    # (x, y)
+                        font,
+                        fontScale,
+                        (0, 0, 255),
+                        thickness, lineType=cv2.LINE_AA)
+                
+                if self.pause_func is not None and self.pause_func(self, patch):
+                    self.pause = True
         
         # Draw grid
         if self.show_grid:
-            relative_grid = self._ilu.absolute_to_relative(self._absolute_locations, feature_2d[0,0].camera_translation, feature_2d[0,0].camera_rotation_z)
-            image_grid = self._ilu.relative_to_image(relative_grid, image.shape[1], image.shape[0])
-        
-            for a in range(image_grid.shape[0]):
-                for b in range(image_grid.shape[1]):
-                    pos = (int(image_grid[a][b][0]), int(image_grid[a][b][1]))
-                    if pos[0] < 0 or pos[0] > image.shape[1] or pos[1] < 0 or pos[1] > image.shape[0]:
-                        continue
-                    cv2.circle(overlay, pos, 2, (255, 255, 255), -1, lineType=cv2.LINE_AA)
-                    
-                    cv2.putText(overlay, "%.1f / %.1f" % (self._absolute_locations[a][b][0], self._absolute_locations[a][b][1]),
-                        (pos[0] + 3, pos[1] + 2),
-                        font,
-                        fontScale,
-                        (255, 255, 255),
-                        thickness, lineType=cv2.LINE_AA)
+            relative_grid = self._ilu.absolute_to_relative(self._absolute_locations, frame.camera_locations[0, 0])
+            image_grid = self._ilu.relative_to_image(relative_grid, image.shape[0], image.shape[1])
+
+            in_image_filter = np.all([image_grid[...,0] > 0,
+                                      image_grid[...,0] < image.shape[0],
+                                      image_grid[...,1] > 0,
+                                      image_grid[...,1] < image.shape[1]], axis=0)
+
+            a = self._absolute_locations[in_image_filter]
+
+            for i, p in enumerate(image_grid[in_image_filter]):
+                pos = (int(p[1]), int(p[0]))
+
+                cv2.circle(overlay, pos, 2, (255, 255, 255), -1, lineType=cv2.LINE_AA)
+                
+                cv2.putText(overlay, "%.1f / %.1f" % (a[i, 1], a[i, 0]),
+                    (pos[0] + 3, pos[1] + 2),
+                    font,
+                    fontScale,
+                    (255, 255, 255),
+                    thickness, lineType=cv2.LINE_AA)
 
         # Blend the overlay
         alpha = cv2.getTrackbarPos("overlay",self.WINDOWS_CONTROLS) / 100.0  # Transparency factor.
         image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
 
         # Draw current label
-        self.image_write_label(image_new, feature_2d[0, 0])
+        self.image_write_label(image_new, frame[0, 0])
         cv2.imshow(self.WINDOWS_IMAGE, image_new)
     
     def __index_update__(self, new_index=None):
@@ -594,38 +606,38 @@ class Visualize(object):
         self.index = new_index
         self.__draw__()
 
-    def __change_features__(self, *args):
+    def __change_frames__(self, *args):
         label        = cv2.getTrackbarPos("label", self.WINDOWS_CONTROLS)
         direction    = cv2.getTrackbarPos("direction", self.WINDOWS_CONTROLS)
         round_number = cv2.getTrackbarPos("round_number", self.WINDOWS_CONTROLS)
 
-        self.features = self.orig_features
+        self.patches = self.orig_patches
         if label == 0:
-            self.features = self.features.unknown_anomaly
+            self.patches = self.patches.unknown_anomaly
         elif label == 1:
-            self.features = self.features.no_anomaly
+            self.patches = self.patches.no_anomaly
         elif label == 2:
-            self.features = self.features.anomaly
+            self.patches = self.patches.anomaly
 
         if direction == 0:
-            self.features = self.features.direction_unknown
+            self.patches = self.patches.direction_unknown
         elif direction == 1:
-            self.features = self.features.direction_ccw
+            self.patches = self.patches.direction_ccw
         elif direction == 2:
-            self.features = self.features.direction_cw
+            self.patches = self.patches.direction_cw
 
         if round_number != -1:
-            self.features = self.features.round_number(round_number)
+            self.patches = self.patches.round_number(round_number)
 
         cv2.setTrackbarPos("index", self.WINDOWS_CONTROLS, 0)
-        cv2.setTrackbarMax("index", self.WINDOWS_CONTROLS, max(0, self.features.shape[0] - 1))
+        cv2.setTrackbarMax("index", self.WINDOWS_CONTROLS, max(0, self.patches.shape[0] - 1))
 
         self.__draw__()
 
 
 if __name__ == "__main__":
-    from common import FeatureArray
-    features = FeatureArray(consts.IMAGES_PATH)
+    from common import PatchArray
+    patches = PatchArray()
 
-    vis = Visualize(features)
+    vis = Visualize(patches)
     vis.show()

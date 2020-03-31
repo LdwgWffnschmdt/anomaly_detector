@@ -12,8 +12,7 @@ anomaly_detector/anomaly_model/anomalyModelSVG.py
 anomaly_detector/anomaly_model/anomalyModelSVGPos.py
 anomaly_detector/anomaly_model/anomalyModelSpatialBinsBase.py
 anomaly_detector/common/__init__.py
-anomaly_detector/common/feature.py
-anomaly_detector/common/featureArray.py
+anomaly_detector/common/patchArray.py
 anomaly_detector/common/imageLocationUtility.py
 anomaly_detector/common/utils.py
 anomaly_detector/feature_extractor/__init__.py

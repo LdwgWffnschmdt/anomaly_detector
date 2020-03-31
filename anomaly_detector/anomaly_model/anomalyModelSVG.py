@@ -18,22 +18,24 @@ class AnomalyModelSVG(AnomalyModelBase):
         self._var       = None # Variance σ²
         self._mean      = None # Mean μ
     
-    def classify(self, feature, threshold=None):
+    def classify(self, patch, threshold=None):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
         and the single variate Gaussian distribution along each dimension.
         """
-        return self._mahalanobis_distance(feature) > threshold
+        return self.__mahalanobis_distance__(patch) > threshold
     
-    def _mahalanobis_distance(self, feature):
+    def __mahalanobis_distance__(self, patch):
         """Calculate the Mahalanobis distance between the input and the model"""
         assert not self._var is None and not self._mean is None, \
             "You need to load a model before computing a Mahalanobis distance"
+            
+        feature = patch["features"]
         assert feature.shape == self._var.shape == self._mean.shape, \
             "Shapes don't match (x: %s, μ: %s, σ²: %s)" % (feature.shape, self._mean.shape, self._var.shape)
         
         # TODO: This is a hack for collapsed SVGs. Should normally not happen
         if not self._var.any(): # var contains only zeros
-            return (feature.base == self._mean).all()
+            return (feature == self._mean).all()
 
         # res = np.sqrt(np.sum((feature.base - self._mean) **2 / self._var))
         res2 = distance.mahalanobis(feature, self._mean, self._varI)
@@ -44,24 +46,21 @@ class AnomalyModelSVG(AnomalyModelBase):
         #     self._varI = np.linalg.inv(np.diag(self._var))
         # return distance.mahalanobis(feature, self._mean, self._varI)
 
-    def __generate_model__(self, features):
-        # Reduce features to simple list
-        features_flat = features.flatten()
+    def __generate_model__(self, patches):
+        logger.info("Generating SVG from %i feature vectors of length %i" % (len(patches.ravel()), patches.features.shape[-1]))
 
-        logger.info("Generating SVG from %i feature vectors of length %i" % (features_flat.shape[0], len(features_flat[0])))
-
-        if features_flat.shape[0] == 1:
-            logger.warn("Trying to generate SVG from a single value.")
+        if len(patches.ravel()) == 1:
+            logger.warning("Trying to generate SVG from a single value.")
 
         # Get the variance
         logger.info("Calculating the variance")
-        self._var = features_flat.var()
+        self._var = patches.var()
         self._varI = np.linalg.pinv(np.diag(self._var))
         # --> one variance per feature dimension
 
         # Get the mean
         logger.info("Calculating the mean")
-        self._mean = features_flat.mean()
+        self._mean = patches.mean()
         # --> one mean per feature dimension
 
         return True
@@ -85,7 +84,7 @@ class AnomalyModelSVG(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelSVG()
-    if model.load_or_generate(load_features=True):
+    if model.load_or_generate(load_patches=True):
         # model.calculate_mahalobis_distances()
         # model.show_mahalanobis_distribution()
         model.visualize(threshold=200)

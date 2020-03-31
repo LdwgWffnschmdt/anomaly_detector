@@ -16,7 +16,7 @@ parser.add_argument("--single", dest="single", action="store_true",
 
 args = parser.parse_args()
 
-from common import logger, FeatureArray, Visualize
+from common import logger, PatchArray, Visualize
 
 def relabel():
     # Check parameters
@@ -25,11 +25,10 @@ def relabel():
         return
 
     # Load the file
-    features = FeatureArray(args.images)
-    features.preload_metadata()
+    patches = PatchArray(args.images)
 
     # Visualize
-    vis = Visualize(features, images_path=args.images)
+    vis = Visualize(patches, images_path=args.images)
     vis.pause = True
     vis.show()
 

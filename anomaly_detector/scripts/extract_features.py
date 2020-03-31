@@ -27,7 +27,7 @@ args = parser.parse_args()
 import os
 import time
 from tqdm import tqdm
-from common import utils, logger, FeatureArray
+from common import utils, logger, PatchArray
 import traceback
 
 
@@ -63,15 +63,14 @@ def extract_features():
     total = 0
 
     if args.files[0].endswith(".jpg") and args.filter is not None:
-        features = FeatureArray(args.files)
-        features.preload_metadata()
-        features = getattr(features, args.filter, None)
-        assert features is not None, "The filter was not valid."
+        patches = PatchArray(args.files)
+        patches = getattr(patches, args.filter, None)
+        assert patches is not None, "The filter was not valid."
         if args.filter_argument is not None:
-            features = features(args.filter_argument)
-            assert features is not None, "The filter argument was not valid."
-        dataset = features.to_dataset()
-        total = features.shape[0]
+            patches = patches(args.filter_argument)
+            assert patches is not None, "The filter argument was not valid."
+        dataset = patches.to_dataset()
+        total = patches.shape[0]
     else:
         dataset, total = utils.load_dataset(args.files)
 

@@ -45,18 +45,18 @@ class FeatureExtractorBase(object):
         batch = tf.expand_dims(image, 0) # Expand dimension so single image is a "batch" of one image
         return tf.squeeze(self.extract_batch(batch)) # Remove unnecessary output dimension
     
-    def extract_feature_array(self, features, **kwargs):
+    def extract_frame_array(self, patches, **kwargs):
         """Loads a set of files, extracts the features and saves them to file
         Args:
-            features (FeatureArray): Should be a feature array created with the images path only
+            patches (PatchArray): PatchArray
             For **kwargs see extract_dataset
 
         Returns:
             success (bool)
         """
 
-        dataset = features.to_dataset()
-        total = features.shape[0]
+        dataset = patches.to_dataset()
+        total = patches.shape[0]
 
         return self.extract_dataset(dataset, total, **kwargs)
 
