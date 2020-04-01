@@ -37,7 +37,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
 
         model = self.get_model(patch.bins)
         if model is None:
-            logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
+            # logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
             return 0 # Unknown
         
         return model.classify(patch)
@@ -49,7 +49,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
 
         model = self.get_model(patch.bins)
         if model is None:
-            logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
+            # logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
             return -1 # TODO: What should we do?
         
         return model.__mahalanobis_distance__(patch)
@@ -58,17 +58,19 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         # Ensure locations are calculated
         patches.ensure_locations()
         
-        shape = patches.calculate_rasterization(self.CELL_SIZE)
+        patches.calculate_rasterization(self.CELL_SIZE)
+
+        shape = (patches.bins.v.max() + 1, patches.bins.u.max() + 1)
 
         # Empty grid that will contain the model for each bin
         self.models = np.empty(shape=shape, dtype=object)
         models_created = 0
 
-        with tqdm(desc="Generating models", total=np.prod(shape), file=sys.stderr) as pbar:
+        with tqdm(desc="Generating models", total=self.models.size, file=sys.stderr) as pbar:
             for bin in np.ndindex(shape):
                 bin_features_flat = patches.bin(bin, self.CELL_SIZE)
                 
-                if len(bin_features_flat) > 0:
+                if bin_features_flat.size > 0:
                     # Create a new model
                     model = self.CREATE_ANOMALY_MODEL_FUNC()    # Instantiate a new model
                     model.__generate_model__(bin_features_flat, silent=silent) # The model only gets flattened features
@@ -80,7 +82,9 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     
     def get_model(self, bin):
         """ Return the respective model for the given bin """
-        assert self.models is not None, "Please generate the models first."
+        # assert self.models is not None, "Please generate the models first."
+        if bin[0] >= self.models.shape[0] or bin[1] >= self.models.shape[1]:
+            return None
         return self.models[bin[0], bin[1]]
 
     def __load_model_from_file__(self, h5file):

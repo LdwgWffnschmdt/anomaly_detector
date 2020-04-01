@@ -205,6 +205,7 @@ class PatchArray(np.recarray):
     # Spatial stuff #
     #################
 
+    # @profile
     def bin(self, bin, cell_size):
         """ Get a view of only the features that are in a specific bin
 
@@ -216,7 +217,12 @@ class PatchArray(np.recarray):
         if not self.contains_bins or self.cell_size.flat[0] != cell_size:
             self.calculate_rasterization(cell_size)
         
-        return self[np.logical_and(self.bins.v == bin[0], self.bins.u == bin[1])]
+        b1 = self.bins.v == bin[0]
+        r1 = self[b1]
+        b2 = r1.bins.u == bin[1]
+        r2 = r1[b2]
+
+        return r2
 
     def get_spatial_histogram(self, cell_size):
         # Get extent
@@ -244,10 +250,6 @@ class PatchArray(np.recarray):
 
         if self.cell_size.flat[0] == cell_size:
             return shape
-        
-        if self.base is not None and isinstance(self.base, PatchArray):
-            logger.info("Going down!" + str(self.shape) + "=>" + str(self.base.shape))
-            return self.base.calculate_rasterization(cell_size)
         
         logger.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
 
@@ -365,15 +367,12 @@ class PatchArray(np.recarray):
     #################
     
     def var(self):
-        assert self.contains_features, "Can only compute var if there are features"
         return np.var(self.ravel().features, axis=0, dtype=np.float64)
 
     def cov(self):
-        assert self.contains_features, "Can only compute cov if there are features"
         return np.cov(self.ravel().features, rowvar=False)
 
     def mean(self):
-        assert self.contains_features, "Can only compute mean if there are features"
         return np.mean(self.ravel().features, axis=0, dtype=np.float64)
 
     #################

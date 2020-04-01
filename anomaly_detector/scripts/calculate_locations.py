@@ -60,19 +60,22 @@ def calculate_locations():
                 else:
                     patches.save_locations_to_file()
 
+                patches.calculate_rasterization(0.2)
+
                 # Calculate anomaly models
 
                 models = [
                     AnomalyModelSVG(),
-                    AnomalyModelBalancedDistribution(initial_normal_features=1000, threshold_learning=300, pruning_parameter=0.5),
+                    # AnomalyModelBalancedDistribution(initial_normal_features=1000, threshold_learning=300, pruning_parameter=0.5),
                     AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=0.2),
-                    AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistribution(initial_normal_features=10, threshold_learning=150, pruning_parameter=0.5), cell_size=0.2)
+                    # AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistribution(initial_normal_features=10, threshold_learning=150, pruning_parameter=0.5), cell_size=0.2)
                 ]
 
                 with tqdm(total=len(models), file=sys.stderr) as pbar2:
                     for m in models:
                         try:
                             pbar2.set_description(m.NAME)
+                            logger.info("Calculating %s" % m.NAME)
 
                             model, mdist = m.is_in_file(features_file)
 
@@ -96,6 +99,9 @@ def calculate_locations():
                 raise
             except:
                 logger.error("%s: %s" % (features_file, traceback.format_exc()))
+            finally:
+                del patches
+                del models
             pbar.update()
 
 if __name__ == "__main__":

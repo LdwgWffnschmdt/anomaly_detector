@@ -29,7 +29,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         assert not self._var is None and not self._mean is None, \
             "You need to load a model before computing a Mahalanobis distance"
             
-        feature = patch["features"]
+        feature = patch.features
         assert feature.shape == self._var.shape == self._mean.shape, \
             "Shapes don't match (x: %s, μ: %s, σ²: %s)" % (feature.shape, self._mean.shape, self._var.shape)
         
@@ -37,9 +37,9 @@ class AnomalyModelSVG(AnomalyModelBase):
         if not self._var.any(): # var contains only zeros
             return (feature == self._mean).all()
 
-        # res = np.sqrt(np.sum((feature.base - self._mean) **2 / self._var))
-        res2 = distance.mahalanobis(feature, self._mean, self._varI)
-        return res2
+        res = np.sqrt(np.sum((feature - self._mean) **2 / self._var))
+        # res2 = distance.mahalanobis(feature, self._mean, self._varI)
+        return res
         
         ### scipy implementation is way slower
         # if self._varI is None:
@@ -49,13 +49,14 @@ class AnomalyModelSVG(AnomalyModelBase):
     def __generate_model__(self, patches, silent=False):
         if not silent: logger.info("Generating SVG from %i feature vectors of length %i" % (len(patches.ravel()), patches.features.shape[-1]))
 
-        if len(patches.ravel()) == 1:
+        if not silent and patches.size == 1:
             logger.warning("Trying to generate SVG from a single value.")
 
         # Get the variance
         if not silent: logger.info("Calculating the variance")
         self._var = patches.var()
-        self._varI = np.linalg.pinv(np.diag(self._var))
+        # d = np.diag(self._var)
+        # self._varI = np.linalg.pinv(d)
         # --> one variance per feature dimension
 
         # Get the mean
@@ -70,7 +71,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         if not "var" in h5file.keys() or not "mean" in h5file.keys():
             return False
         self._var       = np.array(h5file["var"])
-        self._varI = np.linalg.pinv(np.diag(self._var))
+        # self._varI = np.linalg.pinv(np.diag(self._var))
         self._mean      = np.array(h5file["mean"])
         assert len(self._var) == len(self._mean), "Dimensions of variance and mean do not match!"
         return True
@@ -84,7 +85,7 @@ class AnomalyModelSVG(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelSVG()
-    if model.load_or_generate(load_patches=True):
+    if model.load_or_generate(load_patches=True, load_mahalanobis_distances=True):
         # model.calculate_mahalobis_distances()
-        # model.show_mahalanobis_distribution()
+        model.show_mahalanobis_distribution()
         model.visualize(threshold=200)
