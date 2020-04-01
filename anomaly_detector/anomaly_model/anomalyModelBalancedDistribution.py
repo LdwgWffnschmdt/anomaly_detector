@@ -66,8 +66,8 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         
         return distance.mahalanobis(feature, self._mean, self._covI)
 
-    def __generate_model__(self, patches):
-        logger.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (len(patches.ravel()), patches.features.shape[-1]))
+    def __generate_model__(self, patches, silent=False):
+        if not silent: logger.info("Generating a Balanced Distribution from %i feature vectors of length %i" % (len(patches.ravel()), patches.features.shape[-1]))
 
         patches_flat = patches.ravel()
 
@@ -100,7 +100,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
         # Prune the distribution
         
-        logger.info(np.mean(np.array([self.__mahalanobis_distance__(f) for f in self.balanced_distribution])))
+        if not silent: logger.info(np.mean(np.array([self.__mahalanobis_distance__(f) for f in self.balanced_distribution])))
 
         prune_filter = []
         pruned = 0
@@ -121,7 +121,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
         self.balanced_distribution = self.balanced_distribution[prune_filter]
 
-        logger.info("Generated Balanced Distribution with %i entries" % len(self.balanced_distribution))
+        if not silent: logger.info("Generated Balanced Distribution with %i entries" % len(self.balanced_distribution))
     
         self._calculate_mean_and_covariance()
         return True

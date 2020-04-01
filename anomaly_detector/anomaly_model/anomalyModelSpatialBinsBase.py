@@ -54,7 +54,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         
         return model.__mahalanobis_distance__(patch)
 
-    def __generate_model__(self, patches):
+    def __generate_model__(self, patches, silent=False):
         # Ensure locations are calculated
         patches.ensure_locations()
         
@@ -71,7 +71,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
                 if len(bin_features_flat) > 0:
                     # Create a new model
                     model = self.CREATE_ANOMALY_MODEL_FUNC()    # Instantiate a new model
-                    model.__generate_model__(bin_features_flat) # The model only gets flattened features
+                    model.__generate_model__(bin_features_flat, silent=silent) # The model only gets flattened features
                     self.models[bin] = model                    # Store the model
                     models_created += 1
                     pbar.set_postfix({"Models": models_created})
@@ -113,7 +113,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     def __save_model_to_file__(self, h5file):
         """Save the model to disk"""
         h5file.attrs["Cell size"] = self.CELL_SIZE
-        h5file.attrs["Num models"] = sum(x is not None for x in self.models.flatten())
+        h5file.attrs["Num models"] = sum(x is not None for x in self.models.ravel())
         h5file.attrs["Models shape"] = self.models.shape
         
         for v, u in tqdm(np.ndindex(self.models.shape), desc="Saving models", total=np.prod(self.models.shape), file=sys.stderr):
@@ -133,11 +133,12 @@ if __name__ == "__main__":
 
     patches = PatchArray(consts.FEATURES_FILE)
 
-    model = AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=1.0)
-    if model.load_or_generate(patches):
+    model = AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=0.2)
+    
+    if model.load_or_generate(patches, load_mahalanobis_distances=True):
         patches.show_spatial_histogram(model.CELL_SIZE)
 
-        model.calculate_mahalobis_distances()
+        # model.calculate_mahalobis_distances()
         model.show_mahalanobis_distribution()
 
         model.visualize()

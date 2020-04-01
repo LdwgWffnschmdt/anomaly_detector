@@ -9,9 +9,9 @@ class AnomalyModelSVGPos(AnomalyModelSVG):
     Reference: https://www.mdpi.com/1424-8220/16/11/1904/htm
     """
     
-    def __generate_model__(self, patches):
+    def __generate_model__(self, patches, silent=False):
         # Add location to features
-        AnomalyModelSVG.__generate_model__(self, patches.add_location_as_feature_dimension())
+        AnomalyModelSVG.__generate_model__(self, patches.add_location_as_feature_dimension(), silent=silent)
 
 # Only for tests
 if __name__ == "__main__":

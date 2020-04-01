@@ -46,20 +46,20 @@ class AnomalyModelSVG(AnomalyModelBase):
         #     self._varI = np.linalg.inv(np.diag(self._var))
         # return distance.mahalanobis(feature, self._mean, self._varI)
 
-    def __generate_model__(self, patches):
-        logger.info("Generating SVG from %i feature vectors of length %i" % (len(patches.ravel()), patches.features.shape[-1]))
+    def __generate_model__(self, patches, silent=False):
+        if not silent: logger.info("Generating SVG from %i feature vectors of length %i" % (len(patches.ravel()), patches.features.shape[-1]))
 
         if len(patches.ravel()) == 1:
             logger.warning("Trying to generate SVG from a single value.")
 
         # Get the variance
-        logger.info("Calculating the variance")
+        if not silent: logger.info("Calculating the variance")
         self._var = patches.var()
         self._varI = np.linalg.pinv(np.diag(self._var))
         # --> one variance per feature dimension
 
         # Get the mean
-        logger.info("Calculating the mean")
+        if not silent: logger.info("Calculating the mean")
         self._mean = patches.mean()
         # --> one mean per feature dimension
 

@@ -16,7 +16,7 @@ class AnomalyModelBase(object):
         self.NAME = self.__class__.__name__.replace("AnomalyModel", "")
         self.patches = None
     
-    def __generate_model__(self, patches):
+    def __generate_model__(self, patches, silent=False):
         """Generate a model based on the features and metadata
         
         Args:
@@ -59,7 +59,7 @@ class AnomalyModelBase(object):
     ########################
     
     def load_or_generate(self, patches=consts.FEATURES_FILE,
-                               load_patches=False, load_mahalanobis_distances=False):
+                               load_patches=False, load_mahalanobis_distances=False, silent=False):
         """Load a model from file or generate it based on the features
         
         Args:
@@ -80,6 +80,7 @@ class AnomalyModelBase(object):
             if not isinstance(self.patches, PatchArray):
                 patches = PatchArray(patches)
         elif isinstance(patches, PatchArray):
+            self.patches = patches
             # Try loading
             loaded = self.load_from_file(patches.filename, load_patches=load_patches, load_mahalanobis_distances=load_mahalanobis_distances)
             if loaded:
@@ -94,7 +95,7 @@ class AnomalyModelBase(object):
         start = time.time()
 
         # Generate model
-        if self.__generate_model__(self.patches.no_anomaly) == False:
+        if self.__generate_model__(self.patches.no_anomaly, silent=silent) == False:
             logger.info("Could not generate model.")
             return False
 
@@ -129,6 +130,16 @@ class AnomalyModelBase(object):
 
         return True
 
+    def is_in_file(self, model_file):
+        """ Check if model and mahalanobis distances are already in model_file """
+        with h5py.File(model_file, "r") as hf:
+            g = hf.get(self.NAME)
+            
+            if g is None:
+                return (False, False)
+            else:
+                return (True, "mahalanobis_no_anomaly" in g.keys())
+
     def load_from_file(self, model_file, load_patches=False, load_mahalanobis_distances=False):
         """ Load a model from file """
         logger.info("Reading model from: %s" % model_file)
@@ -156,10 +167,10 @@ class AnomalyModelBase(object):
             return True
 
         logger.info("Calculating Mahalanobis distances of %i features with and %i features without anomalies" % \
-            (len(self.patches.no_anomaly.ravel()), len(self.patches.anomaly.ravel())))
+            (self.patches.no_anomaly.ravel().size, self.patches.anomaly.ravel().size))
 
-        self.mahalanobis_no_anomaly = np.array(list(map(self.__mahalanobis_distance__, tqdm(np.nditer(self.patches.no_anomaly), desc="No anomaly  ", file=sys.stderr)))) # 75.49480115577167
-        self.mahalanobis_anomaly    = np.array(list(map(self.__mahalanobis_distance__, tqdm(np.nditer(self.patches.anomaly), desc="With anomaly", file=sys.stderr))))    # 76.93620254133627
+        self.mahalanobis_no_anomaly = np.array(list(map(self.__mahalanobis_distance__, tqdm(self.patches.no_anomaly.ravel(), desc="No anomaly  ", file=sys.stderr)))) # 75.49480115577167
+        self.mahalanobis_anomaly    = np.array(list(map(self.__mahalanobis_distance__, tqdm(self.patches.anomaly.ravel(), desc="With anomaly", file=sys.stderr))))    # 76.93620254133627
 
         self.mahalanobis_no_anomaly_max = np.nanmax(self.mahalanobis_no_anomaly) if len(self.mahalanobis_no_anomaly) > 0 else np.nan
         self.mahalanobis_anomaly_max    = np.nanmax(self.mahalanobis_anomaly) if len(self.mahalanobis_anomaly) > 0 else np.nan
