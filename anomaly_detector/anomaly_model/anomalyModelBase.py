@@ -142,12 +142,13 @@ class AnomalyModelBase(object):
 
     def load_from_file(self, model_file, load_patches=False, load_mahalanobis_distances=False):
         """ Load a model from file """
-        logger.info("Reading model from: %s" % model_file)
         with h5py.File(model_file, "r") as hf:
             g = hf.get(self.NAME)
             
             if g is None:
                 return False
+            
+            logger.info("Reading model from: %s" % model_file)
 
             if load_patches:
                 self.patches = PatchArray(model_file)
@@ -268,7 +269,7 @@ class AnomalyModelBase(object):
 
         vis = Visualize(self.patches, **kwargs)
 
-        vis.create_trackbar("threshold", kwargs["threshold"], kwargs["threshold"] * 3)
+        vis.create_trackbar("threshold", int(kwargs["threshold"]), int(kwargs["threshold"] * 3))
         vis.create_trackbar("show_thresh", 1, 1)
         
         vis.show()
