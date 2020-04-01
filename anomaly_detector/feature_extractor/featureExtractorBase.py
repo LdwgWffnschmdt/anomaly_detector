@@ -242,7 +242,7 @@ class FeatureExtractorBase(object):
         out = model(image)
         logger.info("Outputs for model at %s with signature %s" % (handle, signature))
         for s in map(lambda y: "%-40s | %s" % (y, str(out[y].shape)), sorted(list(out), key=lambda x:out[x].shape[1])):
-            print(s)
+            logger.info(s)
 
     def plot_model(self, model, dpi=300, to_file=None):
         """ Plot a model to an image file """
