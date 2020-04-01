@@ -96,7 +96,13 @@ class PatchArray(np.recarray):
 
                 if "features" in hf.keys():
                     contains_features = True
-                    patches_dict["features"] = hf["features"]
+
+                    features = hf["features"]
+
+                    if features.ndim == 2:
+                        features = np.expand_dims(np.expand_dims(features, axis=1), axis=2)
+
+                    patches_dict["features"] = features
                 else:
                     raise ValueError("%s does not contain features." % filename)
 
@@ -112,15 +118,16 @@ class PatchArray(np.recarray):
                 patches_dict["cell_size"] = np.zeros(locations_shape, dtype=np.float64)
 
                 # Broadcast metadata to the correct shape
-                for n, m in metadata.items():
-                    patches_dict[n] = np.moveaxis(np.broadcast_to(m, patches_dict["features"].shape[1:-1] + (m.size,)), -1, 0)
+                if patches_dict["features"].shape[1:-1] != ():
+                    for n, m in metadata.items():
+                        patches_dict[n] = np.moveaxis(np.broadcast_to(m, patches_dict["features"].shape[1:-1] + (m.size,)), -1, 0)
 
                 # Create type
-                t = [(x, patches_dict[x].dtype, patches_dict[x].shape[3:]) for x in patches_dict]
+                t = [(x, patches_dict[x].dtype, patches_dict[x].shape[patches_dict["features"].ndim - 1:]) for x in patches_dict]
 
                 s = time.time()
                 patches = np.rec.fromarrays(patches_dict.values(), dtype=t)
-                logger.info("Loading patches recarray: %f" % (time.time() - s))
+                logger.info("Loading patches: %f" % (time.time() - s))
         else:
             # Broadcast metadata to the correct shape
             for n, m in metadata.items():

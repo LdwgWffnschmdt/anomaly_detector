@@ -13,7 +13,7 @@ parser.add_argument("--list", dest="list", action="store_true",
 parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.EXTRACT_FILES,
                     help="File(s) to use (*.tfrecord, *.jpg)")
 
-parser.add_argument("--filter", metavar="FI", dest="filter", type=str,# default="direction_ccw",
+parser.add_argument("--filter", metavar="FI", dest="filter", type=str, default="direction_ccw",
                     help="Filter only works with *.jpg files (\"no_anomaly\", \"anomaly\", \"round_number\", \"direction_ccw\", ...)")
 
 parser.add_argument("--filter_argument", metavar="FIA", dest="filter_argument", type=int,
@@ -28,8 +28,10 @@ import os
 import sys
 import time
 from tqdm import tqdm
-from common import utils, logger, PatchArray
+from common import utils, logger, PatchArray, Visualize
 import traceback
+
+import numpy as np
 
 
 def extract_features():
@@ -65,11 +67,20 @@ def extract_features():
 
     if args.files[0].endswith(".jpg") and args.filter is not None:
         patches = PatchArray(args.files)
-        patches = getattr(patches, args.filter, None)
-        assert patches is not None, "The filter was not valid."
-        if args.filter_argument is not None:
-            patches = patches(args.filter_argument)
-            assert patches is not None, "The filter argument was not valid."
+
+        patches = patches[np.logical_and(patches.directions[:, 0, 0] == 1,          # CCW and
+                                         np.logical_or(patches.labels[:, 0, 0] == 2,             #   Anomaly or
+                                                       np.logical_and(patches.round_numbers[:, 0, 0] >= 2,      #   Round between 2 and 5
+                                                                      patches.round_numbers[:, 0, 0] <= 5)))]
+
+        vis = Visualize(patches)
+        vis.show()
+        
+        # patches = getattr(patches, args.filter, None)
+        # assert patches is not None, "The filter was not valid."
+        # if args.filter_argument is not None:
+        #     patches = patches(args.filter_argument)
+        #     assert patches is not None, "The filter argument was not valid."
         dataset = patches.to_dataset()
         total = patches.shape[0]
     else:
