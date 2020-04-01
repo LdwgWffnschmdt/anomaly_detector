@@ -32,7 +32,8 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
         and the single variate Gaussian distribution along each dimension.
         """
-        assert patch.cell_size != self.CELL_SIZE, "The patch needs bins computed in the correct cell size"
+        if patch.cell_size.flat[0] != self.CELL_SIZE:
+            patch.base.calculate_rasterization(self.CELL_SIZE)
 
         model = self.get_model(patch.bins)
         if model is None:
@@ -43,7 +44,8 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     
     def __mahalanobis_distance__(self, patch):
         """Calculate the Mahalanobis distance between the input and the model"""
-        assert patch.cell_size != self.CELL_SIZE, "The patch needs bins computed in the correct cell size"
+        if patch.cell_size.flat[0] != self.CELL_SIZE:
+            patch.base.calculate_rasterization(self.CELL_SIZE)
 
         model = self.get_model(patch.bins)
         if model is None:

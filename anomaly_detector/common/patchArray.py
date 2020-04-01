@@ -17,8 +17,6 @@ from common import utils, logger, ImageLocationUtility
 import consts
 
 class Patch(np.record):
-    attrs = ("cell_size")
-
     image_cache = LRUCache(maxsize=20*60*2)  # Least recently used cache for images
 
     @cached(image_cache, key=lambda self, *args: self.times) # The cache should only be based on the timestamp
@@ -27,9 +25,7 @@ class Patch(np.record):
         return cv2.imread(os.path.join(images_path, "%i.jpg" % self.times))
 
     def __setattr__(self, attr, val):
-        if attr in self.attrs:
-            object.__setattr__(self, attr, val)
-        elif attr in self.dtype.names:
+        if attr in self.dtype.names:
             old_val = self.__getattribute__(attr)
             if not np.all(old_val == val): # Check if any value changed
                 np.record.__setattr__(self, "changed", True)
@@ -40,6 +36,8 @@ class Patch(np.record):
 class PatchArray(np.recarray):
     """Array with metadata."""
     
+    __metadata_attrs__ = list()
+
     def __new__(cls, filename=None, metadata_filename=None, **kwargs):
         """Reads metadata and features from a HDF5 file.
         
@@ -59,6 +57,7 @@ class PatchArray(np.recarray):
         with h5py.File(filename_metadata, "r") as hf:
             def _c(x, y):
                 if isinstance(y, h5py.Dataset):
+                    cls.__metadata_attrs__.append(x)
                     metadata[x] = np.array(y)
                     
             hf.visititems(_c)
@@ -108,12 +107,9 @@ class PatchArray(np.recarray):
                     locations_shape = patches_dict["features"].shape[:-1]
                     patches_dict["locations"] = np.zeros(locations_shape, dtype=[("y", np.float32), ("x", np.float32)])
 
-                if "bins" in hf.keys():
-                    contains_bins = True
-                    patches_dict["bins"] = hf["bins"]
-                else:
-                    locations_shape = patches_dict["features"].shape[:-1]
-                    patches_dict["bins"] = np.zeros(locations_shape, dtype=[("v", np.uint16), ("u", np.uint16)])
+                locations_shape = patches_dict["features"].shape[:-1]
+                patches_dict["bins"] = np.zeros(locations_shape, dtype=[("v", np.uint16), ("u", np.uint16)])
+                patches_dict["cell_size"] = np.zeros(locations_shape, dtype=np.float64)
 
                 # Broadcast metadata to the correct shape
                 for n, m in metadata.items():
@@ -150,15 +146,13 @@ class PatchArray(np.recarray):
         self.contains_features  = getattr(obj, "contains_features", False)
         self.contains_locations = getattr(obj, "contains_locations", False)
         self.contains_bins      = getattr(obj, "contains_bins", False)
-
-        self.cell_size = -1
     
     def __setattr__(self, attr, val):
         if self.dtype.names is not None and attr in self.dtype.names:
             # Try finding the attribute in the metadata (will throw if there it is not in metadata)
             old_val = self.__getattribute__(attr)
             if not np.all(old_val == val): # Check if any value changed
-                if attr != "changed" and attr in self.dtype.names:
+                if attr != "changed" and attr in self.__metadata_attrs__:
                     # Set changed to true, where there was a change
                     if len(self.shape) > 0:
                         self["changed"][old_val != val] = True
@@ -176,9 +170,6 @@ class PatchArray(np.recarray):
         if isinstance(obj, np.record):
             obj.__class__ = Patch
         
-        if isinstance(obj, PatchArray) or isinstance(obj, Patch):
-            obj.cell_size = self.cell_size
-
         return obj
     
     #################
@@ -222,7 +213,7 @@ class PatchArray(np.recarray):
             cell_size (float): 
         """
         # Check if cell size is calculated
-        if not self.contains_bins or self.cell_size != cell_size:
+        if not self.contains_bins or self.cell_size.flat[0] != cell_size:
             self.calculate_rasterization(cell_size)
         
         return self[np.logical_and(self.bins.v == bin[0], self.bins.u == bin[1])]
@@ -249,11 +240,15 @@ class PatchArray(np.recarray):
         bins_y = np.arange(y_min, y_max, cell_size)
         bins_x = np.arange(x_min, x_max, cell_size)
 
-        shape = (len(bins_y), len(bins_x))
+        shape = (len(bins_y) + 1, len(bins_x) + 1)
 
-        if self.cell_size == cell_size:
+        if self.cell_size.flat[0] == cell_size:
             return shape
-
+        
+        if self.base is not None and isinstance(self.base, PatchArray):
+            logger.info("Going down!" + str(self.shape) + "=>" + str(self.base.shape))
+            return self.base.calculate_rasterization(cell_size)
+        
         logger.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
 
         # Use digitize to sort the locations in the bins
@@ -265,7 +260,7 @@ class PatchArray(np.recarray):
         self.bins[...] = np.rec.fromarrays(res.transpose(), dtype=[("v", np.float32), ("u", np.float32)]).transpose()
 
         self.contains_bins = True
-        self.cell_size = cell_size
+        self.cell_size[:] = cell_size
 
         return shape
 
@@ -413,8 +408,8 @@ if __name__ == "__main__":
 
     # patches.show_spatial_histogram(1.0)
 
-    vis = Visualize(patches)
-    vis.show()
+    # vis = Visualize(patches)
+    # vis.show()
 
     patches[0, 0, 0].labels = 2
     print patches[0:5, 0, 0].labels
