@@ -546,7 +546,7 @@ class Visualize(object):
 
                 if self.patch_to_text_func is not None and self.show_values:
                     text = str(self.patch_to_text_func(self, patch))
-                    cv2.putText(overlay, "%i, %i" % (x, y),# text,
+                    cv2.putText(overlay, text,
                         (p1[0] + 2, p1[1] + int(patch_size[0]) - 2),    # (x, y)
                         font,
                         fontScale,
