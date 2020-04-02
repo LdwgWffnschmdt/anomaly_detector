@@ -139,10 +139,6 @@ if __name__ == "__main__":
 
     model = AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=0.2)
     
-    if model.load_or_generate(patches, load_mahalanobis_distances=True):
+    if model.load_or_generate(patches):
         patches.show_spatial_histogram(model.CELL_SIZE)
-
-        # model.calculate_mahalobis_distances()
-        model.show_mahalanobis_distribution()
-
         model.visualize()

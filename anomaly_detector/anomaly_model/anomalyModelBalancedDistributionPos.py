@@ -17,6 +17,4 @@ class AnomalyModelBalancedDistributionPos(AnomalyModelBalancedDistribution):
 if __name__ == "__main__":
     model = AnomalyModelBalancedDistributionPos()
     if model.load_or_generate(load_patches=True):
-        # model.calculate_mahalobis_distances()
-        # model.show_mahalanobis_distribution()
         model.visualize(threshold=200)

@@ -85,7 +85,5 @@ class AnomalyModelSVG(AnomalyModelBase):
 # Only for tests
 if __name__ == "__main__":
     model = AnomalyModelSVG()
-    if model.load_or_generate(load_patches=True, load_mahalanobis_distances=True):
-        # model.calculate_mahalobis_distances()
-        model.show_mahalanobis_distribution()
+    if model.load_or_generate(load_patches=True):
         model.visualize(threshold=200)

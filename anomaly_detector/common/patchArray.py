@@ -71,6 +71,7 @@ class PatchArray(np.recarray):
         contains_features  = False
         contains_locations = False
         contains_bins      = False
+        contains_mahalanobis_distances = False
 
         # Check if file is h5 file
         if isinstance(filename, str) and filename.endswith(".h5"):
@@ -93,27 +94,41 @@ class PatchArray(np.recarray):
                 assert np.all(feature_indices == np.arange(len(feature_indices))), "Oops?"
 
                 patches_dict = dict()
+                mahalanobis_dict = dict()
 
-                if "features" in hf.keys():
+                add = ["features", "locations"]
+
+                def _add(x, y):
+                    if not isinstance(y, h5py.Dataset):
+                        return
+                    if x in add:
+                        patches_dict[x] = y
+                    elif x.endswith("/mahalanobis_distances"):
+                        n = x.replace("/mahalanobis_distances", "")
+                        mahalanobis_dict[n] = numpy.array(y)
+
+                hf.visititems(_add)
+
+                if "features" in patches_dict.keys():
                     contains_features = True
-
-                    features = hf["features"]
-
-                    if features.ndim == 2:
-                        features = np.expand_dims(np.expand_dims(features, axis=1), axis=2)
-
-                    patches_dict["features"] = features
+                    if patches_dict["features"].ndim == 2:
+                        patches_dict["features"] = np.expand_dims(np.expand_dims(patches_dict["features"], axis=1), axis=2)
                 else:
                     raise ValueError("%s does not contain features." % filename)
 
-                if "locations" in hf.keys():
+                locations_shape = patches_dict["features"].shape[:-1]
+
+                if "locations" in patches_dict.keys():
                     contains_locations = True
-                    patches_dict["locations"] = hf["locations"]
                 else:
-                    locations_shape = patches_dict["features"].shape[:-1]
                     patches_dict["locations"] = np.zeros(locations_shape, dtype=[("y", np.float32), ("x", np.float32)])
 
-                locations_shape = patches_dict["features"].shape[:-1]
+                if len(mahalanobis_dict) > 0:
+                    contains_mahalanobis_distances = True
+                    t = [(x, mahalanobis_dict[x].dtype) for x in mahalanobis_dict]
+                    patches_dict["mahalanobis_distances"] = np.rec.fromarrays(mahalanobis_dict.values(), dtype=t)
+                    patches_dict["mahalanobis_distances_filtered"] = np.zeros(locations_shape, dtype=np.float64)
+
                 patches_dict["bins"] = np.zeros(locations_shape, dtype=[("v", np.uint16), ("u", np.uint16)])
                 patches_dict["cell_size"] = np.zeros(locations_shape, dtype=np.float64)
 
@@ -144,6 +159,7 @@ class PatchArray(np.recarray):
         obj.contains_features  = contains_features
         obj.contains_locations = contains_locations
         obj.contains_bins      = contains_bins
+        obj.contains_mahalanobis_distances = contains_mahalanobis_distances
         return obj
 
     def __array_finalize__(self, obj):
@@ -153,6 +169,7 @@ class PatchArray(np.recarray):
         self.contains_features  = getattr(obj, "contains_features", False)
         self.contains_locations = getattr(obj, "contains_locations", False)
         self.contains_bins      = getattr(obj, "contains_bins", False)
+        self.contains_mahalanobis_distances = getattr(obj, "contains_mahalanobis_distances", False)
     
     def __setattr__(self, attr, val):
         if self.dtype.names is not None and attr in self.dtype.names:
@@ -182,7 +199,7 @@ class PatchArray(np.recarray):
     #################
     #     Views     #
     #################
-    
+
     unknown_anomaly = property(lambda self: self[self.labels[:, 0, 0] == 0])
     no_anomaly      = property(lambda self: self[self.labels[:, 0, 0] == 1])
     anomaly         = property(lambda self: self[self.labels[:, 0, 0] == 2])
@@ -202,11 +219,11 @@ class PatchArray(np.recarray):
             filename = os.path.join(self.images_path, "metadata_cache.h5")
         with h5py.File(filename, "w") as hf:
             hf.attrs["Created"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
-            hf.create_dataset("camera_locations", data=self.camera_location)
-            hf.create_dataset("times",            data=self.time)
-            hf.create_dataset("labels",           data=self.label)
-            hf.create_dataset("directions",       data=self.direction)
-            hf.create_dataset("round_numbers",    data=self.round_number)
+            hf.create_dataset("camera_locations", data=self.camera_locations[:, 0, 0])
+            hf.create_dataset("times",            data=self.times[:, 0, 0])
+            hf.create_dataset("labels",           data=self.labels[:, 0, 0])
+            hf.create_dataset("directions",       data=self.directions[:, 0, 0])
+            hf.create_dataset("round_numbers",    data=self.round_numbers[:, 0, 0])
 
     #################
     # Spatial stuff #
