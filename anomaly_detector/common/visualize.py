@@ -3,6 +3,9 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
+from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage.morphology import generate_binary_structure, grey_erosion, grey_dilation
+
 import consts
 
 from common import utils, logger, ImageLocationUtility
@@ -10,6 +13,7 @@ from common import utils, logger, ImageLocationUtility
 class Visualize(object):
     WINDOWS_IMAGE = "visualize_image"
     WINDOWS_CONTROLS = "visualize_controls"
+    WINDOWS_MAHA = "visualize_maha"
 
     LABEL_TEXTS = {
         0: "Unknown",
@@ -144,22 +148,35 @@ class Visualize(object):
         self.show_map  = kwargs.get("show_map", False)
         self.show_values  = kwargs.get("show_values", False)
         
-        self.patch_to_color_func = kwargs.get("patch_to_color_func", None)
-        self.patch_to_text_func  = kwargs.get("patch_to_text_func", None)
-        self.pause_func            = kwargs.get("pause_func", None)
-        self.key_func              = kwargs.get("key_func", None)
+        self.patch_to_color_func = [kwargs.get("patch_to_color_func", None)]
+        self.patch_to_text_func  = [kwargs.get("patch_to_text_func", None)]
+        self.pause_func          = [kwargs.get("pause_func", None)]
+        self.key_func            = kwargs.get("key_func", None)
+
+        self.model_index = 0 # Index for patch_to_color_func ...
 
         self.index = 0
         self.pause = False
+        
+        if self.patches.contains_mahalanobis_distances:
+            self._histogram_fig, (self._histogram_ax1, self._histogram_ax2) = plt.subplots(2, 1, sharex=True)
+
+            self._histogram_ax1.set_title("No anomaly")
+            self._histogram_ax2.set_title("Anomaly")
+            
+            self._histogram_fig.suptitle("Mahalanobis distances")
+
+            plt.ion()
+            self._histogram_fig.show()
         
         if self.patches.contains_locations:
             # Setup map display
             self.extent = patches.get_extent()
             
-            self._fig = plt.figure()
-            self._ax = self._fig.add_subplot(111)
-            self._ax.set_xlim([self.extent[0], self.extent[2]])
-            self._ax.set_ylim([self.extent[1], self.extent[3]])
+            self._map_fig = plt.figure()
+            self._map_ax = self._map_fig.add_subplot(111)
+            self._map_ax.set_xlim([self.extent[0], self.extent[2]])
+            self._map_ax.set_ylim([self.extent[1], self.extent[3]])
 
             # Calculate grid overlay
             self._ilu = ImageLocationUtility()
@@ -167,7 +184,7 @@ class Visualize(object):
                                                                    offset_y=self.extent[1],         offset_x=self.extent[0])
 
             plt.ion()
-            self._fig.show()
+            self._map_fig.show()
         else:
             self.show_grid = False
             self.show_map = False
@@ -243,7 +260,7 @@ class Visualize(object):
                 self.pause = True
 
             if self.key_func is not None:
-                self.key_func(self, key)
+                self.key_func(key)
 
             
             if key == 115:  # [s]   => Switch single / continuous mode
@@ -334,6 +351,108 @@ class Visualize(object):
     def get_trackbar(self, name):
         return cv2.getTrackbarPos(name, self.WINDOWS_CONTROLS)
     
+    def __maha__(self, x=None, only_refresh_image=False):
+        image = np.zeros((300, 480, 3), dtype=np.uint8)
+        if self.model_index > 0 and self.patches.contains_mahalanobis_distances:
+            font                   = cv2.FONT_HERSHEY_SIMPLEX
+            fontScale              = 0.5
+            thickness              = 1
+
+            model = self.patches.mahalanobis_distances.dtype.names[self.model_index - 1]
+
+            cv2.putText(image,"Model:", (10, 20), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+            cv2.putText(image, model,    (65, 20), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+
+            cv2.putText(image,"Filter:", (10, 50), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+
+            if not only_refresh_image:
+                self.patches.mahalanobis_distances_filtered[:] = self.patches.mahalanobis_distances[model]
+
+            sigma_0 = (cv2.getTrackbarPos("0_gaussian_0", self.WINDOWS_MAHA),
+                       cv2.getTrackbarPos("0_gaussian_1", self.WINDOWS_MAHA),
+                       cv2.getTrackbarPos("0_gaussian_2", self.WINDOWS_MAHA))
+            if sigma_0 != (0, 0, 0):
+                cv2.putText(image, "gaussian (%i, %i, %i)" % sigma_0, (65, 50), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+                if not only_refresh_image:
+                    self.patches.mahalanobis_distances_filtered = gaussian_filter(self.patches.mahalanobis_distances_filtered, sigma=sigma_0)
+
+            erosion_dilation = cv2.getTrackbarPos("1_erosion_dilation", self.WINDOWS_MAHA)
+            if erosion_dilation > 0:
+                struct = generate_binary_structure(cv2.getTrackbarPos("1_erosion_dilation_structure_rank", self.WINDOWS_MAHA),
+                                                   cv2.getTrackbarPos("1_erosion_dilation_structure_connectivity", self.WINDOWS_MAHA))
+                if struct.ndim == 2:
+                    z = np.zeros_like(struct, dtype=np.bool)
+                    struct = np.stack((z, struct, z))
+                
+                if erosion_dilation == 1:
+                    cv2.putText(image, "erosion", (65, 80), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+                    if not only_refresh_image:
+                        self.patches.mahalanobis_distances_filtered = grey_erosion(self.patches.mahalanobis_distances_filtered, structure=struct)
+                elif erosion_dilation == 2:
+                    cv2.putText(image, "dilation", (65, 80), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+                    if not only_refresh_image:
+                        self.patches.mahalanobis_distances_filtered = grey_dilation(self.patches.mahalanobis_distances_filtered, structure=struct)
+
+                for (z, x, y) in np.ndindex(struct.shape):
+                    cv2.putText(image, str(int(struct[z, x, y])), (150 + y * 15 + z * 60, 80 + x * 15), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+            
+            sigma_2 = (cv2.getTrackbarPos("2_gaussian_0", self.WINDOWS_MAHA),
+                       cv2.getTrackbarPos("2_gaussian_1", self.WINDOWS_MAHA),
+                       cv2.getTrackbarPos("2_gaussian_2", self.WINDOWS_MAHA))
+            if sigma_2 != (0, 0, 0):
+                cv2.putText(image, "gaussian (%i, %i, %i)" % sigma_2, (65, 140), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+                if not only_refresh_image:
+                    self.patches.mahalanobis_distances_filtered = gaussian_filter(self.patches.mahalanobis_distances_filtered, sigma=sigma_2)
+            
+            # Add some statistics
+            threshold = cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA)
+
+            cv2.putText(image,"Patches > Threshold:   #            %", (10, 190), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+
+            no_anomaly = self.patches.mahalanobis_distances_filtered[self.patches.labels == 1]
+            anomaly = self.patches.mahalanobis_distances_filtered[self.patches.labels == 2]
+            f_no_anomaly = no_anomaly[no_anomaly > threshold]
+            f_anomaly = anomaly[anomaly > threshold]
+
+            cv2.putText(image,"No anomaly:", (40, 220), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+            n_no_anomaly = f_no_anomaly.size
+            p_no_anomaly = n_no_anomaly / float(no_anomaly.size) * 100.0
+            cv2.putText(image, str(n_no_anomaly), (200, 220), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+            cv2.putText(image, "%.2f" % p_no_anomaly, (300, 220), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+
+            cv2.putText(image,"Anomaly:", (40, 250), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+            n_anomaly = f_anomaly.size
+            p_anomaly = n_anomaly / float(anomaly.size) * 100.0
+            cv2.putText(image, str(n_anomaly), (200, 250), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+            cv2.putText(image, "%.2f" % p_anomaly, (300, 250), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+
+            if not only_refresh_image:
+                self._histogram_ax1.clear()
+                self._histogram_ax2.clear()
+
+                _, bins, _ = self._histogram_ax1.hist(no_anomaly.ravel(), bins="fd")
+                self._histogram_ax2.hist(anomaly.ravel(), bins=bins)
+                
+                self._histogram_fig.canvas.draw()
+
+            self.__draw__()
+        cv2.imshow(self.WINDOWS_MAHA, image)
+
+    def __default_patch_to_color__(self, patch):
+        b = 0#100 if patch in self.normal_distribution else 0
+        g = 0
+        threshold = cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA)
+        if cv2.getTrackbarPos("show_thresh", self.WINDOWS_MAHA):
+            r = 100 if patch.mahalanobis_distances_filtered > threshold else 0
+        elif threshold == 0:
+            r = 0
+        else:
+            r = min(255, int(patch.mahalanobis_distances_filtered * (255 / threshold)))
+        return (b, g, r)
+
+    def __default_patch_to_text__(self, patch):
+        return round(patch.mahalanobis_distances_filtered, 2)
+
     def __setup_window__(self):
         ### Set up window if it does not exist
         if not self._window_set_up:
@@ -345,13 +464,39 @@ class Visualize(object):
                 cv2.createTrackbar("show_grid", self.WINDOWS_CONTROLS, int(self.show_grid), 1, self.__draw__)
                 cv2.createTrackbar("show_map",  self.WINDOWS_CONTROLS, int(self.show_map),  1, self.__draw__)
             
-            if self.patch_to_text_func is not None:
+            if self.patch_to_text_func is not None or self.patches.contains_mahalanobis_distances:
                 cv2.createTrackbar("show_values", self.WINDOWS_CONTROLS, int(self.show_values), 1, self.__draw__)
             
-            if self.patch_to_text_func is not None or \
-               self.patch_to_color_func is not None or \
-               self.patches.contains_locations:
+            if self.patch_to_text_func[self.model_index] is not None or \
+               self.patch_to_color_func[self.model_index] is not None or \
+               self.patches.contains_locations or self.patches.contains_mahalanobis_distances:
                 cv2.createTrackbar("overlay", self.WINDOWS_CONTROLS, 40, 100, self.__draw__)
+
+            if self.patches.contains_mahalanobis_distances:
+                cv2.namedWindow(self.WINDOWS_MAHA)
+                for n in self.patches.mahalanobis_distances.dtype.names:
+                    self.patch_to_color_func.append(self.__default_patch_to_color__)
+                    self.patch_to_text_func.append(self.__default_patch_to_text__)
+                    self.pause_func.append(None)
+                
+                cv2.createTrackbar("threshold", self.WINDOWS_MAHA, 60, 1000, lambda x: self.__maha__(only_refresh_image=True))
+                cv2.createTrackbar("show_thresh", self.WINDOWS_MAHA, 1, 1, self.__draw__)
+
+                cv2.createTrackbar("0_gaussian_0", self.WINDOWS_MAHA, 0, 10, self.__maha__)
+                cv2.createTrackbar("0_gaussian_1", self.WINDOWS_MAHA, 0, 10, self.__maha__)
+                cv2.createTrackbar("0_gaussian_2", self.WINDOWS_MAHA, 0, 10, self.__maha__)
+                
+                cv2.createTrackbar("1_erosion_dilation", self.WINDOWS_MAHA, 0, 2, self.__maha__)
+                cv2.createTrackbar("1_erosion_dilation_structure_rank", self.WINDOWS_MAHA, 2, 3, self.__maha__)
+                cv2.setTrackbarMin("1_erosion_dilation_structure_rank", self.WINDOWS_MAHA, 2)
+                cv2.createTrackbar("1_erosion_dilation_structure_connectivity", self.WINDOWS_MAHA, 1, 3, self.__maha__)
+                cv2.setTrackbarMin("1_erosion_dilation_structure_connectivity", self.WINDOWS_MAHA, 1)
+
+                cv2.createTrackbar("2_gaussian_0", self.WINDOWS_MAHA, 0, 10, self.__maha__)
+                cv2.createTrackbar("2_gaussian_1", self.WINDOWS_MAHA, 0, 10, self.__maha__)
+                cv2.createTrackbar("2_gaussian_2", self.WINDOWS_MAHA, 0, 10, self.__maha__)
+                
+                cv2.createTrackbar("model", self.WINDOWS_MAHA, 0, len(self.patches.mahalanobis_distances.dtype.names), self.__model__)
 
             cv2.createTrackbar("optical_flow", self.WINDOWS_CONTROLS, 0, 1, self.__draw__)
 
@@ -492,12 +637,12 @@ class Visualize(object):
 
             # Update map
             if self.show_map:
-                self._ax.clear()
-                self._ax.set_xlim([self.extent[0], self.extent[2]])
-                self._ax.set_ylim([self.extent[1], self.extent[3]])
+                self._map_ax.clear()
+                self._map_ax.set_xlim([self.extent[0], self.extent[2]])
+                self._map_ax.set_ylim([self.extent[1], self.extent[3]])
 
                 # Draw FOV polygon
-                self._ax.fill([frame[0 ,  0].locations.x,
+                self._map_ax.fill([frame[0 ,  0].locations.x,
                                frame[-1,  0].locations.x,
                                frame[-1, -1].locations.x,
                                frame[0 , -1].locations.x],
@@ -506,16 +651,16 @@ class Visualize(object):
                                frame[-1, -1].locations.y,
                                frame[0 , -1].locations.y])
 
-                self._ax.plot(frame[0 ,  0].locations.x, frame[0 ,  0].locations.y, "g+", markersize=2, linewidth=2)
-                self._ax.plot(frame[-1,  0].locations.x, frame[-1,  0].locations.y, "b+", markersize=2, linewidth=2)
-                self._ax.plot(frame[0 , -1].locations.x, frame[0 , -1].locations.y, "r+", markersize=2, linewidth=2)
-                self._ax.plot(frame[-1, -1].locations.x, frame[-1, -1].locations.y, "y+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[0 ,  0].locations.x, frame[0 ,  0].locations.y, "g+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[-1,  0].locations.x, frame[-1,  0].locations.y, "b+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[0 , -1].locations.x, frame[0 , -1].locations.y, "r+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[-1, -1].locations.x, frame[-1, -1].locations.y, "y+", markersize=2, linewidth=2)
                 
                 # Draw camera position
-                self._ax.plot(frame.camera_locations[0, 0].translation.x, 
+                self._map_ax.plot(frame.camera_locations[0, 0].translation.x, 
                               frame.camera_locations[0, 0].translation.y, "bo")
                 
-                self._fig.canvas.draw()
+                self._map_fig.canvas.draw()
             
         
         self.show_values = bool(cv2.getTrackbarPos("show_values", self.WINDOWS_CONTROLS))
@@ -527,10 +672,9 @@ class Visualize(object):
         overlay = image.copy()
         
         # Loop over all patches
-        if self.patches.contains_features and ( \
-             self.patch_to_color_func is not None or \
-            (self.patch_to_text_func is not None and self.show_values) or \
-             self.pause_func is not None):
+        if self.patch_to_color_func[self.model_index] is not None or \
+            (self.patch_to_text_func[self.model_index] is not None and self.show_values) or \
+            self.pause_func is not None:
              
             patch_size = (float(image.shape[0]) / float(frame.shape[0]),
                           float(image.shape[1]) / float(frame.shape[1]))
@@ -541,11 +685,11 @@ class Visualize(object):
                 p1 = (int(x * patch_size[1]), int(y * patch_size[0]))               # (x, y)
                 p2 = (int(p1[0] + patch_size[1]), int(p1[1] + patch_size[0]))       # (x, y)
                 
-                if self.patch_to_color_func is not None:
-                    cv2.rectangle(overlay, p1, p2, self.patch_to_color_func(self, patch), -1)
+                if self.patch_to_color_func[self.model_index] is not None:
+                    cv2.rectangle(overlay, p1, p2, self.patch_to_color_func[self.model_index](patch), -1)
 
-                if self.patch_to_text_func is not None and self.show_values:
-                    text = str(self.patch_to_text_func(self, patch))
+                if self.patch_to_text_func[self.model_index] is not None and self.show_values:
+                    text = str(self.patch_to_text_func[self.model_index](patch))
                     cv2.putText(overlay, text,
                         (p1[0] + 2, p1[1] + int(patch_size[0]) - 2),    # (x, y)
                         font,
@@ -553,7 +697,7 @@ class Visualize(object):
                         (0, 0, 255),
                         thickness, lineType=cv2.LINE_AA)
                 
-                if self.pause_func is not None and self.pause_func(self, patch):
+                if self.pause_func[self.model_index] is not None and self.pause_func[self.model_index](patch):
                     self.pause = True
         
         # Draw grid
@@ -588,6 +732,10 @@ class Visualize(object):
         self.image_write_label(image_new, frame[0, 0])
         cv2.imshow(self.WINDOWS_IMAGE, image_new)
     
+    def __model__(self, new_model_index=None):
+        self.model_index = new_model_index
+        self.__maha__()
+
     def __index_update__(self, new_index=None):
         if new_index != self.index:
             self.pause = True
