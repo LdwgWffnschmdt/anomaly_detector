@@ -426,11 +426,16 @@ class Visualize(object):
             cv2.putText(image, str(n_anomaly), (200, 250), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
             cv2.putText(image, "%.2f" % p_anomaly, (300, 250), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
 
+            if p_anomaly > 0:
+                cv2.putText(image, "%.2f" % (p_no_anomaly / p_anomaly), (360, 235), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+
             if not only_refresh_image:
                 self._histogram_ax1.clear()
                 self._histogram_ax2.clear()
 
-                _, bins, _ = self._histogram_ax1.hist(no_anomaly.ravel(), bins="fd")
+                # r = (np.nanmin(self.patches.mahalanobis_distances_filtered), np.nanmax(self.patches.mahalanobis_distances_filtered))
+
+                _, bins, _ = self._histogram_ax1.hist(no_anomaly.ravel(), bins=200)
                 self._histogram_ax2.hist(anomaly.ravel(), bins=bins)
                 
                 self._histogram_fig.canvas.draw()
@@ -773,7 +778,8 @@ class Visualize(object):
 
 if __name__ == "__main__":
     from common import PatchArray
-    patches = PatchArray()
+    import consts
+    patches = PatchArray(consts.FEATURES_FILE)
 
     vis = Visualize(patches)
     vis.show()
