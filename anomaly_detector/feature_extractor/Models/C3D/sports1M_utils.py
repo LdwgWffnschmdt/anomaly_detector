@@ -3,46 +3,64 @@
 
 """
 
+import tensorflow as tf
+from tensorflow.keras.utils import get_file
+
 import numpy as np
 from scipy.misc import imresize
-from tensorflow.keras.utils import get_file
 
 C3D_MEAN_PATH = 'https://github.com/adamcasson/c3d/releases/download/v0.1/c3d_mean.npy'
 SPORTS1M_CLASSES_PATH = 'https://github.com/adamcasson/c3d/releases/download/v0.1/sports1M_classes.txt'
 
-def preprocess_input(video):
+mean_path = get_file('c3d_mean.npy',
+                        C3D_MEAN_PATH,
+                        cache_subdir='models',
+                        md5_hash='08a07d9761e76097985124d9e8b2fe34')
+
+# Subtract mean
+mean = np.load(mean_path)
+mean_tf = tf.constant(mean)
+
+def preprocess_input(frames):
     """Resize and subtract mean from video input
     
-    Keyword arguments:
-    video -- video frames to preprocess. Expected shape 
-        (frames, rows, columns, channels). If the input has more than 16 frames
-        then only 16 evenly samples frames will be selected to process.
+    Args:
+        frames (tf.Tensor): Video frames to preprocess. Expected shape 
+                            (frames, rows, columns, channels).
     
     Returns:
-    A numpy array.
-    
+        A TF Tensor.
     """
-    intervals = np.ceil(np.linspace(0, video.shape[0]-1, 16)).astype(int)
-    frames = video[intervals]
+    # Reshape to 128x171
+    frames = tf.image.resize(frames, (128, 171))
+    frames -= mean
+
+    # Crop to 112x112
+    frames = tf.image.crop_to_bounding_box(frames, 8, 30, 112, 112)
+
+    return frames
+
+def preprocess_input_python(frames):
+    """Resize and subtract mean from video input
     
+    Args:
+        frames (np.ndarray): Video frames to preprocess. Expected shape 
+                             (frames, rows, columns, channels).
+    
+    Returns:
+        A numpy array.
+    """
     # Reshape to 128x171
     reshape_frames = np.zeros((frames.shape[0], 128, 171, frames.shape[3]))
     for i, img in enumerate(frames):
         img = imresize(img, (128,171), 'bicubic')
         reshape_frames[i,:,:,:] = img
-        
-    mean_path = get_file('c3d_mean.npy',
-                         C3D_MEAN_PATH,
-                         cache_subdir='models',
-                         md5_hash='08a07d9761e76097985124d9e8b2fe34')
     
-    # Subtract mean
-    mean = np.load(mean_path)
     reshape_frames -= mean
     # Crop to 112x112
     reshape_frames = reshape_frames[:,8:120,30:142,:]
-    # Add extra dimension for samples
-    reshape_frames = np.expand_dims(reshape_frames, axis=0)
+    # # Add extra dimension for samples
+    # reshape_frames = np.expand_dims(reshape_frames, axis=0)
     
     return reshape_frames
 

@@ -102,7 +102,7 @@ class FeatureExtractorBase(object):
                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         # Call internal transformations (eg. temporal windowing for 3D networks)
-        dataset, total = self.__transform_dataset__(dataset, total)
+        # dataset, total = self.__transform_dataset__(dataset, total)
 
         # Get batches (seems to be better performance wise than extracting individual images)
         if batch_size > 0:
