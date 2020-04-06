@@ -17,9 +17,9 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
     """Anomaly model formed by a Balanced Distribution of feature vectors
     Reference: https://www.mdpi.com/2076-3417/9/4/757
     """
-    def __init__(self, initial_normal_features=1000, threshold_learning=300, threshold_classification=5, pruning_parameter=0.5):
+    def __init__(self, initial_normal_features=1000, threshold_learning=300, threshold_classification=5, pruning_parameter=0.3):
         AnomalyModelBase.__init__(self)
-        self.NAME += "/%i/%i/%i" % (initial_normal_features, threshold_learning, pruning_parameter)
+        self.NAME += "/%i/%i/%.2f" % (initial_normal_features, threshold_learning, pruning_parameter)
         
         assert 0 < pruning_parameter < 1, "Pruning parameter out of range (0 < η < 1)"
 
@@ -71,8 +71,10 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
         patches_flat = patches.ravel()
 
-        assert patches_flat.shape[0] > self.initial_normal_features, \
-            "Not enough initial features provided. Please decrease initial_normal_features (%i)" % self.initial_normal_features
+        if patches_flat.shape[0] > self.initial_normal_features:
+            self.initial_normal_features = patches_flat.shape[0]
+        # assert patches_flat.shape[0] > self.initial_normal_features, \
+        #     "Not enough initial features provided. Please decrease initial_normal_features (%i)" % self.initial_normal_features
 
         # Create initial set of "normal" vectors
         self.balanced_distribution = patches_flat[:self.initial_normal_features]
@@ -102,17 +104,17 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         
         if not silent: logger.info(np.mean(np.array([self.__mahalanobis_distance__(f) for f in self.balanced_distribution])))
 
-        prune_filter = []
+        prune_filter = np.empty(self.balanced_distribution.shape, dtype=np.bool)
         pruned = 0
-
+        
         with tqdm(desc="Pruning balanced distribution",
                     total=len(self.balanced_distribution),
                     file=sys.stderr) as pbar:
-            for patch in self.balanced_distribution:
-                prune = self.__mahalanobis_distance__(patch) < self.threshold_learning * self.pruning_parameter
-                prune_filter.append(prune)
+            for i, patch in enumerate(self.balanced_distribution):
+                not_prune = self.__mahalanobis_distance__(patch) > self.threshold_learning * self.pruning_parameter
+                prune_filter[i] = not_prune
 
-                if prune:
+                if not not_prune:
                     pruned += 1
 
                 # Print progress
@@ -136,7 +138,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
            not "pruning_parameter" in h5file.attrs.keys():
             return False
         
-        self.balanced_distribution      = np.array(h5file["balanced_distribution"])
+        self.balanced_distribution      = np.array([h5file["balanced_distribution"]], dtype=[("features", np.float64)]).squeeze()
         self.initial_normal_features    = h5file.attrs["initial_normal_features"]
         self.threshold_learning         = h5file.attrs["threshold_learning"]
         self.threshold_classification   = h5file.attrs["threshold_classification"]
@@ -147,7 +149,8 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
     
     def __save_model_to_file__(self, h5file):
         """Save the model to disk"""
-        h5file.create_dataset("balanced_distribution", data=self.balanced_distribution, dtype=np.float64)
+        h5file.create_dataset("balanced_distribution", data=self.balanced_distribution["features"], dtype=np.float64)
+        h5file.create_dataset("balanced_distribution_times", data=self.balanced_distribution["times"], dtype=np.float64)
         h5file.attrs["initial_normal_features"]    = self.initial_normal_features
         h5file.attrs["threshold_learning"]         = self.threshold_learning
         h5file.attrs["threshold_classification"]   = self.threshold_classification
