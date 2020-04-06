@@ -147,7 +147,7 @@ def feature_extractor_benchmark():
                                   num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
             # Call internal transformations (eg. temporal windowing for 3D networks)
-            dataset = extractor.__transform_dataset__(dataset)
+            # dataset = extractor.__transform_dataset__(dataset)
 
             mins = []
 

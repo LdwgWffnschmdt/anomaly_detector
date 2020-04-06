@@ -11,13 +11,7 @@ parser.add_argument("--list", dest="list", action="store_true",
                     help="List all extractors and exit")
 
 parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.EXTRACT_FILES,
-                    help="File(s) to use (*.tfrecord, *.jpg)")
-
-parser.add_argument("--filter", metavar="FI", dest="filter", type=str, default="direction_ccw",
-                    help="Filter only works with *.jpg files (\"no_anomaly\", \"anomaly\", \"round_number\", \"direction_ccw\", ...)")
-
-parser.add_argument("--filter_argument", metavar="FIA", dest="filter_argument", type=int,
-                    help="Use with --filter=\"round_number\"")
+                    help="File(s) to use (*.jpg)")
 
 parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', type=str,
                     help="Extractor name. Leave empty for all extractors (default: \"\")")
@@ -32,7 +26,6 @@ from common import utils, logger, PatchArray, Visualize
 import traceback
 
 import numpy as np
-
 
 def extract_features():
     if not args.list and len(args.files) == 0:
@@ -61,30 +54,36 @@ def extract_features():
 
     if isinstance(args.files, basestring):
         args.files = [args.files]
-        
-    dataset = None
-    total = 0
+    
+    patches = PatchArray(args.files)
+    
+    p = patches[:, 0, 0]
 
-    if args.files[0].endswith(".jpg") and args.filter is not None:
-        patches = PatchArray(args.files)
+    f = np.zeros(p.shape, dtype=np.bool)
+    f[:] = np.logical_and(p.directions == 1,                                   # CCW and
+                            np.logical_or(p.labels == 2,                         #   Anomaly or
+                                        np.logical_and(p.round_numbers >= 7,   #     Round between 2 and 5
+                                                        p.round_numbers <= 9)))
 
-        patches = patches[np.logical_and(patches.directions[:, 0, 0] == 1,          # CCW and
-                                         np.logical_or(patches.labels[:, 0, 0] == 2,             #   Anomaly or
-                                                       np.logical_and(patches.round_numbers[:, 0, 0] >= 2,      #   Round between 2 and 5
-                                                                      patches.round_numbers[:, 0, 0] <= 5)))]
+    # Let's make contiguous blocks of at least 10, so
+    # we can do some meaningful temporal smoothing afterwards
+    for i, b in enumerate(f):
+        if b and i - 10 >= 0:
+            f[i - 10:i] = True
 
-        vis = Visualize(patches)
-        vis.show()
-        
-        # patches = getattr(patches, args.filter, None)
-        # assert patches is not None, "The filter was not valid."
-        # if args.filter_argument is not None:
-        #     patches = patches(args.filter_argument)
-        #     assert patches is not None, "The filter argument was not valid."
-        dataset = patches.to_dataset()
-        total = patches.shape[0]
-    else:
-        dataset, total = utils.load_dataset(args.files)
+    patches = patches[f]
+
+    vis = Visualize(patches)
+    vis.show()
+    
+    # patches = getattr(patches, args.filter, None)
+    # assert patches is not None, "The filter was not valid."
+    # if args.filter_argument is not None:
+    #     patches = patches(args.filter_argument)
+    #     assert patches is not None, "The filter argument was not valid."
+    dataset = patches.to_dataset().cache()
+    dataset_3D = patches.to_temporal_dataset(16).cache()
+    total = patches.shape[0]
 
     module = __import__("feature_extractor")
     
@@ -95,9 +94,14 @@ def extract_features():
     for extractor_name in args.extractor:
         logger.info("Instantiating %s" % extractor_name)
         try:
+            bs = getattr(module, extractor_name).TEMPORAL_BATCH_SIZE
             # Get an instance
-            extractor = getattr(module, extractor_name)()
-            extractor.extract_dataset(dataset, total, filter=args.filter)
+            if bs > 1:
+                extractor = getattr(module, extractor_name)()
+                extractor.extract_dataset(dataset_3D, total)
+            else:
+                pass
+                # extractor.extract_dataset(dataset, total)
         except KeyboardInterrupt:
             logger.info("Terminated by CTRL-C")
             return

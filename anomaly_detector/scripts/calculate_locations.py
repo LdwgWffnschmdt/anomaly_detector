@@ -19,9 +19,10 @@ import traceback
 from glob import glob
 
 from tqdm import tqdm
+import numpy as np
 
 from common import utils, logger, PatchArray
-from anomaly_model import AnomalyModelSVG, AnomalyModelBalancedDistribution, AnomalyModelSpatialBinsBase
+from anomaly_model import AnomalyModelSVG, AnomalyModelBalancedDistribution, AnomalyModelBalancedDistributionSVG, AnomalyModelSpatialBinsBase
 
 def calculate_locations():
     ################
@@ -60,15 +61,17 @@ def calculate_locations():
                 else:
                     patches.save_locations_to_file()
 
-                patches.calculate_rasterization(0.2)
+                patches.calculate_rasterization(0.5)
 
                 # Calculate anomaly models
 
+                threshold_learning = int(np.nanmax(patches.mahalanobis_distances["SpatialBin/SVG/0.50"]) * 0.7)
+
                 models = [
-                    AnomalyModelSVG(),
-                    # AnomalyModelBalancedDistribution(initial_normal_features=1000, threshold_learning=300, pruning_parameter=0.5),
-                    AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=0.2),
-                    # AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistribution(initial_normal_features=10, threshold_learning=150, pruning_parameter=0.5), cell_size=0.2)
+                    # AnomalyModelSVG(),
+                    # AnomalyModelBalancedDistributionSVG(initial_normal_features=1000, threshold_learning=threshold_learning, pruning_parameter=0.5),
+                    # AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=0.5),
+                    AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistributionSVG(initial_normal_features=10, threshold_learning=threshold_learning, pruning_parameter=0.5), cell_size=0.5)
                 ]
 
                 with tqdm(total=len(models), file=sys.stderr) as pbar2:
@@ -76,16 +79,16 @@ def calculate_locations():
                         try:
                             pbar2.set_description(m.NAME)
                             logger.info("Calculating %s" % m.NAME)
-
+                            
                             model, mdist = m.is_in_file(features_file)
 
                             if not model:
-                                m.load_or_generate(patches, load_mahalanobis_distances=True, silent=True)
+                                m.load_or_generate(patches, silent=True)
                             elif not mdist:
                                 logger.info("Model already calculated")
                                 m.load_from_file(features_file)
                                 m.patches = patches
-                                m.calculate_mahalobis_distances()
+                                m.calculate_mahalanobis_distances()
                             else:
                                 logger.info("Model and mahalanobis distances already calculated")
 

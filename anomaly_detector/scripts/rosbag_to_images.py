@@ -47,7 +47,9 @@ import sys
 import time
 from glob import glob
 import yaml
+from datetime import datetime
 
+import h5py
 import rospy
 import rosbag
 import cv2
@@ -138,69 +140,79 @@ def rosbag_to_images():
             ### Get images
             expected_im_count = bag.get_message_count(image_topic)
 
-            skipped_count = 0       
+            skipped_count = 0
+
+            meta = list()
 
             with tqdm(desc="Writing images", total=expected_im_count, file=sys.stderr) as pbar:
                 for topic, msg, t in bag.read_messages(topics=image_topic):
                     output_file = os.path.join(output_dir, str(t.to_nsec()))
 
-                    if not args.override and os.path.exists(output_file + ".jpg"):
+                    # if not args.override and os.path.exists(output_file + ".jpg"):
+                    #     skipped_count += 1
+                    # else:
+                    try:
+                        # Get translation and orientation
+                        msg_tf = tf_buffer.lookup_transform(tf_map, tf_base_link, t)#, rospy.Duration.from_sec(0.001))
+                        translation = msg_tf.transform.translation
+                        euler = ros_tf.transformations.euler_from_quaternion([msg_tf.transform.rotation.x,
+                                                                            msg_tf.transform.rotation.y,
+                                                                            msg_tf.transform.rotation.z,
+                                                                            msg_tf.transform.rotation.w])
+
+                        # # Get the image
+                        # if msg._type == "sensor_msgs/CompressedImage":
+                        #     image_arr = np.fromstring(msg.data, np.uint8)
+                        #     cv_image = cv2.imdecode(image_arr, cv2.IMREAD_COLOR)
+                        # elif msg._type == "sensor_msgs/Image":
+                        #     cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+                        # else:
+                        #     raise ValueError("Image topic type must be either \"sensor_msgs/Image\" or \"sensor_msgs/CompressedImage\".")
+                        
+                        # # Crop the image
+                        # if args.image_crop is not None:
+                        #     cv_image = cv_image[args.image_crop[1]:args.image_crop[1] + args.image_crop[3], # y:y+h
+                        #                         args.image_crop[0]:args.image_crop[0] + args.image_crop[2]] # x:x+w
+
+                        # # Scale the image
+                        # if args.image_scale != 1.0:
+                        #     cv_image = cv2.resize(cv_image, (int(cv_image.shape[1] * args.image_scale),
+                        #                                     int(cv_image.shape[0] * args.image_scale)), cv2.INTER_AREA)
+
+                        # cv2.imwrite(output_file + ".jpg", cv_image)
+                        
+                        meta.append((((translation.x, translation.y, translation.z), (euler[0], euler[1], euler[2])),
+                                    t.to_nsec(),
+                                    label, # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
+                                    -1,
+                                    -1))
+
+                    except KeyboardInterrupt:
+                        logger.info("Cancelled")
+                        return
+                    except:# tf2.LookupException, tf2.ExtrapolationException:
                         skipped_count += 1
-                    else:
-                        try:
-                            # Get translation and orientation
-                            msg_tf = tf_buffer.lookup_transform(tf_map, tf_base_link, t)#, rospy.Duration.from_sec(0.001))
-                            translation = msg_tf.transform.translation
-                            euler = ros_tf.transformations.euler_from_quaternion([msg_tf.transform.rotation.x,
-                                                                                  msg_tf.transform.rotation.y,
-                                                                                  msg_tf.transform.rotation.z,
-                                                                                  msg_tf.transform.rotation.w])
-
-                            # Get the image
-                            if msg._type == "sensor_msgs/CompressedImage":
-                                image_arr = np.fromstring(msg.data, np.uint8)
-                                cv_image = cv2.imdecode(image_arr, cv2.IMREAD_COLOR)
-                            elif msg._type == "sensor_msgs/Image":
-                                cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
-                            else:
-                                raise ValueError("Image topic type must be either \"sensor_msgs/Image\" or \"sensor_msgs/CompressedImage\".")
-                            
-                            # Crop the image
-                            if args.image_crop is not None:
-                                cv_image = cv_image[args.image_crop[1]:args.image_crop[1] + args.image_crop[3], # y:y+h
-                                                    args.image_crop[0]:args.image_crop[0] + args.image_crop[2]] # x:x+w
-
-                            # Scale the image
-                            if args.image_scale != 1.0:
-                                cv_image = cv2.resize(cv_image, (int(cv_image.shape[1] * args.image_scale),
-                                                                int(cv_image.shape[0] * args.image_scale)), cv2.INTER_AREA)
-
-                            cv2.imwrite(output_file + ".jpg", cv_image)
-                            
-                            feature_dict = {
-                                "location/translation/x"   : translation.x,
-                                "location/translation/y"   : translation.y,
-                                "location/translation/z"   : translation.z,
-                                "location/rotation/x"      : euler[0],
-                                "location/rotation/y"      : euler[1],
-                                "location/rotation/z"      : euler[2],
-                                "time"                     : t.to_nsec(),
-                                "label"                    : label, # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-                                "rosbag"                   : bag_file
-                            }
-
-                            with open(output_file + ".yml", "w") as yaml_file:
-                                yaml.dump(feature_dict, yaml_file, default_flow_style=False)
-
-                        except KeyboardInterrupt:
-                            logger.info("Cancelled")
-                            return
-                        except:# tf2.LookupException, tf2.ExtrapolationException:
-                            skipped_count += 1
                         
                     # Print progress
                     pbar.set_postfix({"Skipped": skipped_count})
                     pbar.update()
+
+            metadata = np.rec.array(meta, dtype=[('camera_locations', [('translation', [('x', '<f4'), ('y', '<f4'), ('z', '<f4')]),
+                                                                       ('rotation', [('x', '<f4'), ('y', '<f4'), ('z', '<f4')])]),
+                                                 ('times', '<u8'),
+                                                 ('labels', 'i1'),
+                                                 ('directions', 'i1'),
+                                                 ('round_numbers', 'i1')])
+
+            meta_filename = os.path.join(output_dir, "metadata_cache.h5")
+            with h5py.File(meta_filename, "w") as hf:
+                hf.attrs["Created"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
+                camera_locations = hf.create_dataset("camera_locations", data=metadata.camera_locations)
+                times =            hf.create_dataset("times",            data=metadata.times)
+                labels =           hf.create_dataset("labels",           data=metadata.labels)
+                directions =       hf.create_dataset("directions",       data=metadata.directions)
+                round_numbers =    hf.create_dataset("round_numbers",    data=metadata.round_numbers)
+                
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
