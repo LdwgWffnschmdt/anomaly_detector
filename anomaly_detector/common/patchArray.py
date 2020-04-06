@@ -38,6 +38,8 @@ class PatchArray(np.recarray):
     
     __metadata_attrs__ = list()
 
+    root = None
+
     def __new__(cls, filename=None, metadata_filename=None, **kwargs):
         """Reads metadata and features from a HDF5 file.
         
@@ -47,6 +49,9 @@ class PatchArray(np.recarray):
         Returns:
             A new PatchArray
         """
+        if cls.root is not None:
+            logger.warning("There is already a root PatchArray loaded.")
+        
         logger.info("Reading metadata and features from: %s" % filename)
 
         images_path = kwargs.get("images_path", consts.IMAGES_PATH)
@@ -106,6 +111,7 @@ class PatchArray(np.recarray):
                     elif x.endswith("/mahalanobis_distances"):
                         n = x.replace("/mahalanobis_distances", "")
                         mahalanobis_dict[n] = numpy.array(y)
+                        mahalanobis_dict[n][np.isnan(mahalanobis_dict[n])] = -1
 
                 hf.visititems(_add)
 
@@ -160,6 +166,9 @@ class PatchArray(np.recarray):
         obj.contains_locations = contains_locations
         obj.contains_bins      = contains_bins
         obj.contains_mahalanobis_distances = contains_mahalanobis_distances
+
+        cls.root = obj
+
         return obj
 
     def __array_finalize__(self, obj):
@@ -418,27 +427,63 @@ class PatchArray(np.recarray):
 
         return raw_dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
+    isview = property(lambda self: np.shares_memory(self, self.root))
+
+    def get_batch(self, time, temporal_batch_size):
+        time_index = np.argwhere(self.root.times == time).flat[0]
+        res = None
+        for res_i, arr_i in enumerate(range(time_index - temporal_batch_size, time_index)):
+            image = cv2.cvtColor(self.root[max(0, arr_i), 0, 0].get_image(), cv2.COLOR_BGR2RGB)
+            if res is None:
+                res = np.zeros((temporal_batch_size,) + image.shape)
+            res[res_i,...] = image
+        return res
+
+    def to_temporal_dataset(self, temporal_batch_size=16):
+        import tensorflow as tf
+
+        def _gen():
+            for i in range(self.shape[0]):
+                temporal_batch = self.get_batch(self[i, 0, 0].times, temporal_batch_size)
+                yield (temporal_batch, self[i, 0, 0].times)
+
+        raw_dataset = tf.data.Dataset.from_generator(
+            _gen,
+            output_types=(tf.uint8, tf.int64),
+            output_shapes=((None, None, None, None), ()))
+
+        return raw_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
 if __name__ == "__main__":
     from common import Visualize
+    from scipy.misc import imresize
 
-    patches = PatchArray(consts.FEATURES_FILE)
-    
-    # r = patches.ravel()
+    patches = PatchArray().anomaly
 
-    # for i, x in enumerate(r):
-    #     if i >= len(patches) -2:
-    #         print i
+    vis = Visualize(patches)
+    vis.show()
+    for p in patches:
+        from feature_extractor.Models.C3D.sports1M_utils import preprocess_input_python
+        b = preprocess_input_python(patches.get_batch(p.times[0, 0], 16))
+        im = numpy.concatenate([np.concatenate(b[4*i:4*i+4,...], axis=1) for i in range(4)], axis=0)
+        im = im.astype(np.uint8)
+        cv2.imshow("Batch", im)
+        cv2.waitKey(1)
 
-    # patches.show_spatial_histogram(1.0)
+    # f = np.zeros(patches.shape[0], dtype=np.bool)
+    # f[0:3] = True
+    # f[5:10] = True
+    # patches = patches[f]
 
-    # vis = Visualize(patches)
-    # vis.show()
+    # print patches.isview
 
-    patches[0, 0, 0].labels = 2
-    print patches[0:5, 0, 0].labels
-    print patches[0:5, 0, 0].changed
+    # patches[0, 0, 0].labels = 2
+    # print patches[0:5, 0, 0].labels
+    # print patches[0:5, 0, 0].changed
 
-    patches[0:2, 0, 0].labels = 2
+    # patches[0:2, 0, 0].labels = 2
 
-    print patches[0:5, 0, 0].labels
-    print patches[0:5, 0, 0].changed
+    # print patches[0:5, 0, 0].labels
+    # print patches[0:5, 0, 0].changed
+
+    # print patches.root[0:15, 0, 0].changed
