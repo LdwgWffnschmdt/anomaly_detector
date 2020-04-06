@@ -35,10 +35,13 @@ class AnomalyModelSVG(AnomalyModelBase):
         
         # TODO: This is a hack for collapsed SVGs. Should normally not happen
         if not self._var.any(): # var contains only zeros
-            return (feature == self._mean).all()
+            if (feature == self._mean).all():
+                return 0.0
+            else:
+                return np.nan
 
-        res = np.sqrt(np.sum((feature - self._mean) **2 / self._var))
-        # res2 = distance.mahalanobis(feature, self._mean, self._varI)
+        res = np.sqrt(np.sum(np.divide((feature - self._mean) **2, self._var, out=np.zeros_like(self._var), where=self._var!=0)))
+        # res2 = distance.mahalanobis(feature, self._mean, np.diag(self._varI))
         return res
         
         ### scipy implementation is way slower
@@ -57,6 +60,7 @@ class AnomalyModelSVG(AnomalyModelBase):
         self._var = patches.var()
         # d = np.diag(self._var)
         # self._varI = np.linalg.pinv(d)
+        # self._varI = np.divide(np.ones_like(self._var), self._var, out=np.zeros_like(self._var), where=self._var!=0)
         # --> one variance per feature dimension
 
         # Get the mean
@@ -70,15 +74,16 @@ class AnomalyModelSVG(AnomalyModelBase):
         """Load a SVG model from file"""
         if not "var" in h5file.keys() or not "mean" in h5file.keys():
             return False
-        self._var       = np.array(h5file["var"])
-        # self._varI = np.linalg.pinv(np.diag(self._var))
-        self._mean      = np.array(h5file["mean"])
+        self._var  = np.array(h5file["var"])
+        # self._varI = np.array(h5file["varI"])#np.linalg.pinv(np.diag(self._var))
+        self._mean = np.array(h5file["mean"])
         assert len(self._var) == len(self._mean), "Dimensions of variance and mean do not match!"
         return True
     
     def __save_model_to_file__(self, h5file):
         """Save the model to disk"""
         h5file.create_dataset("var",  data=self._var)
+        # h5file.create_dataset("varI", data=self._varI)
         h5file.create_dataset("mean", data=self._mean)
         return True
 

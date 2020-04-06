@@ -92,10 +92,19 @@ class AnomalyModelBase(object):
 
         self.patches = patches
 
+        p = self.patches[:, 0, 0]
+
+        f = np.zeros(p.shape, dtype=np.bool)
+        f[:] = np.logical_and(p.labels == 1,                        # No anomaly and
+                              np.logical_or(p.round_numbers == 7,   #     Round 7
+                                            p.round_numbers == 9))  #        or 9
+
+        model_input = patches[f]
+
         start = time.time()
 
         # Generate model
-        if self.__generate_model__(self.patches.no_anomaly, silent=silent) == False:
+        if self.__generate_model__(model_input, silent=silent) == False:
             logger.info("Could not generate model.")
             return False
 
@@ -111,7 +120,7 @@ class AnomalyModelBase(object):
             g = hf.create_group(self.NAME)
 
             # Add metadata to the output file
-            g.attrs["Number of features used"]   = len(self.patches.ravel())
+            g.attrs["Number of features used"]   = model_input.size
 
             computer_info = utils.getComputerInfo()
             for key, value in computer_info.items():
@@ -164,7 +173,7 @@ class AnomalyModelBase(object):
             
             maha = np.zeros(self.patches.shape, dtype=np.float64)
             
-            for i in tqdm(np.ndindex(self.patches.shape), desc="Calculating mahalanobis distances", file=sys.stderr):
+            for i in tqdm(np.ndindex(self.patches.shape), desc="Calculating mahalanobis distances", total=self.patches.size, file=sys.stderr):
                 maha[i] = self.__mahalanobis_distance__(self.patches[i])
 
             no_anomaly = maha[self.patches.labels == 1]
@@ -175,13 +184,13 @@ class AnomalyModelBase(object):
             m.attrs["max_no_anomaly"] = np.nanmax(no_anomaly)
             m.attrs["max_anomaly"]    = np.nanmax(anomaly)
 
-            hist1, bins = np.histogram(no_anomaly, bins="fd")
-            m.attrs["histogram_no_anomaly"] = hist1
+            # hist1, bins = np.histogram(no_anomaly, bins="fd")
+            # m.attrs["histogram_no_anomaly"] = hist1
 
-            hist2, _ = np.histogram(anomaly, bins=bins)
-            m.attrs["histogram_anomaly"] = hist2
+            # hist2, _ = np.histogram(anomaly, bins=bins)
+            # m.attrs["histogram_anomaly"] = hist2
             
-            m.attrs["histogram_edges"] = bins
+            # m.attrs["histogram_edges"] = bins
 
             logger.info("Saved Mahalanobis distances to file")
             return True

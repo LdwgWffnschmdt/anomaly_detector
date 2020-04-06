@@ -50,7 +50,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         model = self.get_model(patch.bins)
         if model is None:
             # logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
-            return -1 # TODO: What should we do?
+            return np.nan # TODO: What should we do?
         
         return model.__mahalanobis_distance__(patch)
 
@@ -117,9 +117,9 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     def __save_model_to_file__(self, h5file):
         """Save the model to disk"""
         h5file.attrs["Cell size"] = self.CELL_SIZE
-        h5file.attrs["Num models"] = sum(x is not None for x in self.models.ravel())
         h5file.attrs["Models shape"] = self.models.shape
         
+        models_count = 0
         for v, u in tqdm(np.ndindex(self.models.shape), desc="Saving models", total=np.prod(self.models.shape), file=sys.stderr):
             model = self.get_model((v, u))
             if model is not None:
@@ -127,6 +127,8 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
                 g.attrs["v"] = v
                 g.attrs["u"] = u
                 model.__save_model_to_file__(g)
+                models_count += 1
+        h5file.attrs["Num models"] = models_count
         return True
     	
         
