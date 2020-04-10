@@ -1,5 +1,6 @@
 .vscode
 *.pyc
 .env
+.env3
 __pycache__
 consts.py

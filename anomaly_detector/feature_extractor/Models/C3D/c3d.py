@@ -9,10 +9,10 @@ Based on code from @albertomontesg
 """
 
 import tensorflow.keras.backend as K
-from tensorflow.keras.models import Sequential
+from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.utils import get_file
-from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv3D, MaxPooling3D, ZeroPadding3D
-from sports1M_utils import preprocess_input, decode_predictions
+from tensorflow.keras.layers import Input, Dense, Dropout, Flatten, Conv3D, MaxPooling3D, ZeroPadding3D, Conv2D, MaxPooling2D, ZeroPadding2D
+# from sports1M_utils import preprocess_input, decode_predictions
 
 WEIGHTS_PATH = 'https://github.com/adamcasson/c3d/releases/download/v0.1/sports1M_weights_tf.h5'
 
@@ -72,6 +72,30 @@ def C3D(weights='sports1M'):
         model.load_weights(weights_path)
     
     return model
+    
+def C2D(shape):
+    """Only for calculating the receptive field
+    """
+    
+    inp = Input(shape=shape, name='input_1')
+    x = Conv2D(64, 3, activation='linear', padding='same', name='conv1', input_shape=shape)(inp)
+    x = MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='same', name='pool1')(x)
+    
+    x = Conv2D(128, 3, activation='linear', padding='same', name='conv2')(x)
+    x = MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='valid', name='pool2')(x)
+    
+    x = Conv2D(256, 3, activation='linear', padding='same', name='conv3a')(x)
+    x = Conv2D(256, 3, activation='linear', padding='same', name='conv3b')(x)
+    x = MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='valid', name='pool3')(x)
+    
+    x = Conv2D(512, 3, activation='linear', padding='same', name='conv4a')(x)
+    x = Conv2D(512, 3, activation='linear', padding='same', name='conv4b')(x)
+    x = MaxPooling2D(pool_size=(2,2), strides=(2,2), padding='valid', name='pool4')(x)
+    
+    x = Conv2D(512, 3, activation='linear', padding='same', name='conv5a')(x)
+    x = Conv2D(512, 3, activation='linear', padding='same', name='conv5b')(x)
+    
+    return Model(inp, x)
     
 if __name__ == '__main__':
     import tensorflow as tf
