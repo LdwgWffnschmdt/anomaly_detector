@@ -9,19 +9,20 @@ from Models.C3D.sports1M_utils import preprocess_input
 class FeatureExtractorC3D(FeatureExtractorBase):
     """Feature extractor based on C3D (trained on sports1M).
     Output layer: conv5b + MaxPooling3D to reduce frames
-    Generates 7x7x512 feature vectors per temporal image batch
+    OUTPUT_SHAPE = (7x7x512 feature vectors per temporal image batch
     """
-    __layer__           = "conv5b"
+    LAYER_NAME          = "conv5b"
     IMG_SIZE            = 112
     BATCH_SIZE          = 8
     TEMPORAL_BATCH_SIZE = 16   # Fixed for C3D
+    RECEPTIVE_FIELD     = {'stride': (16.0, 16.0), 'size': (119, 119)}
 
     def __init__(self):
         # Create the base model from the pre-trained C3D
         model_full = C3D(weights='sports1M')
         model_full.trainable = False
 
-        output = model_full.get_layer(self.__layer__).output
+        output = model_full.get_layer(self.LAYER_NAME).output
         pool_size = (output.shape[1], 1, 1)
         output = tf.keras.layers.MaxPooling3D(pool_size=pool_size, strides=pool_size, padding='valid', name='reduce_frames')(output)
 
@@ -46,6 +47,22 @@ class FeatureExtractorC3D(FeatureExtractorBase):
         if batch.ndim == 4:
             batch = np.expand_dims(batch, axis=0)
         return tf.squeeze(self.model(batch))
+
+class FeatureExtractorC3D_Block4(FeatureExtractorC3D):
+    """Feature extractor based on C3D (trained on sports1M).
+    Output layer: conv4b + MaxPooling3D to reduce frames"""
+    BATCH_SIZE      = 32
+    LAYER_NAME      = "conv4b"
+    OUTPUT_SHAPE    = (14, 14, 512)
+    RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (55, 55)}
+
+class FeatureExtractorC3D_Block3(FeatureExtractorC3D):
+    """Feature extractor based on C3D (trained on sports1M).
+    Output layer: conv3b + MaxPooling3D to reduce frames"""
+    BATCH_SIZE      = 32
+    LAYER_NAME      = "conv3b"
+    OUTPUT_SHAPE    = (28, 28, 256)
+    RECEPTIVE_FIELD = {'stride': (4.0, 4.0),   'size': (23, 23)}
 
 # Only for tests
 if __name__ == "__main__":

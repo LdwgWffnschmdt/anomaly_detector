@@ -4,12 +4,12 @@ from tensorflow.keras.applications.vgg16 import preprocess_input
 from featureExtractorBase import FeatureExtractorBase
 
 class FeatureExtractorVGG16(FeatureExtractorBase):
-    """Feature extractor based on VGG16 without the last max pooling layer (trained on ImageNet).
-    Generates 14x14x512 feature vectors per image
-    """
-    __layer__  = "block5_conv3"
-    IMG_SIZE   = 224
-    BATCH_SIZE = 32
+    """Feature extractor based on VGG16 without the last max pooling layer (trained on ImageNet)."""
+    IMG_SIZE        = 224
+    BATCH_SIZE      = 32
+    LAYER_NAME      = "block5_conv3"
+    OUTPUT_SHAPE    = (14, 14, 512)
+    RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (181, 181)}
 
     def __init__(self):
         # Create the base model from the pre-trained model MobileNet V2
@@ -18,7 +18,7 @@ class FeatureExtractorVGG16(FeatureExtractorBase):
                                                  weights="imagenet")
         model_full.trainable = False
 
-        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.__layer__).output)   
+        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
         self.model.trainable = False
     
     def format_image(self, image):
@@ -34,6 +34,22 @@ class FeatureExtractorVGG16(FeatureExtractorBase):
 
     def extract_batch(self, batch):
         return self.model(batch)
+
+class FeatureExtractorVGG16_Block4(FeatureExtractorVGG16):
+    """Feature extractor based on VGG16 at Bock 4 without the last max pooling layer (trained on ImageNet)."""
+    IMG_SIZE   = 224
+    BATCH_SIZE = 32
+    LAYER_NAME  = "block4_conv3"
+    OUTPUT_SHAPE = (28, 28, 512)
+    RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (85, 85)}
+
+class FeatureExtractorVGG16_Block3(FeatureExtractorVGG16):
+    """Feature extractor based on VGG16 at Bock 3 without the last max pooling layer (trained on ImageNet)."""
+    IMG_SIZE   = 224
+    BATCH_SIZE = 32
+    LAYER_NAME  = "block3_conv3"
+    OUTPUT_SHAPE = (56, 56, 512)
+    RECEPTIVE_FIELD = {'stride': (4.0, 4.0),   'size': (37, 37)}
 
 # Only for tests
 if __name__ == "__main__":

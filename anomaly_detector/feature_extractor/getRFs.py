@@ -6,9 +6,9 @@ from receptivefield.image import get_default_image
 from Models.C3D.c3d import C2D
 import efficientnet.tfkeras as efn
 
-shape = (224, 224, 3)
+shape = (673, 673, 3)
 
-model = tf.keras.applications.MobileNetV2(input_shape=shape, include_top=False)
+model = tf.keras.applications.ResNet50V2(input_shape=shape, include_top=False)
 # model = efn.EfficientNetB6(input_shape=shape, include_top=False, weights=None)
 # model = C2D(shape)
 
@@ -95,8 +95,6 @@ for i, x in enumerate(rf_params):
 # top_conv              (7, 7, 1280):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (851, 851)} ### -> EfficientNetB0        (62720)
 
 ### EfficientNetB6 (528, 528, 3)
-
-
 # stem_conv             (264, 264, 56):  {'offset': (1.5, 1.5),     'stride': (2.0, 2.0),   'size': (3, 3)}
 # block1a_dwconv        (264, 264, 56):  {'offset': (1.5, 1.5),     'stride': (2.0, 2.0),   'size': (7, 7)}
 # block1a_project_conv  (264, 264, 32):  {'offset': (1.5, 0.5),     'stride': (2.0, 2.0),   'size': (7, 7)}
@@ -252,7 +250,9 @@ for i, x in enumerate(rf_params):
 # conv4_block6_out (7, 7, 1024):    {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (287, 287)} ### -> ResNet50V2_Stack4 (50176)
 # conv5_block1_out (7, 7, 2048):    {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (351, 351)}
 # conv5_block2_out (7, 7, 2048):    {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (415, 415)}
-# conv5_block3_out (7, 7, 2048):    {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (479, 479)} ### -> ResNet50V2        (100352) ? (2048 is a lot)
+# conv5_block3_out (7, 7, 2048):    {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (479, 479)}
+# post_bn          (7, 7, 2048):    {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (479, 479)}
+# post_relu        (7, 7, 2048):    {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (479, 479)} ### -> ResNet50V2        (100352) ? (2048 is a lot)
 
 ### ResNet50V2 (449, 449, 3), RFs mit (673, 673, 3) berechnet
 # conv2_block1_out (113, 113, 256): {'offset': (-1.5, -1.5), 'stride': (4.0, 4.0),   'size': (15, 15)}
@@ -270,7 +270,9 @@ for i, x in enumerate(rf_params):
 # conv4_block6_out (15, 15, 1024):  {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (287, 287)} ### -> ResNet50V2_Stack4_LargeImage (230400) !
 # conv5_block1_out (15, 15, 2048):  {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (351, 351)}
 # conv5_block2_out (15, 15, 2048):  {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (415, 415)}
-# conv5_block3_out (15, 15, 2048):  {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (479, 479)} ### -> ResNet50V2_LargeImage        (460800) !
+# conv5_block3_out (15, 15, 2048):  {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (479, 479)}
+# post_bn          (15, 15, 2048):  {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (479, 479)}
+# post_relu        (15, 15, 2048):  {'offset': (-1.5, -1.5), 'stride': (32.0, 32.0), 'size': (479, 479)} ### -> ResNet50V2_LargeImage        (460800) !
 
 ### MobileNetV2 (224, 224, 3), RFs mit (673, 673, 3) berechnet
 # expanded_conv_project_BN   (112, 112, 16): {'offset': (0.5, 0.5),  'stride': (2.0, 2.0),   'size': (7, 7)}
