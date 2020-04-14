@@ -6,9 +6,9 @@ from receptivefield.image import get_default_image
 from Models.C3D.c3d import C2D
 import efficientnet.tfkeras as efn
 
-shape = (673, 673, 3)
+shape = (449, 449, 3)
 
-model = tf.keras.applications.ResNet50V2(input_shape=shape, include_top=False)
+model = tf.keras.applications.VGG16(input_shape=shape, include_top=False)
 # model = efn.EfficientNetB6(input_shape=shape, include_top=False, weights=None)
 # model = C2D(shape)
 
@@ -21,7 +21,7 @@ def model_build_func(input_shape):
 rf = KerasReceptiveField(model_build_func)
 
 # layers = list(filter(lambda y: (y.name.endswith("add")) and y.output_shape[1] < 65 and y.output_shape[1] > 1, model.layers))
-layers = model.layers[-2:]#  list(filter(lambda y: y.name.endswith("project_BN") or y.name.endswith("add"), model.layers))
+layers = model.layers[1:]#  list(filter(lambda y: y.name.endswith("project_BN") or y.name.endswith("add"), model.layers))
 layers_names = [x.name for x in layers]
 
 rf_params = rf.compute(shape, 'input_1', layers_names)
@@ -225,14 +225,33 @@ for i, x in enumerate(rf_params):
 # conv5a          (7, 7, 512):     {'offset': (0.5, 0.5), 'stride': (16.0, 16.0), 'size': (87, 87)}
 # conv5b          (7, 7, 512):     {'offset': (0.5, 0.5), 'stride': (16.0, 16.0), 'size': (119, 119)}   ### -> C3D          (25088)
 
-### VGG16 (etwas merkwürdige Ergebnisse)
+### VGG16 (224, 224, 3) (etwas merkwürdige Ergebnisse)
 # block3_conv3    (56, 56, 256):   {'offset': (-1.5, 0.5), 'stride': (4.0, 4.0),   'size': (35, 37)}
 # block4_conv3    (28, 28, 512):   {'offset': (-3.0, 0.5), 'stride': (8.0, 8.0),   'size': (82, 85)}
 # block5_conv3    (14, 14, 512):   {'offset': (0.5, 0.5),  'stride': (16.0, 16.0), 'size': (181, 181)}
 ### Manuell korrigiert (plausibler so)
-# block3_conv3    (56, 56, 256):   {'offset': (0.5, 0.5),  'stride': (4.0, 4.0),   'size': (37, 37)}    ### -> VGG16_Block3 (802816) !
-# block4_conv3    (28, 28, 512):   {'offset': (0.0, 0.5),  'stride': (8.0, 8.0),   'size': (85, 85)}    ### -> VGG16_Block4 (401408) !
-# block5_conv3    (14, 14, 512):   {'offset': (0.5, 0.5),  'stride': (16.0, 16.0), 'size': (181, 181)}  ### -> VGG16        (100352)
+# block3_conv3    (56, 56, 256):   {'offset': (0.5, 0.5),  'stride': (4.0, 4.0),   'size': (37, 37)}
+# block4_conv3    (28, 28, 512):   {'offset': (0.0, 0.5),  'stride': (8.0, 8.0),   'size': (85, 85)}
+# block5_conv3    (14, 14, 512):   {'offset': (0.5, 0.5),  'stride': (16.0, 16.0), 'size': (181, 181)}
+
+# block1_conv1    (449, 449, 64):  'stride': (1.0, 1.0),   'size': (2, 1)}
+# block1_conv2    (449, 449, 64):  'stride': (1.0, 1.0),   'size': (4, 4)}
+# block1_pool     (224, 224, 64):  'stride': (2.0, 2.0),   'size': (4, 4)}
+# block2_conv1    (224, 224, 128): 'stride': (2.0, 2.0),   'size': (8, 8)}
+# block2_conv2    (224, 224, 128): 'stride': (2.0, 2.0),   'size': (12, 12)}
+# block2_pool     (112, 112, 128): 'stride': (4.0, 4.0),   'size': (12, 12)}
+# block3_conv1    (112, 112, 256): 'stride': (4.0, 4.0),   'size': (21, 20)}
+# block3_conv2    (112, 112, 256): 'stride': (4.0, 4.0),   'size': (29, 29)}
+# block3_conv3    (112, 112, 256): 'stride': (4.0, 4.0),   'size': (37, 35)}    ### -> VGG16_Block3 (802816) !
+# block3_pool     (56, 56, 256):   'stride': (8.0, 8.0),   'size': (37, 35)}
+# block4_conv1    (56, 56, 512):   'stride': (8.0, 8.0),   'size': (53, 51)}
+# block4_conv2    (56, 56, 512):   'stride': (8.0, 8.0),   'size': (69, 68)}
+# block4_conv3    (56, 56, 512):   'stride': (8.0, 8.0),   'size': (85, 82)}    ### -> VGG16_Block4 (401408) !
+# block4_pool     (28, 28, 512):   'stride': (16.0, 16.0), 'size': (85, 82)}
+# block5_conv1    (28, 28, 512):   'stride': (16.0, 16.0), 'size': (117, 116)}
+# block5_conv2    (28, 28, 512):   'stride': (16.0, 16.0), 'size': (149, 148)}
+# block5_conv3    (28, 28, 512):   'stride': (16.0, 16.0), 'size': (181, 181)}  ### -> VGG16        (100352)
+# block5_pool     (14, 14, 512):   'stride': (32.0, 32.0), 'size': (181, 181)}
 
 ### ResNet50V2 (224, 224, 3), RFs mit (673, 673, 3) berechnet
 # conv2_block1_out (56, 56, 256):   {'offset': (-1.5, -1.5), 'stride': (4.0, 4.0),   'size': (15, 15)}
