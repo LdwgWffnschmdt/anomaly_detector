@@ -1,6 +1,6 @@
 import tensorflow as tf
 import efficientnet.tfkeras as efn
-from efficientnet.keras import preprocess_input
+from efficientnet.tfkeras import preprocess_input
 
 from featureExtractorBase import FeatureExtractorBase
 

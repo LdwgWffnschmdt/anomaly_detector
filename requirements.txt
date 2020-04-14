@@ -14,4 +14,7 @@ gputil
 XlsxWriter
 
 opencv-python
+scikit-image
 pillow
+
+git+https://github.com/LdwgWffnschmdt/efficientnet.git
