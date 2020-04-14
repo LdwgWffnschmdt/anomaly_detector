@@ -17,9 +17,12 @@ class FeatureExtractorBase(object):
     NAME       = property(lambda self: self.__class__.__name__.replace("FeatureExtractor", ""))
     
     # OVERRIDE THESE WITH THE RESPECTIVE IMPLEMENTATION
-    IMG_SIZE   = 224
-    BATCH_SIZE = consts.DEFAULT_BATCH_SIZE # Change this per network so it best utilizes resources
+    IMG_SIZE            = 224
+    BATCH_SIZE          = consts.DEFAULT_BATCH_SIZE # Change this per network so it best utilizes resources
     TEMPORAL_BATCH_SIZE = 1
+    LAYER_NAME          = "---"
+    OUTPUT_SHAPE        = (None)
+    RECEPTIVE_FIELD     = {'stride': (None, None), 'size': (None, None)}
 
     def extract_batch(self, batch): # Should be implemented by child class
         """Extract the features of batch of images"""
@@ -118,6 +121,8 @@ class FeatureExtractorBase(object):
             hf.attrs["Compression"]         = str(compression)
             hf.attrs["Compression options"] = str(compression_opts)
             hf.attrs["Temporal batch size"] = self.TEMPORAL_BATCH_SIZE
+            hf.attrs["Receptive field"]     = self.RECEPTIVE_FIELD
+            hf.attrs["Image size"]          = self.IMG_SIZE
 
             for key, value in kwargs.items():
                 if value is not None:

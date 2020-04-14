@@ -60,6 +60,9 @@ class PatchArray(np.recarray):
         metadata = dict()
 
         with h5py.File(filename_metadata, "r") as hf:
+            receptive_field = hf.attrs.get("Receptive field", None)
+            image_size = hf.attrs.get("Image size", None)
+
             def _c(x, y):
                 if isinstance(y, h5py.Dataset):
                     cls.__metadata_attrs__.append(x)
@@ -162,6 +165,8 @@ class PatchArray(np.recarray):
 
         obj.filename = filename
         obj.images_path = images_path
+        obj.receptive_field = receptive_field
+        obj.image_size = image_size
         obj.contains_features  = contains_features
         obj.contains_locations = contains_locations
         obj.contains_bins      = contains_bins
@@ -175,6 +180,8 @@ class PatchArray(np.recarray):
         if obj is None: return
         self.filename    = getattr(obj, "filename", None)
         self.images_path = getattr(obj, "images_path", consts.IMAGES_PATH)
+        self.receptive_field  = getattr(obj, "receptive_field", None)
+        self.image_size  = getattr(obj, "image_size", 224)
         self.contains_features  = getattr(obj, "contains_features", False)
         self.contains_locations = getattr(obj, "contains_locations", False)
         self.contains_bins      = getattr(obj, "contains_bins", False)
