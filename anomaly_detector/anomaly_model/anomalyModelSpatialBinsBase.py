@@ -58,9 +58,12 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         # Ensure locations are calculated
         patches.ensure_locations()
         
-        patches.calculate_rasterization(self.CELL_SIZE)
-
-        shape = (patches.bins.v.max() + 1, patches.bins.u.max() + 1)
+        # Get extent
+        extent = self.get_extent(self.CELL_SIZE)
+        x_min, y_min, x_max, y_max = extent
+        
+        shape = (int(np.ceil((x_max - x_min) / self.CELL_SIZE)),
+                 int(np.ceil((y_max - y_min) / self.CELL_SIZE)))
 
         # Empty grid that will contain the model for each bin
         self.models = np.empty(shape=shape, dtype=object)

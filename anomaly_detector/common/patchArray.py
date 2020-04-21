@@ -13,6 +13,9 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import cv2
 
+from shapely.strtree import STRtree
+from shapely.geometry import Polygon, box
+
 from common import utils, logger, ImageLocationUtility
 import consts
 
@@ -78,7 +81,7 @@ class PatchArray(np.recarray):
 
         contains_features  = False
         contains_locations = False
-        contains_bins      = False
+        contains_bins      = {"bins_0.20": False, "bins_0.50": False}
         contains_mahalanobis_distances = False
 
         # Check if file is h5 file
@@ -109,7 +112,7 @@ class PatchArray(np.recarray):
                 def _add(x, y):
                     if not isinstance(y, h5py.Dataset):
                         return
-                    if x in add:
+                    if x in add or x.startswith("bins"):
                         patches_dict[x] = y
                     elif x.endswith("/mahalanobis_distances"):
                         n = x.replace("/mahalanobis_distances", "")
@@ -130,16 +133,23 @@ class PatchArray(np.recarray):
                 if "locations" in patches_dict.keys():
                     contains_locations = True
                 else:
-                    patches_dict["locations"] = np.zeros(locations_shape, dtype=[("y", np.float32), ("x", np.float32)])
+                    patches_dict["locations"] = np.zeros(locations_shape, dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
+                                                                                 ("tr", [("y", np.float32), ("x", np.float32)]),
+                                                                                 ("bl", [("y", np.float32), ("x", np.float32)]),
+                                                                                 ("br", [("y", np.float32), ("x", np.float32)])])
 
                 if len(mahalanobis_dict) > 0:
                     contains_mahalanobis_distances = True
                     t = [(x, mahalanobis_dict[x].dtype) for x in mahalanobis_dict]
                     patches_dict["mahalanobis_distances"] = np.rec.fromarrays(mahalanobis_dict.values(), dtype=t)
                     patches_dict["mahalanobis_distances_filtered"] = np.zeros(locations_shape, dtype=np.float64)
-
-                patches_dict["bins"] = np.zeros(locations_shape, dtype=[("v", np.uint16), ("u", np.uint16)])
-                patches_dict["cell_size"] = np.zeros(locations_shape, dtype=np.float64)
+                
+                for k in contains_bins.keys():
+                    if k in patches_dict.keys():
+                        contains_bins[k] = True
+                    else:
+                        contains_bins[k] = False
+                        patches_dict[k] = np.zeros(locations_shape, dtype=[("v", np.uint16), ("u", np.uint16), ("weight", np.float32)])
 
                 # Broadcast metadata to the correct shape
                 if patches_dict["features"].shape[1:-1] != ():
@@ -184,7 +194,7 @@ class PatchArray(np.recarray):
         self.image_size  = getattr(obj, "image_size", 224)
         self.contains_features  = getattr(obj, "contains_features", False)
         self.contains_locations = getattr(obj, "contains_locations", False)
-        self.contains_bins      = getattr(obj, "contains_bins", False)
+        self.contains_bins      = getattr(obj, "contains_bins", {"bins_0.20": False, "bins_0.50": False})
         self.contains_mahalanobis_distances = getattr(obj, "contains_mahalanobis_distances", False)
     
     def __setattr__(self, attr, val):
@@ -306,6 +316,52 @@ class PatchArray(np.recarray):
 
         return shape
 
+    def calculate_rasterization(self, cell_size):
+        # Check if cell size is already calculated
+        if cell_size in self.__rasterizations__.keys() and "feature_indices" in self.__rasterizations__[cell_size]:
+            return self.__rasterizations__[cell_size]["feature_indices"].shape
+        
+        # Get extent
+        x_min, y_min, x_max, y_max = self.get_extent(cell_size)
+
+        # Create the bins
+        bins_y = np.arange(y_min, y_max, cell_size)
+        bins_x = np.arange(x_min, x_max, cell_size)
+
+        grid = [box(x, y, x + cell_size, y + cell_size)]
+
+        self.__rasterizations__[cell_size] = {}
+        
+        # Get extent
+        extent = self.get_extent(cell_size)
+        x_min, y_min, x_max, y_max = extent
+        
+        shape = (int(np.ceil((x_max - x_min) / cell_size)),
+                 int(np.ceil((y_max - y_min) / cell_size)))
+
+        logger.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
+
+        logger.info("Calculating corresponding bin for every feature")
+        self.__rasterizations__[cell_size]["feature_indices"] = np.empty(shape=shape, dtype=object)
+        self.__rasterizations__[cell_size]["feature_indices_count"] = np.zeros(shape=shape, dtype=np.uint32)
+        # Get the corresponding bin for every feature
+        for i, f in enumerate(tqdm(self.flatten(), desc="Calculating bins"), file=sys.stderr):
+            bin = f.get_bin(cell_size, extent)
+
+            if self.__rasterizations__[cell_size]["feature_indices"][bin] is None:
+                self.__rasterizations__[cell_size]["feature_indices"][bin] = list()
+            self.__rasterizations__[cell_size]["feature_indices"][bin].append(i)
+            self.__rasterizations__[cell_size]["feature_indices_count"][bin] += 1
+        
+        # Save to file
+        try:
+            with h5py.File(self.filename, "r+") as hf:
+                hf["rasterizations/%.2f" % cell_size] = self.__rasterizations__[cell_size]["feature_indices_count"]
+        except:
+            pass
+
+        return shape
+
     def get_extent(self, cell_size=None):
         """Calculates the extent of the features
         
@@ -359,6 +415,24 @@ class PatchArray(np.recarray):
         if not self.contains_locations:
             self.calculate_patch_locations()
 
+    def calculate_receptive_field(self, y, x):
+        _, h, w = self.locations.shape
+        center_y = y / float(h) * self.image_size
+        center_x = x / float(w) * self.image_size
+
+        rf_h = self.receptive_field.size[0] / 2.0
+        rf_w = self.receptive_field.size[1] / 2.0
+        
+        tl = (max(0, center_y - rf_h), max(0, center_x - rf_w))
+        tr = (max(0, center_y - rf_h), min(self.image_size, center_x + rf_w))
+        bl = (min(self.image_size, center_y + rf_h), max(0, center_x - rf_w))
+        br = (min(self.image_size, center_y + rf_h), min(self.image_size, center_x + rf_w))
+        
+        return np.recarray([tl, tr, bl, br], dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
+                                                    ("tr", [("y", np.float32), ("x", np.float32)]),
+                                                    ("bl", [("y", np.float32), ("x", np.float32)]),
+                                                    ("br", [("y", np.float32), ("x", np.float32)])]))
+
     def calculate_patch_locations(self):
         """Calculate the real world coordinates of every feature"""
         assert self.contains_features, "Can only compute patch locations if there are patches"
@@ -368,7 +442,15 @@ class PatchArray(np.recarray):
         logger.info("Calculating locations of every patch")
         n, h, w = self.locations.shape
         
-        image_locations = ilu.span_grid(h, w, offset_x=0.5, offset_y=0.5)   # (h, w)
+        rfs = np.zeros((h, w), dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
+                                      ("tr", [("y", np.float32), ("x", np.float32)]),
+                                      ("bl", [("y", np.float32), ("x", np.float32)]),
+                                      ("br", [("y", np.float32), ("x", np.float32)])]))
+        
+        for (y, x) in np.ndindex((h, w)):
+            rf = self.calculate_receptive_field(y + 0.5, x + 0.5)
+            image_locations[y, x] = rf
+        
         relative_locations = ilu.image_to_relative(image_locations)         # (h, w, 2)
         
         # # Construct inverse transformation matrices
@@ -395,12 +477,6 @@ class PatchArray(np.recarray):
             self.locations[i] = res
         
         self.contains_locations = True
-
-    # def add_location_as_feature_dimension(self):
-    #     """Act as if the location of a feature would be two additional feature dimensions"""
-    #     self.ensure_locations()
-    #     logger.info("Adding locations as feature dimensions")
-    #     return np.concatenate((self, self.locations), axis=-1).view(PatchArray)
 
     #################
     # Calculations  #
