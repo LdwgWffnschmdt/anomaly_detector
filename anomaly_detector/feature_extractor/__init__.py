@@ -1,5 +1,5 @@
-import featureExtractorC3D
-import featureExtractorEfficientNet
-import featureExtractorMobileNetV2
-import featureExtractorResNet50V2
-import featureExtractorVGG16
+from featureExtractorC3D import *
+from featureExtractorEfficientNet import *
+from featureExtractorMobileNetV2 import *
+from featureExtractorResNet50V2 import *
+from featureExtractorVGG16 import *

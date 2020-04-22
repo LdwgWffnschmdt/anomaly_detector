@@ -121,7 +121,7 @@ class FeatureExtractorBase(object):
             hf.attrs["Compression"]         = str(compression)
             hf.attrs["Compression options"] = str(compression_opts)
             hf.attrs["Temporal batch size"] = self.TEMPORAL_BATCH_SIZE
-            hf.attrs["Receptive field"]     = self.RECEPTIVE_FIELD
+            hf.attrs["Receptive field"]     = self.RECEPTIVE_FIELD["size"]
             hf.attrs["Image size"]          = self.IMG_SIZE
 
             for key, value in kwargs.items():
