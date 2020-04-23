@@ -135,8 +135,8 @@ class PatchArray(np.recarray):
                 else:
                     patches_dict["locations"] = np.zeros(locations_shape, dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
                                                                                  ("tr", [("y", np.float32), ("x", np.float32)]),
-                                                                                 ("bl", [("y", np.float32), ("x", np.float32)]),
-                                                                                 ("br", [("y", np.float32), ("x", np.float32)])])
+                                                                                 ("br", [("y", np.float32), ("x", np.float32)]),
+                                                                                 ("bl", [("y", np.float32), ("x", np.float32)])])
 
                 if len(mahalanobis_dict) > 0:
                     contains_mahalanobis_distances = True
@@ -374,10 +374,10 @@ class PatchArray(np.recarray):
         assert self.contains_locations, "Can only compute extent if there are patch locations"
         
         # Get the extent
-        x_min = self.locations.x.min()
-        y_min = self.locations.y.min()
-        x_max = self.locations.x.max()
-        y_max = self.locations.y.max()
+        x_min = min(self.locations.tl.x.min(), self.locations.tr.x.min(), self.locations.br.x.min(), self.locations.bl.x.min())
+        y_min = min(self.locations.tl.y.min(), self.locations.tr.y.min(), self.locations.br.y.min(), self.locations.bl.y.min())
+        x_max = max(self.locations.tl.x.max(), self.locations.tr.x.max(), self.locations.br.x.max(), self.locations.bl.x.max())
+        y_max = max(self.locations.tl.y.max(), self.locations.tr.y.max(), self.locations.br.y.max(), self.locations.bl.y.max())
         
         # Increase the extent to fit the cell size
         if cell_size is not None:
@@ -420,18 +420,15 @@ class PatchArray(np.recarray):
         center_y = y / float(h) * self.image_size
         center_x = x / float(w) * self.image_size
 
-        rf_h = self.receptive_field.size[0] / 2.0
-        rf_w = self.receptive_field.size[1] / 2.0
+        rf_h = self.receptive_field["size"][0] / 2.0
+        rf_w = self.receptive_field["size"][1] / 2.0
         
         tl = (max(0, center_y - rf_h), max(0, center_x - rf_w))
         tr = (max(0, center_y - rf_h), min(self.image_size, center_x + rf_w))
-        bl = (min(self.image_size, center_y + rf_h), max(0, center_x - rf_w))
         br = (min(self.image_size, center_y + rf_h), min(self.image_size, center_x + rf_w))
+        bl = (min(self.image_size, center_y + rf_h), max(0, center_x - rf_w))
         
-        return np.recarray([tl, tr, bl, br], dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
-                                                    ("tr", [("y", np.float32), ("x", np.float32)]),
-                                                    ("bl", [("y", np.float32), ("x", np.float32)]),
-                                                    ("br", [("y", np.float32), ("x", np.float32)])]))
+        return (tl, tr, br, bl)
 
     def calculate_patch_locations(self):
         """Calculate the real world coordinates of every feature"""
@@ -442,38 +439,21 @@ class PatchArray(np.recarray):
         logger.info("Calculating locations of every patch")
         n, h, w = self.locations.shape
         
-        rfs = np.zeros((h, w), dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
-                                      ("tr", [("y", np.float32), ("x", np.float32)]),
-                                      ("bl", [("y", np.float32), ("x", np.float32)]),
-                                      ("br", [("y", np.float32), ("x", np.float32)])]))
+        image_locations = np.zeros((h, w, 4, 2), dtype=np.float32)
         
         for (y, x) in np.ndindex((h, w)):
             rf = self.calculate_receptive_field(y + 0.5, x + 0.5)
-            image_locations[y, x] = rf
+            image_locations[y, x, 0] = rf[0]
+            image_locations[y, x, 1] = rf[1]
+            image_locations[y, x, 2] = rf[2]
+            image_locations[y, x, 3] = rf[3]
         
-        relative_locations = ilu.image_to_relative(image_locations)         # (h, w, 2)
-        
-        # # Construct inverse transformation matrices
-        # s = np.sin(self.camera_locations["rotation"]["z"] - np.pi / 2.)     # (n)
-        # c = np.cos(self.camera_locations["rotation"]["z"] - np.pi / 2.)     # (n)
-        # tx = self.camera_locations["translation"]["x"]                      # (n)
-        # ty = self.camera_locations["translation"]["y"]                      # (n)
-
-        # matrices = np.zeros((n, 3, 3))                                      # (n, 3, 3)
-        # # [[c,-s, tx],
-        # #  [s, c, ty],
-        # #  [0, 0,  1]]
-        # matrices[:, 0, 0] = c
-        # matrices[:, 0, 1] = -s
-        # matrices[:, 0, 2] = tx
-        # matrices[:, 1, 0] = s
-        # matrices[:, 1, 1] = c
-        # matrices[:, 1, 2] = ty
-        # matrices[:, 2, 2] = 1
+        relative_locations = ilu.image_to_relative(image_locations, image_width=self.image_size, image_height=self.image_size)         # (h, w, 4, 2)
         
         for i in tqdm(range(n), desc="Calculating locations", file=sys.stderr):
             res = ilu.relative_to_absolute(relative_locations, self[i, 0, 0].camera_locations)
             res = np.rec.fromarrays(res.transpose(), dtype=[("y", np.float32), ("x", np.float32)]).transpose()
+            res = np.rec.fromarrays(res.transpose(), dtype=self.locations.dtype) # No transpose here smh
             self.locations[i] = res
         
         self.contains_locations = True
@@ -538,20 +518,25 @@ class PatchArray(np.recarray):
         return raw_dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
 if __name__ == "__main__":
-    from common import Visualize
-    from scipy.misc import imresize
+    p = PatchArray(consts.FEATURES_FILE)
+    p.image_size = 224
+    p.receptive_field = {'stride': (32.0, 32.0), 'size': (491, 491)}
+    p.calculate_rasterization(0.5)
 
-    patches = PatchArray().anomaly
+    # from common import Visualize
+    # from scipy.misc import imresize
 
-    vis = Visualize(patches)
-    vis.show()
-    for p in patches:
-        from feature_extractor.Models.C3D.sports1M_utils import preprocess_input_python
-        b = preprocess_input_python(patches.get_batch(p.times[0, 0], 16))
-        im = numpy.concatenate([np.concatenate(b[4*i:4*i+4,...], axis=1) for i in range(4)], axis=0)
-        im = im.astype(np.uint8)
-        cv2.imshow("Batch", im)
-        cv2.waitKey(1)
+    # patches = PatchArray().anomaly
+
+    # vis = Visualize(patches)
+    # vis.show()
+    # for p in patches:
+    #     from feature_extractor.Models.C3D.sports1M_utils import preprocess_input_python
+    #     b = preprocess_input_python(patches.get_batch(p.times[0, 0], 16))
+    #     im = numpy.concatenate([np.concatenate(b[4*i:4*i+4,...], axis=1) for i in range(4)], axis=0)
+    #     im = im.astype(np.uint8)
+    #     cv2.imshow("Batch", im)
+    #     cv2.waitKey(1)
 
     # f = np.zeros(patches.shape[0], dtype=np.bool)
     # f[0:3] = True

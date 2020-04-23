@@ -105,8 +105,8 @@ class ImageLocationUtility(object):
             p_trans = p_trans / p_trans[2]  # Normalize by third dimension
             return p_trans[:-1]             # Return only the first two dimensions
 
-        if len(image_coordinate.shape) == 3:
-            return np.apply_along_axis(_to_relative, 2, image_coordinate)
+        if image_coordinate.ndim > 1:
+            return np.apply_along_axis(_to_relative, -1, image_coordinate)
         elif image_coordinate.shape == (2,):
             return _to_relative(image_coordinate)
         else:
@@ -135,8 +135,8 @@ class ImageLocationUtility(object):
             p_trans = p_trans / p_trans[2]  # Normalize by third dimension
             return p_trans[:-1]             # Return only the first two dimensions
 
-        if len(relative_location.shape) == 3:
-            return np.apply_along_axis(_to_image, 2, relative_location)
+        if relative_location.ndim > 1:
+            return np.apply_along_axis(_to_image, -1, relative_location)
         elif relative_location.shape == (2,):
             return _to_image(relative_location)
         else:
@@ -168,8 +168,8 @@ class ImageLocationUtility(object):
         def _to_absolute(p):
             return camera_translation + R.dot(p)
         
-        if len(relative_location.shape) == 3:
-            return np.apply_along_axis(_to_absolute, 2, relative_location)
+        if relative_location.ndim > 1:
+            return np.apply_along_axis(_to_absolute, -1, relative_location)
         elif relative_location.shape == (2,):
             return _to_absolute(relative_location)
         else:
@@ -202,8 +202,8 @@ class ImageLocationUtility(object):
         def _to_relative(p):
             return R_inv.dot(p - camera_translation)
 
-        if len(absolute_location.shape) == 3:
-            return np.apply_along_axis(_to_relative, 2, absolute_location)
+        if absolute_location.ndim > 1:
+            return np.apply_along_axis(_to_relative, -1, absolute_location)
         elif absolute_location.shape == (2,):
             return _to_relative(absolute_location)
         else:

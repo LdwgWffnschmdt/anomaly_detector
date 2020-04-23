@@ -123,7 +123,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         h5file.attrs["Models shape"] = self.models.shape
         
         models_count = 0
-        for v, u in tqdm(np.ndindex(self.models.shape), desc="Saving models", total=np.prod(self.models.shape), file=sys.stderr):
+        for v, u in tqdm(np.ndindex(self.models.shape), desc="Saving models", total=self.models.size, file=sys.stderr):
             model = self.get_model((v, u))
             if model is not None:
                 g = h5file.create_group("%i/%i" % (v, u))
