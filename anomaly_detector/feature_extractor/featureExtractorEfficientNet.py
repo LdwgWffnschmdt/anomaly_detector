@@ -4,23 +4,15 @@ from efficientnet.tfkeras import preprocess_input
 
 from featureExtractorBase import FeatureExtractorBase
 
-######
-# B0 #
-######
-
-class FeatureExtractorEfficientNetB0(FeatureExtractorBase):
-    """Feature extractors based on EfficientNetB0 (trained on noisy-student)."""
-    IMG_SIZE        = 224
-    BATCH_SIZE      = 128
-    LAYER_NAME      = "top_conv"
-    OUTPUT_SHAPE    = (7, 7, 1280)
-    RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (851, 851)}
+class __FeatureExtractorEfficientNetBase__(FeatureExtractorBase):
+    """ Base class for feature extractors based on EfficientNet """
+    __model_class__ = efn.EfficientNetB0
 
     def __init__(self):
         # Create the base model from the pre-trained EfficientNet
-        model_full = efn.EfficientNetB0(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
-                                        include_top=False,
-                                        weights="noisy-student")
+        model_full = self.__model_class__(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
+                                          include_top=False,
+                                          weights="noisy-student")
         model_full.trainable = False
 
         self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
@@ -39,6 +31,19 @@ class FeatureExtractorEfficientNetB0(FeatureExtractorBase):
 
     def extract_batch(self, batch):
         return self.model(batch)
+
+######
+# B0 #
+######
+
+class FeatureExtractorEfficientNetB0(__FeatureExtractorEfficientNetBase__):
+    """Feature extractors based on EfficientNetB0 (trained on noisy-student)."""
+    IMG_SIZE        = 224
+    BATCH_SIZE      = 128
+    LAYER_NAME      = "top_conv"
+    OUTPUT_SHAPE    = (7, 7, 1280)
+    RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (851, 851)}
+    __model_class__ = efn.EfficientNetB0
 
 class FeatureExtractorEfficientNetB0_Block3(FeatureExtractorEfficientNetB0):
     """Feature extractor based on EfficientNetB0 (trained on noisy-student)."""
@@ -65,26 +70,54 @@ class FeatureExtractorEfficientNetB0_Block6(FeatureExtractorEfficientNetB0):
     RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (787, 787)}
 
 ######
+# B3 #
+######
+
+class FeatureExtractorEfficientNetB3(__FeatureExtractorEfficientNetBase__):
+    """Feature extractors based on EfficientNetB3 (trained on noisy-student)."""
+    IMG_SIZE        = 300
+    BATCH_SIZE      = 128
+    LAYER_NAME      = "top_conv"
+    OUTPUT_SHAPE    = (10, 10, 1536)
+    RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (1200, 1200)}
+    __model_class__ = efn.EfficientNetB3
+
+class FeatureExtractorEfficientNetB3_Block3(FeatureExtractorEfficientNetB3):
+    """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
+    LAYER_NAME      = "block3c_add"
+    OUTPUT_SHAPE    = (38, 38, 48)
+    RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (111, 111)}
+
+class FeatureExtractorEfficientNetB3_Block4(FeatureExtractorEfficientNetB3):
+    """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
+    LAYER_NAME      = "block4e_add"
+    OUTPUT_SHAPE    = (19, 19, 96)
+    RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (255, 255)}
+
+class FeatureExtractorEfficientNetB3_Block5(FeatureExtractorEfficientNetB3):
+    """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
+    LAYER_NAME      = "block5e_add"
+    OUTPUT_SHAPE    = (19, 19, 136)
+    RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (575, 575)}
+
+class FeatureExtractorEfficientNetB3_Block6(FeatureExtractorEfficientNetB3):
+    """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
+    LAYER_NAME      = "block6f_add"
+    OUTPUT_SHAPE    = (10, 10, 232)
+    RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (1200, 1200)}
+
+######
 # B6 #
 ######
 
-class FeatureExtractorEfficientNetB6(FeatureExtractorEfficientNetB0):
+class FeatureExtractorEfficientNetB6(__FeatureExtractorEfficientNetBase__):
     """Feature extractors based on EfficientNetB6 (trained on noisy-student)."""
     IMG_SIZE        = 528
     BATCH_SIZE      = 64
     LAYER_NAME      = "top_conv"
     OUTPUT_SHAPE    = (17, 17, 2304)
     RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (1056, 1056)}
-
-    def __init__(self):
-        # Create the base model from the pre-trained EfficientNet
-        model_full = efn.EfficientNetB6(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
-                                        include_top=False,
-                                        weights="noisy-student")
-        model_full.trainable = False
-
-        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
-        self.model.trainable = False
+    __model_class__ = efn.EfficientNetB6
 
 class FeatureExtractorEfficientNetB6_Block3(FeatureExtractorEfficientNetB6):
     """Feature extractor based on EfficientNetB6 (trained on noisy-student)."""

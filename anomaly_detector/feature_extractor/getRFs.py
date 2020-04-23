@@ -8,13 +8,13 @@ import efficientnet.tfkeras as efn
 
 # tf.config.set_visible_devices([], 'GPU')
 
-shape = (528, 528, 3)
+shape = (300, 300, 3)
 
 # model = tf.keras.applications.VGG16(input_shape=shape, include_top=False)
-model = efn.EfficientNetB6(input_shape=shape, include_top=False, weights=None)
+model = efn.EfficientNetB3(input_shape=shape, include_top=False, weights=None)
 # model = C2D(shape)
 
-model.summary()
+# model.summary()
 
 def model_build_func(input_shape):
     return model
@@ -22,79 +22,54 @@ def model_build_func(input_shape):
 # compute receptive field
 rf = KerasReceptiveField(model_build_func)
 
-layers = list(filter(lambda y: (y.name.endswith("add")), model.layers))
+layers = list(filter(lambda y: (y.name.endswith("add") or y.name == "top_conv"), model.layers))
 # layers = model.layers[1:]#  list(filter(lambda y: y.name.endswith("project_BN") or y.name.endswith("add"), model.layers))
 layers_names = [x.name for x in layers]
 
 rf_params = rf.compute(shape, 'input_1', layers_names)
 
 for i, x in enumerate(rf_params):
-    print("%16s %16s: %s" % (layers_names[i], layers[i].output_shape[1:], {"offset": x.rf.offset, "stride": x.rf.stride, "size": (x.rf.size.h, x.rf.size.w)}))
+    print("%-16s %-16s: %s" % (layers_names[i], layers[i].output_shape[1:], {"offset": x.rf.offset, "stride": x.rf.stride, "size": (x.rf.size.h, x.rf.size.w)}))
 
 # debug receptive field
 # rf.plot_rf_grids(get_default_image(shape, name='doge'))
 # plt.show()
 
 ### EfficientNetB0 (224, 224, 3), RFs berechnet mit (528, 528, 3)
-# stem_conv             (112, 112, 32): {'offset': (1.5, 1.5),     'stride': (2.0, 2.0),   'size': (3, 3)}
-# block1a_dwconv        (112, 112, 32): {'offset': (1.5, 1.5),     'stride': (2.0, 2.0),   'size': (7, 7)}
-# block1a_project_conv  (112, 112, 16): {'offset': (0.5, 0.5),     'stride': (2.0, 2.0),   'size': (7, 7)}
-# block2a_expand_conv   (112, 112, 96): {'offset': (1.5, 1.5),     'stride': (2.0, 2.0),   'size': (7, 7)}
-# block2a_dwconv        (56, 56, 96):   {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (11, 11)}
-# block2a_project_conv  (56, 56, 24):   {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (11, 11)}
-# block2b_expand_conv   (56, 56, 144):  {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (11, 11)}
-# block2b_dwconv        (56, 56, 144):  {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (19, 19)}
-# block2b_project_conv  (56, 56, 24):   {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (19, 19)}
-# block2b_add           (56, 56, 24):   {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (19, 19)} ###  -> EfficientNetB0_Block2  (75264) ? Keine guten Ergebnisse zu erwarten
-# block3a_expand_conv   (56, 56, 144):  {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (19, 19)}
-# block3a_dwconv        (28, 28, 144):  {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (35, 35)}
-# block3a_project_conv  (28, 28, 40):   {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (35, 35)}
-# block3b_expand_conv   (28, 28, 240):  {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (35, 35)}
-# block3b_dwconv        (28, 28, 240):  {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (67, 67)}
-# block3b_project_conv  (28, 28, 40):   {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (67, 67)}
-# block3b_add           (28, 28, 40):   {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (67, 67)} ###  -> EfficientNetB0_Block3  (31360)
-# block4a_expand_conv   (28, 28, 240):  {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (67, 67)}
-# block4a_dwconv        (14, 14, 240):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (83, 83)}
-# block4a_project_conv  (14, 14, 80):   {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (83, 83)}
-# block4b_expand_conv   (14, 14, 480):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (83, 83)}
-# block4b_dwconv        (14, 14, 480):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (115, 115)}
-# block4b_project_conv  (14, 14, 80):   {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (115, 115)}
+# block2b_add           (56, 56, 24):   {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (19, 19)}   ### -> EfficientNetB0_Block2  (75264) ? Keine guten Ergebnisse zu erwarten
+# block3b_add           (28, 28, 40):   {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (67, 67)}   ### -> EfficientNetB0_Block3  (31360)
 # block4b_add           (14, 14, 80):   {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (115, 115)}
-# block4c_expand_conv   (14, 14, 480):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (115, 115)}
-# block4c_dwconv        (14, 14, 480):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (147, 147)}
-# block4c_project_conv  (14, 14, 80):   {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (147, 147)}
 # block4c_add           (14, 14, 80):   {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (147, 147)} ### -> EfficientNetB0_Block4 (15680)
-# block5a_expand_conv   (14, 14, 480):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (147, 147)}
-# block5a_dwconv        (14, 14, 480):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (211, 211)}
-# block5a_project_conv  (14, 14, 112):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (211, 211)}
-# block5b_expand_conv   (14, 14, 672):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (211, 211)}
-# block5b_dwconv        (14, 14, 672):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (275, 275)}
-# block5b_project_conv  (14, 14, 112):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (275, 275)}
 # block5b_add           (14, 14, 112):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (275, 275)}
-# block5c_expand_conv   (14, 14, 672):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (275, 275)}
-# block5c_dwconv        (14, 14, 672):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (339, 339)}
-# block5c_project_conv  (14, 14, 112):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (339, 339)}
 # block5c_add           (14, 14, 112):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (339, 339)} ### -> EfficientNetB0_Block5 (21952)
-# block6a_expand_conv   (14, 14, 672):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (339, 339)}
 # Ab hier mit (1024, 1024, 3) berechnet
-# block6a_dwconv        (7, 7, 672):    {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (403, 403)}
-# block6a_project_conv  (7, 7, 192):    {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (403, 403)}
-# block6b_expand_conv   (7, 7, 1152):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (403, 403)}
-# block6b_dwconv        (7, 7, 1152):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (531, 531)}
-# block6b_project_conv  (7, 7, 192):    {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (531, 531)}
 # block6b_add           (7, 7, 192):    {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (531, 531)}
-# block6c_expand_conv   (7, 7, 1152):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (531, 531)}
-# block6c_dwconv        (7, 7, 1152):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (659, 659)}
-# block6c_project_conv  (7, 7, 192):    {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (659, 659)}
 # block6c_add           (7, 7, 192):    {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (659, 659)}
-# block6d_expand_conv   (7, 7, 1152):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (659, 659)}
-# block6d_dwconv        (7, 7, 1152):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (787, 787)}
-# block6d_project_conv  (7, 7, 192):    {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (787, 787)}
 # block6d_add           (7, 7, 192):    {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (787, 787)} ### -> EfficientNetB0_Block6 (9408)
-# block7a_expand_conv   (7, 7, 1152):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (787, 787)}
-# block7a_dwconv        (7, 7, 1152):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (851, 851)}
-# block7a_project_conv  (7, 7, 320):    {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (851, 851)}
 # top_conv              (7, 7, 1280):   {'offset': (31.5, 31.5),   'stride': (32.0, 32.0), 'size': (851, 851)} ### -> EfficientNetB0        (62720)
+
+### EfficientNetB3 (300, 300, 3)
+# block1b_add           (150, 150, 24): {'offset': (1.5, 1.5),     'stride': (2.0, 2.0),   'size': (11, 11)}
+# block2b_add           (75, 75, 32):   {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (23, 23)}
+# block2c_add           (75, 75, 32):   {'offset': (3.5, 3.5),     'stride': (4.0, 4.0),   'size': (31, 31)}     ### -> EfficientNetB3_Block2 (180000) ?
+# block3b_add           (38, 38, 48):   {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (79, 79)}
+# block3c_add           (38, 38, 48):   {'offset': (7.5, 7.5),     'stride': (8.0, 8.0),   'size': (111, 111)}   ### -> EfficientNetB3_Block3 (69312)
+# block4b_add           (19, 19, 96):   {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (159, 159)}}
+# block4c_add           (19, 19, 96):   {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (191, 191)}}
+# block4d_add           (19, 19, 96):   {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (223, 223)}}
+# block4e_add           (19, 19, 96):   {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (255, 255)}}  ### -> EfficientNetB3_Block4 (34656)
+# block5b_add           (19, 19, 136):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (383, 383)}}
+# block5c_add           (19, 19, 136):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (447, 447)}}
+# block5d_add           (19, 19, 136):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (511, 511)}}
+# block5e_add           (19, 19, 136):  {'offset': (15.5, 15.5),   'stride': (16.0, 16.0), 'size': (575, 575)}}  ### -> EfficientNetB3_Block5 (49096)
+# block6b_add           (10, 10, 232):  {'offset': (15.5, 15.5),   'stride': (32.0, 32.0), 'size': (767, 767)}}
+# block6c_add           (10, 10, 232):  {'offset': (15.5, 15.5),   'stride': (32.0, 32.0), 'size': (895, 895)}}
+# block6d_add           (10, 10, 232):  {'offset': (15.5, 15.5),   'stride': (32.0, 32.0), 'size': (1023, 1023)}
+# block6e_add           (10, 10, 232):  {'offset': (15.5, 15.5),   'stride': (32.0, 32.0), 'size': (1151, 1151)}
+### Ab hier sind die Ergebnisse nicht mehr korrekt, aber eh doppelt so groß wie das Bild, also egal
+# block6f_add           (10, 10, 232):  {'offset': (55.0, 55.0),   'stride': (0.0, 0.0),   'size': (1200, 1200)}  ### -> EfficientNetB3_Block6 (23200)
+# block7b_add           (10, 10, 384):  {'offset': (119.0, 119.0), 'stride': (0.0, 0.0),   'size': (1200, 1200)}
+# top_conv              (10, 10, 1536): {'offset': (150.0, 150.0), 'stride': (0.0, 0.0),   'size': (1200, 1200)}  ### -> EfficientNetB3 (153600)
 
 ### EfficientNetB6 (528, 528, 3)
 # block1b_add           (264, 264, 32):  {'offset': (1.5, 1.5),     'stride': (2.0, 2.0),   'size': (11, 11)}
