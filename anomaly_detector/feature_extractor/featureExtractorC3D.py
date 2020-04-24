@@ -8,12 +8,11 @@ from Models.C3D.sports1M_utils import preprocess_input
 
 class FeatureExtractorC3D(FeatureExtractorBase):
     """Feature extractor based on C3D (trained on sports1M).
-    Output layer: conv5b + MaxPooling3D to reduce frames
-    OUTPUT_SHAPE = (7x7x512 feature vectors per temporal image batch
-    """
-    LAYER_NAME          = "conv5b"
+    Output layer: conv5b + MaxPooling3D to reduce frames"""
     IMG_SIZE            = 112
     BATCH_SIZE          = 8
+    LAYER_NAME          = "conv5b"
+    OUTPUT_SHAPE        = (7, 7, 512)
     TEMPORAL_BATCH_SIZE = 16   # Fixed for C3D
     RECEPTIVE_FIELD     = {'stride': (16.0, 16.0), 'size': (119, 119)}
 
