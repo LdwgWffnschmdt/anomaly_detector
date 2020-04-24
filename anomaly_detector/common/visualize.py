@@ -28,12 +28,14 @@ class Visualize(object):
     }
 
     DIRECTION_TEXTS = {
+        -1: "Not set",
         0: "Unknown",
         1: "CCW",
         2: "CW"
     }
 
     DIRECTION_COLORS = {
+        -1: (100, 100, 100),   # Not set
         0: (255,255,255),     # Unknown
         1: (136, 150, 0),     # CCW
         2: (0, 152, 255)      # CW
@@ -647,19 +649,19 @@ class Visualize(object):
                 self._map_ax.set_ylim([self.extent[1], self.extent[3]])
 
                 # Draw FOV polygon
-                self._map_ax.fill([frame[0 ,  0].locations.x,
-                               frame[-1,  0].locations.x,
-                               frame[-1, -1].locations.x,
-                               frame[0 , -1].locations.x],
-                              [frame[0 ,  0].locations.y,
-                               frame[-1,  0].locations.y,
-                               frame[-1, -1].locations.y,
-                               frame[0 , -1].locations.y])
+                self._map_ax.fill([frame[0 ,  0].locations.tl.x,
+                                   frame[-1,  0].locations.bl.x,
+                                   frame[-1, -1].locations.br.x,
+                                   frame[0 , -1].locations.tr.x],
+                                  [frame[0 ,  0].locations.tl.y,
+                                   frame[-1,  0].locations.bl.y,
+                                   frame[-1, -1].locations.br.y,
+                                   frame[0 , -1].locations.tr.y])
 
-                self._map_ax.plot(frame[0 ,  0].locations.x, frame[0 ,  0].locations.y, "g+", markersize=2, linewidth=2)
-                self._map_ax.plot(frame[-1,  0].locations.x, frame[-1,  0].locations.y, "b+", markersize=2, linewidth=2)
-                self._map_ax.plot(frame[0 , -1].locations.x, frame[0 , -1].locations.y, "r+", markersize=2, linewidth=2)
-                self._map_ax.plot(frame[-1, -1].locations.x, frame[-1, -1].locations.y, "y+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[0 ,  0].locations.tl.x, frame[0 ,  0].locations.tl.y, "g+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[-1,  0].locations.bl.x, frame[-1,  0].locations.bl.y, "b+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[0 , -1].locations.br.x, frame[0 , -1].locations.br.y, "r+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[-1, -1].locations.tr.x, frame[-1, -1].locations.tr.y, "y+", markersize=2, linewidth=2)
                 
                 # Draw camera position
                 self._map_ax.plot(frame.camera_locations[0, 0].translation.x, 
@@ -674,24 +676,38 @@ class Visualize(object):
         fontScale = 0.25
         thickness = 1
 
-        overlay = image.copy()
+        overlay = np.zeros(image.shape, dtype=np.uint8)
         
         # Loop over all patches
         if self.patch_to_color_func[self.model_index] is not None or \
             (self.patch_to_text_func[self.model_index] is not None and self.show_values) or \
             self.pause_func is not None:
              
+            mahas = np.zeros(image.shape[:2], dtype=np.float64)
+
             patch_size = (float(image.shape[0]) / float(frame.shape[0]),
                           float(image.shape[1]) / float(frame.shape[1]))
+
+            threshold = cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA)
+            show_thresh = cv2.getTrackbarPos("show_thresh", self.WINDOWS_MAHA)
 
             for y, x in np.ndindex(frame.shape):
                 patch = frame[y, x]
 
+                rf = self.patches.calculate_receptive_field(y + 0.5, x + 0.5, scale_y=image.shape[0] / float(self.patches.image_size)
+                                                                            , scale_x=image.shape[1] / float(self.patches.image_size))
+
                 p1 = (int(x * patch_size[1]), int(y * patch_size[0]))               # (x, y)
                 p2 = (int(p1[0] + patch_size[1]), int(p1[1] + patch_size[0]))       # (x, y)
                 
-                if self.patch_to_color_func[self.model_index] is not None:
-                    cv2.rectangle(overlay, p1, p2, self.patch_to_color_func[self.model_index](patch), -1)
+                mahas[int(rf[0][0]):int(rf[2][0]), int(rf[0][1]):int(rf[2][1])] += patch.mahalanobis_distances_filtered
+
+                if show_thresh:
+                    if patch.mahalanobis_distances_filtered > threshold:
+                        cv2.rectangle(image, (int(rf[0][1]), int(rf[0][0])), (int(rf[2][1]), int(rf[2][0])), (0,0,255), 2)
+                else:
+                    color = (0, 0, min(255, int(patch.mahalanobis_distances_filtered * (255 / threshold))))
+                    cv2.rectangle(overlay, p1, p2, color, -1)
 
                 if self.patch_to_text_func[self.model_index] is not None and self.show_values:
                     text = str(self.patch_to_text_func[self.model_index](patch))
@@ -699,12 +715,19 @@ class Visualize(object):
                         (p1[0] + 2, p1[1] + int(patch_size[0]) - 2),    # (x, y)
                         font,
                         fontScale,
-                        (0, 0, 255),
+                        (0, 255, 0),
                         thickness, lineType=cv2.LINE_AA)
                 
                 if self.pause_func[self.model_index] is not None and self.pause_func[self.model_index](patch):
                     self.pause = True
-        
+
+            # if show_thresh:
+            #     overlay[..., 2] = ((mahas > threshold) * 100).astype(np.uint8)
+            # else:
+            #     mahas -= threshold
+            #     mahas[mahas < 0] = 0
+            #     overlay[..., 2] = mahas.astype(np.uint8)
+
         # Draw grid
         if self.show_grid:
             relative_grid = self._ilu.absolute_to_relative(self._absolute_locations, frame.camera_locations[0, 0])
