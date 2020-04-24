@@ -5,24 +5,27 @@ import ast
 from glob import glob
 from cachetools import cached, Cache, LRUCache
 from datetime import datetime
+from pathos.multiprocessing import ProcessingPool as Pool
 
 import numpy as np
 import numpy.lib.recfunctions
 import h5py
 from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 import matplotlib.pyplot as plt
 import cv2
 
 from shapely.strtree import STRtree
 from shapely.geometry import Polygon, box
+from shapely.prepared import prep
 
 from common import utils, logger, ImageLocationUtility
 import consts
 
 class Patch(np.record):
-    image_cache = LRUCache(maxsize=20*60*2)  # Least recently used cache for images
+    # image_cache = LRUCache(maxsize=20*60*2)  # Least recently used cache for images
 
-    @cached(image_cache, key=lambda self, *args: self.times) # The cache should only be based on the timestamp
+    # @cached(image_cache, key=lambda self, *args: self.times) # The cache should only be based on the timestamp
     def get_image(self, images_path=None):
         if images_path is None: images_path = consts.IMAGES_PATH
         return cv2.imread(os.path.join(images_path, "%i.jpg" % self.times))
@@ -63,9 +66,6 @@ class PatchArray(np.recarray):
         metadata = dict()
 
         with h5py.File(filename_metadata, "r") as hf:
-            receptive_field = hf.attrs.get("Receptive field", None)
-            image_size = hf.attrs.get("Image size", None)
-
             def _c(x, y):
                 if isinstance(y, h5py.Dataset):
                     cls.__metadata_attrs__.append(x)
@@ -84,11 +84,17 @@ class PatchArray(np.recarray):
         contains_bins      = {"bins_0.20": False, "bins_0.50": False}
         contains_mahalanobis_distances = False
 
+        receptive_field = None
+        image_size = None
+
         # Check if file is h5 file
         if isinstance(filename, str) and filename.endswith(".h5"):
             s = time.time()
             with h5py.File(filename, "r") as hf:
                 logger.info("Opening %s: %f" % (filename, time.time() - s))
+
+                receptive_field = hf.attrs.get("Receptive field", None)
+                image_size = hf.attrs.get("Image size", None)
 
                 # Metadata and Features are assumed to be sorted by time
                 # But the features might only be a subset (think temporal patches, C3D)
@@ -149,12 +155,15 @@ class PatchArray(np.recarray):
                         contains_bins[k] = True
                     else:
                         contains_bins[k] = False
-                        patches_dict[k] = np.zeros(locations_shape, dtype=[("v", np.uint16), ("u", np.uint16), ("weight", np.float32)])
+                        patches_dict[k] = np.zeros(locations_shape, dtype=object)
 
                 # Broadcast metadata to the correct shape
                 if patches_dict["features"].shape[1:-1] != ():
                     for n, m in metadata.items():
                         patches_dict[n] = np.moveaxis(np.broadcast_to(m, patches_dict["features"].shape[1:-1] + (m.size,)), -1, 0)
+
+                # Add indices as metadata
+                # patches_dict["index"] = np.mgrid[0:locations_shape[0], 0:locations_shape[1], 0:locations_shape[2]]
 
                 # Create type
                 t = [(x, patches_dict[x].dtype, patches_dict[x].shape[patches_dict["features"].ndim - 1:]) for x in patches_dict]
@@ -289,37 +298,10 @@ class PatchArray(np.recarray):
         plt.show()
 
     def calculate_rasterization(self, cell_size):
-        # Get extent
-        x_min, y_min, x_max, y_max = self.get_extent(cell_size)
-
-        # Create the bins
-        bins_y = np.arange(y_min, y_max, cell_size)
-        bins_x = np.arange(x_min, x_max, cell_size)
-
-        shape = (len(bins_y) + 1, len(bins_x) + 1)
-
-        if self.cell_size.flat[0] == cell_size:
-            return shape
-        
-        logger.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
-
-        # Use digitize to sort the locations in the bins
-        # --> (#frames, h, w, 2) where the entries in the last
-        #     dimension are the respective bin indices (v, u)
-        res = np.stack([np.digitize(self.locations.y, bins_y),
-                        np.digitize(self.locations.x, bins_x)], axis=3)
-
-        self.bins[...] = np.rec.fromarrays(res.transpose(), dtype=[("v", np.float32), ("u", np.float32)]).transpose()
-
-        self.contains_bins = True
-        self.cell_size[:] = cell_size
-
-        return shape
-
-    def calculate_rasterization(self, cell_size):
+        key = "bins_%.2f" % cell_size
         # Check if cell size is already calculated
-        if cell_size in self.__rasterizations__.keys() and "feature_indices" in self.__rasterizations__[cell_size]:
-            return self.__rasterizations__[cell_size]["feature_indices"].shape
+        if key in self.contains_bins.keys() and self.contains_bins[key]:
+            return self[key]
         
         # Get extent
         x_min, y_min, x_max, y_max = self.get_extent(cell_size)
@@ -327,38 +309,114 @@ class PatchArray(np.recarray):
         # Create the bins
         bins_y = np.arange(y_min, y_max, cell_size)
         bins_x = np.arange(x_min, x_max, cell_size)
+        bin_area = cell_size * cell_size
 
-        grid = [box(x, y, x + cell_size, y + cell_size)]
-
-        self.__rasterizations__[cell_size] = {}
+        # Create a search tree of spatial boxes
+        def _get_bins():
+            for v, y in enumerate(bins_y):
+                for u, x in enumerate(bins_x):
+                    b = box(y, x, y + cell_size, x + cell_size)
+                    b.u = u
+                    b.v = v
+                    b.patches = list()
+                    yield b
+            
+        grid = STRtree(list(_get_bins()))
         
-        # Get extent
-        extent = self.get_extent(cell_size)
-        x_min, y_min, x_max, y_max = extent
-        
-        shape = (int(np.ceil((x_max - x_min) / cell_size)),
-                 int(np.ceil((y_max - y_min) / cell_size)))
+        shape = (len(bins_y), len(bins_x))
 
         logger.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
 
-        logger.info("Calculating corresponding bin for every feature")
-        self.__rasterizations__[cell_size]["feature_indices"] = np.empty(shape=shape, dtype=object)
-        self.__rasterizations__[cell_size]["feature_indices_count"] = np.zeros(shape=shape, dtype=np.uint32)
-        # Get the corresponding bin for every feature
-        for i, f in enumerate(tqdm(self.flatten(), desc="Calculating bins"), file=sys.stderr):
-            bin = f.get_bin(cell_size, extent)
+        # # def _calc(i, y, x):
+        # #     f = self[i, y, x]
+        # #     poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
+        # #     bins = grid.query(poly)
+            
+        # #     # for b in bins:
+        # #         # Store info in patch ...
+        # #         # f[key].append((b.v, b.u, 1.0))
 
-            if self.__rasterizations__[cell_size]["feature_indices"][bin] is None:
-                self.__rasterizations__[cell_size]["feature_indices"][bin] = list()
-            self.__rasterizations__[cell_size]["feature_indices"][bin].append(i)
-            self.__rasterizations__[cell_size]["feature_indices_count"][bin] += 1
+        # #         # ... and in the bin
+        # #         # b.patches.append((i, y, x, 1.0))
+
+        # def _calc(x):
+        #     print("STARTING %i" % (x))
+        #     for i, y in tqdm(np.ndindex(self.shape[:-1]), desc="%i" % x, total=np.prod(self.shape[:-1]), position=x, file=sys.stderr):
+        #         f = self[i, y, x]
+        #         poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
+        #         bins = grid.query(poly)
+        #         print("%i, %i, %i" % (i, y, x))
+                
+        #         # for b in bins:
+        #             # Store info in patch ...
+        #             # f[key].append((b.v, b.u, 1.0))
+
+        #             # ... and in the bin
+        #             # b.patches.append((i, y, x, 1.0))
+
+        # Reset this rasterization with empty arrays
+        for i, y, x in tqdm(np.ndindex(self.shape), desc="Emptying shiat bins", total=self.size, file=sys.stderr):
+            self[i, y, x][key] = np.array([], dtype=[("v", np.uint16), ("u", np.uint16), ("weight", np.float32)])
+
+        start = time.time()
+        # # process_map(_calc, np.ndindex(self.shape), max_workers=12, desc="Calculating bins", total=self.size, file=sys.stderr)
+        # p = Pool(12, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),))
+        # p.map(_calc, range(self.shape[-1]))
+        # # list(tqdm(p.imap(_calc, np.ndindex(self.shape)), desc="Calculating bins", total=self.size, file=sys.stderr))
+        # # p.close()
+        # # p.join()
+
+        # Get the corresponding bin for every feature
+        for i, y, x in tqdm(np.ndindex(self.shape), desc="Calculating bins", total=self.size, file=sys.stderr):
+            f = self[i, y, x]
+            poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
+            bins = grid.query(poly)
+            
+            if len(bins) > 0:
+                pr = prep(poly)
+                for b in filter(pr.intersects, bins):
+                    # weight = 1.0#b.intersection(poly).area / bin_area
+
+                    # if f[key] == None:
+                    #     f[key] = np.array([(b.v, b.u, 1.0)], dtype=[("v", np.uint16), ("u", np.uint16), ("weight", np.float32)])
+                    # else:
+                    # Store info in patch ...
+                    f[key] = np.append(f[key], np.array([(b.v, b.u, 1.0)], dtype=[("v", np.uint16), ("u", np.uint16), ("weight", np.float32)]))
+
+                    # ... and in the bin
+                    b.patches.append((i, y, x, 1.0))
         
+        end = time.time()
+
         # Save to file
-        try:
-            with h5py.File(self.filename, "r+") as hf:
-                hf["rasterizations/%.2f" % cell_size] = self.__rasterizations__[cell_size]["feature_indices_count"]
-        except:
-            pass
+        with h5py.File(self.filename, "r+") as hf:
+            # Remove the old dataset
+            if key in hf.keys():
+                del hf[key]
+            
+            dt = h5py.vlen_dtype(np.dtype([("v", np.uint16), ("u", np.uint16), ("weight", np.float32)]))
+            hf.create_dataset(key, data=self[key], dtype=dt)
+            
+            key = "rasterization_%.2f" % cell_size
+            # Remove the old dataset
+            if key in hf.keys():
+                del hf[key]
+
+            if key + "_count" in hf.keys():
+                del hf[key + "_count"]
+            
+            dt = h5py.vlen_dtype(np.dtype([("i", np.uint16), ("y", np.uint16), ("x", np.uint16), ("weight", np.float32)]))
+            rasterization = hf.create_dataset(key, shape=shape, dtype=dt)
+            rasterization_count = hf.create_dataset(key + "_count", shape=shape, dtype=np.uint16)
+
+            for b in grid._geoms:
+                rasterization[b.v, b.u] = b.patches
+                rasterization_count[b.v, b.u] = len(b.patches)
+
+            hf[key].attrs["Start"] = start
+            hf[key].attrs["End"] = end
+            hf[key].attrs["Duration"] = end - start
+            hf[key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
 
         return shape
 
@@ -415,18 +473,30 @@ class PatchArray(np.recarray):
         if not self.contains_locations:
             self.calculate_patch_locations()
 
-    def calculate_receptive_field(self, y, x):
-        _, h, w = self.locations.shape
-        center_y = y / float(h) * self.image_size
-        center_x = x / float(w) * self.image_size
+    def calculate_receptive_field(self, y, x, scale_y=1.0, scale_x=1.0):
+        """Calculate the receptive field of a patch
 
-        rf_h = self.receptive_field["size"][0] / 2.0
-        rf_w = self.receptive_field["size"][1] / 2.0
+        Args:
+            y, x (int): Patch indices
+            scale_y, scale_x (float): Scale factor
+
+        Returns:
+            Tuple (tl, tr, br, bl) with pixel coordinated of the receptive field
+        """
+        image_h = self.image_size * scale_y
+        image_w = self.image_size * scale_x
+
+        _, h, w = self.locations.shape
+        center_y = y / float(h) * image_h
+        center_x = x / float(w) * image_w
+
+        rf_h = self.receptive_field[0] * scale_y / 2.0
+        rf_w = self.receptive_field[1] * scale_x / 2.0
         
         tl = (max(0, center_y - rf_h), max(0, center_x - rf_w))
-        tr = (max(0, center_y - rf_h), min(self.image_size, center_x + rf_w))
-        br = (min(self.image_size, center_y + rf_h), min(self.image_size, center_x + rf_w))
-        bl = (min(self.image_size, center_y + rf_h), max(0, center_x - rf_w))
+        tr = (max(0, center_y - rf_h), min(image_w, center_x + rf_w))
+        br = (min(image_h, center_y + rf_h), min(image_w, center_x + rf_w))
+        bl = (min(image_h, center_y + rf_h), max(0, center_x - rf_w))
         
         return (tl, tr, br, bl)
 
@@ -519,8 +589,6 @@ class PatchArray(np.recarray):
 
 if __name__ == "__main__":
     p = PatchArray(consts.FEATURES_FILE)
-    p.image_size = 224
-    p.receptive_field = {'stride': (32.0, 32.0), 'size': (491, 491)}
     p.calculate_rasterization(0.5)
 
     # from common import Visualize
@@ -528,7 +596,7 @@ if __name__ == "__main__":
 
     # patches = PatchArray().anomaly
 
-    # vis = Visualize(patches)
+    # vis = Visualize(p)
     # vis.show()
     # for p in patches:
     #     from feature_extractor.Models.C3D.sports1M_utils import preprocess_input_python
