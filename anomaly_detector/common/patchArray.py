@@ -235,19 +235,60 @@ class PatchArray(np.recarray):
     #     Views     #
     #################
 
-    unknown_anomaly = property(lambda self: self[self.labels[:, 0, 0] == 0])
-    no_anomaly      = property(lambda self: self[self.labels[:, 0, 0] == 1])
-    anomaly         = property(lambda self: self[self.labels[:, 0, 0] == 2])
+    unknown_anomaly = property(lambda self: self[self.labels[:, 0, 0] == 0] if self.ndim == 3 else self[self.labels[:] == 0])
+    no_anomaly      = property(lambda self: self[self.labels[:, 0, 0] == 1] if self.ndim == 3 else self[self.labels[:] == 1])
+    anomaly         = property(lambda self: self[self.labels[:, 0, 0] == 2] if self.ndim == 3 else self[self.labels[:] == 2])
     
-    direction_unknown = property(lambda self: self[self.directions[:, 0, 0] == 0])
-    direction_ccw     = property(lambda self: self[self.directions[:, 0, 0] == 1])
-    direction_cw      = property(lambda self: self[self.directions[:, 0, 0] == 2])
+    direction_unknown = property(lambda self: self[self.directions[:, 0, 0] == 0] if self.ndim == 3 else self[self.directions[:] == 0])
+    direction_ccw     = property(lambda self: self[self.directions[:, 0, 0] == 1] if self.ndim == 3 else self[self.directions[:] == 1])
+    direction_cw      = property(lambda self: self[self.directions[:, 0, 0] == 2] if self.ndim == 3 else self[self.directions[:] == 2])
     
-    round_number_unknown = property(lambda self: self[self.round_numbers[:, 0, 0] == 0])
+    round_number_unknown = property(lambda self: self[self.round_numbers[:, 0, 0] == 0] if self.ndim == 3 else self[self.round_numbers[:] == 0])
     def round_number(self, round_number):
-        return self[self.round_numbers[:, 0, 0] == round_number]
+        if self.ndim == 3:
+            return self[self.round_numbers[:, 0, 0] == round_number]
+        else:
+            return self[self.round_numbers[:] == round_number]
 
-    metadata_changed = property(lambda self: self[self.changed[:, 0, 0]])
+    
+    def training_and_validation(self):
+        p = self.root[0::6, 0, 0]
+
+        f = np.zeros(p.shape, dtype=np.bool)
+        f[:] = np.logical_and(p.directions == 1,                                   # CCW and
+                            np.logical_or(p.labels == 2,                         #   Anomaly or
+                                            np.logical_and(p.round_numbers >= 7,   #     Round between 7 and 9
+                                                            p.round_numbers <= 7)))
+
+        
+        f[:] = np.logical_and(f[:], np.logical_and(p.camera_locations.translation.x > 20,
+                            np.logical_and(p.camera_locations.translation.x < 25,
+                            np.sqrt((p.camera_locations.rotation.z - (np.pi / 2)) ** 2) < 0.15)))
+
+        # Let's make contiguous blocks of at least 10, so
+        # we can do some meaningful temporal smoothing afterwards
+        for i, b in enumerate(f):
+            if b and i - 20 >= 0:
+                f[i - 20:i] = True
+        
+        return self.root[0::6,...][f]
+
+    def training(self):
+        round_number = 7
+        label = 1
+        if self.ndim == 3:
+            return self[np.logical_and(self.round_numbers[:, 0, 0] == round_number, self.labels[:, 0, 0] == label)]
+        else:
+            return self[np.logical_and(self.round_numbers[:] == round_number, self.labels[:] == label)]
+
+    def validation(self):
+        round_number = 7
+        if self.ndim == 3:
+            return self[self.round_numbers[:, 0, 0] != round_number]
+        else:
+            return self[self.round_numbers[:] != round_number]
+
+    metadata_changed = property(lambda self: self[self.changed[:, 0, 0]] if self.ndim == 3 else self[self.changed[:]])
 
     def save_metadata(self, filename=None):
         if filename is None:

@@ -54,28 +54,35 @@ def extract_features():
 
     if isinstance(args.files, basestring):
         args.files = [args.files]
-    
+
     patches = PatchArray(args.files)
-    
+
     p = patches[:, 0, 0]
 
-    f = np.zeros(p.shape, dtype=np.bool)
-    f[:] = np.logical_and(p.directions == 1,                                   # CCW and
-                            np.logical_or(p.labels == 2,                         #   Anomaly or
-                                        np.logical_and(p.round_numbers >= 7,   #     Round between 2 and 5
-                                                        p.round_numbers <= 9)))
+    ## WZL:
+    # f = np.zeros(p.shape, dtype=np.bool)
+    # f[:] = np.logical_and(p.directions == 1,                                   # CCW and
+    #                         np.logical_or(p.labels == 2,                         #   Anomaly or
+    #                                     np.logical_and(p.round_numbers >= 7,   #     Round between 2 and 5
+    #                                                     p.round_numbers <= 9)))
 
-    # Let's make contiguous blocks of at least 10, so
-    # we can do some meaningful temporal smoothing afterwards
-    for i, b in enumerate(f):
-        if b and i - 10 >= 0:
-            f[i - 10:i] = True
+    # # Let's make contiguous blocks of at least 10, so
+    # # we can do some meaningful temporal smoothing afterwards
+    # for i, b in enumerate(f):
+    #     if b and i - 10 >= 0:
+    #         f[i - 10:i] = True
 
-    patches = patches[f]
+    patches = patches.training_and_validation()
 
-    vis = Visualize(patches)
-    vis.show()
-    
+
+
+    ## FieldSAFE:
+    # f = p.round_numbers == 1
+    # patches = patches[f]
+
+    # vis = Visualize(patches)
+    # vis.show()
+
     # patches = getattr(patches, args.filter, None)
     # assert patches is not None, "The filter was not valid."
     # if args.filter_argument is not None:

@@ -92,14 +92,7 @@ class AnomalyModelBase(object):
 
         self.patches = patches
 
-        p = self.patches[:, 0, 0]
-
-        f = np.zeros(p.shape, dtype=np.bool)
-        f[:] = np.logical_and(p.labels == 1,                        # No anomaly and
-                              np.logical_or(p.round_numbers == 7,   #     Round 7
-                                            p.round_numbers == 9))  #        or 9
-
-        model_input = patches[f]
+        model_input = self.filter_training(patches)
 
         start = time.time()
 
@@ -137,6 +130,9 @@ class AnomalyModelBase(object):
         self.calculate_mahalanobis_distances()
 
         return True
+
+    def filter_training(self, patches):
+        return patches.training
 
     def is_in_file(self, model_file):
         """ Check if model and mahalanobis distances are already in model_file """
