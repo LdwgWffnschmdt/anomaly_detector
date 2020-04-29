@@ -6,18 +6,7 @@ from featureExtractorBase import FeatureExtractorBase
 
 class __FeatureExtractorEfficientNetBase__(FeatureExtractorBase):
     """ Base class for feature extractors based on EfficientNet """
-    __model_class__ = efn.EfficientNetB0
 
-    def __init__(self):
-        # Create the base model from the pre-trained EfficientNet
-        model_full = self.__model_class__(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
-                                          include_top=False,
-                                          weights="noisy-student")
-        model_full.trainable = False
-
-        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
-        self.model.trainable = False
-    
     def format_image(self, image):
         """Resize the images to a fixed input size, and
         rescale the input channels to a range of [-1, 1].
@@ -39,12 +28,21 @@ class __FeatureExtractorEfficientNetBase__(FeatureExtractorBase):
 class FeatureExtractorEfficientNetB0(__FeatureExtractorEfficientNetBase__):
     """Feature extractors based on EfficientNetB0 (trained on noisy-student)."""
     IMG_SIZE        = 224
-    BATCH_SIZE      = 128
+    BATCH_SIZE      = 32
     LAYER_NAME      = "top_conv"
     OUTPUT_SHAPE    = (7, 7, 1280)
     RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (851, 851)}
-    __model_class__ = efn.EfficientNetB0
 
+    def __init__(self):
+        # Create the base model from the pre-trained EfficientNet
+        model_full = efn.EfficientNetB0(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
+                                        include_top=False,
+                                        weights="noisy-student")
+        model_full.trainable = False
+
+        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
+        self.model.trainable = False
+    
 class FeatureExtractorEfficientNetB0_Block3(FeatureExtractorEfficientNetB0):
     """Feature extractor based on EfficientNetB0 (trained on noisy-student)."""
     LAYER_NAME      = "block3b_add"
@@ -76,11 +74,20 @@ class FeatureExtractorEfficientNetB0_Block6(FeatureExtractorEfficientNetB0):
 class FeatureExtractorEfficientNetB3(__FeatureExtractorEfficientNetBase__):
     """Feature extractors based on EfficientNetB3 (trained on noisy-student)."""
     IMG_SIZE        = 300
-    BATCH_SIZE      = 128
+    BATCH_SIZE      = 16
     LAYER_NAME      = "top_conv"
     OUTPUT_SHAPE    = (10, 10, 1536)
     RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (1200, 1200)}
-    __model_class__ = efn.EfficientNetB3
+    
+    def __init__(self):
+        # Create the base model from the pre-trained EfficientNet
+        model_full = efn.EfficientNetB3(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
+                                        include_top=False,
+                                        weights="noisy-student")
+        model_full.trainable = False
+
+        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
+        self.model.trainable = False
 
 class FeatureExtractorEfficientNetB3_Block3(FeatureExtractorEfficientNetB3):
     """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
@@ -113,11 +120,20 @@ class FeatureExtractorEfficientNetB3_Block6(FeatureExtractorEfficientNetB3):
 class FeatureExtractorEfficientNetB6(__FeatureExtractorEfficientNetBase__):
     """Feature extractors based on EfficientNetB6 (trained on noisy-student)."""
     IMG_SIZE        = 528
-    BATCH_SIZE      = 64
+    BATCH_SIZE      = 2
     LAYER_NAME      = "top_conv"
     OUTPUT_SHAPE    = (17, 17, 2304)
     RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (1056, 1056)}
-    __model_class__ = efn.EfficientNetB6
+    
+    def __init__(self):
+        # Create the base model from the pre-trained EfficientNet
+        model_full = efn.EfficientNetB6(input_shape=(self.IMG_SIZE, self.IMG_SIZE, 3),
+                                        include_top=False,
+                                        weights="noisy-student")
+        model_full.trainable = False
+
+        self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
+        self.model.trainable = False
 
 class FeatureExtractorEfficientNetB6_Block3(FeatureExtractorEfficientNetB6):
     """Feature extractor based on EfficientNetB6 (trained on noisy-student)."""
