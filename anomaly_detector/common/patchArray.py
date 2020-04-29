@@ -19,6 +19,11 @@ from shapely.strtree import STRtree
 from shapely.geometry import Polygon, box
 from shapely.prepared import prep
 
+from sklearn.manifold import TSNE
+import seaborn as sns
+import pandas as pd
+from joblib import Parallel, delayed
+
 from common import utils, logger, ImageLocationUtility
 import consts
 
@@ -606,8 +611,61 @@ class PatchArray(np.recarray):
 
         return raw_dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
+    def calculate_tsne(self):
+        features = self.features.reshape(-1, self.features.shape[-1])
+
+        feat_cols = ['feature' + str(i) for i in range(features.shape[1])]
+
+        df = pd.DataFrame(features, columns=feat_cols)
+        df["maha"] = self.mahalanobis_distances.SVG.ravel()
+        df["l"] = self.labels.ravel()
+        df["label"] = df["l"].apply(lambda l: "Anomaly" if l == 2 else "No anomaly")
+
+        # For reproducability of the results
+        np.random.seed(42)
+        rndperm = np.random.permutation(df.shape[0])
+
+        N = 10000
+        df_subset = df.loc[rndperm[:N],:].copy()
+
+        data_subset = df_subset[feat_cols].values
+
+        time_start = time.time()
+        tsne = TSNE(n_components=2, verbose=1)
+        tsne_results = tsne.fit_transform(data_subset)
+        print('t-SNE done! Time elapsed: {} seconds'.format(time.time() - time_start))
+        
+        df_subset['tsne-2d-one'] = tsne_results[:,0]
+        df_subset['tsne-2d-two'] = tsne_results[:,1]
+        fig = plt.figure(figsize=(16,10))
+        fig.suptitle(os.path.basename(self.filename).replace(".h5", ""), fontsize=20)
+
+        LABEL_COLORS = {
+            "No anomaly": "#4CAF50",     # No anomaly
+            "Anomaly": "#F44336"      # Contains anomaly
+        }
+
+        sns.scatterplot(
+            x="tsne-2d-one", y="tsne-2d-two",
+            hue="label",
+            palette=LABEL_COLORS,
+            data=df_subset,
+            legend="brief",
+            alpha=0.4,
+            size="maha"
+        )
+
+        # plt.show()
+        plt.savefig(self.filename.replace(".h5", "_TSNE.png"))
+
 if __name__ == "__main__":
     p = PatchArray(consts.FEATURES_FILE)
+
+    p.calculate_tsne()
+
+    plt.show()
+
+    print "Finished"
 
     # p.calculate_rasterization(2.0)
 
