@@ -42,11 +42,16 @@ def extract_features():
     tf.keras.applications.vgg16.preprocess_input(temp)
 
     # Get all the available feature extractor names
-    extractor_names = map(lambda e: e[0], inspect.getmembers(feature_extractor, inspect.isclass))
+    extractor_names = list([e[0] for e in inspect.getmembers(feature_extractor, inspect.isclass) if e[0] != "FeatureExtractorBase"])
+
+    module = __import__("feature_extractor")
 
     if args.list:
-        for e in extractor_names:
-            print e
+        print("%-30s | %-15s | %-4s | %-8s | %-5s" % ("NAME", "OUTPUT SHAPE", "RF", "IMG SIZE", "RF / IMG"))
+        print("-" * 80)
+        for e in list(map(lambda e: getattr(module, e), extractor_names)):
+            factor = e.RECEPTIVE_FIELD["size"][0] / float(e.IMG_SIZE)
+            print("%-30s | %-15s | %-4s | %-8s | %.3f %s" % (e.__name__.replace("FeatureExtractor", ""), e.OUTPUT_SHAPE, e.RECEPTIVE_FIELD["size"][0], e.IMG_SIZE, factor, "!" if factor >= 2 else ""))
         return
 
     if args.extractor is None:
@@ -88,27 +93,29 @@ def extract_features():
     # if args.filter_argument is not None:
     #     patches = patches(args.filter_argument)
     #     assert patches is not None, "The filter argument was not valid."
-    dataset = patches.to_dataset().cache()
-    dataset_3D = patches.to_temporal_dataset(16).cache()
+    dataset = patches.to_dataset()
+    dataset_3D = patches.to_temporal_dataset(16)
     total = patches.shape[0]
 
-    module = __import__("feature_extractor")
-    
     # Add progress bar if multiple extractors
     if len(args.extractor) > 1:
         args.extractor = tqdm(args.extractor, desc="Extractors", file=sys.stderr)
 
     for extractor_name in args.extractor:
-        logger.info("Instantiating %s" % extractor_name)
         try:
             bs = getattr(module, extractor_name).TEMPORAL_BATCH_SIZE
+            shape = getattr(module, extractor_name).OUTPUT_SHAPE
+            # if np.prod(shape) > 300000:
+            #     logger.warning("Skipping %s (output too big)" % extractor_name)
+            #     continue
+
+            logger.info("Instantiating %s" % extractor_name)
+            extractor = getattr(module, extractor_name)()
             # Get an instance
             if bs > 1:
-                extractor = getattr(module, extractor_name)()
                 extractor.extract_dataset(dataset_3D, total)
             else:
-                pass
-                # extractor.extract_dataset(dataset, total)
+                extractor.extract_dataset(dataset, total)
         except KeyboardInterrupt:
             logger.info("Terminated by CTRL-C")
             return
@@ -117,3 +124,40 @@ def extract_features():
 
 if __name__ == "__main__":
     extract_features()
+
+# | NAME                           | OUTPUT SHAPE    | RF   | IMG SIZE | RF / IMG |
+# |--------------------------------|-----------------|------|----------|----------|
+# | C3D                            | (7, 7, 512)     | 119  | 112      | 1.062    |
+# | C3D_Block3                     | (28, 28, 256)   | 23   | 112      | 0.205    |
+# | C3D_Block4                     | (14, 14, 512)   | 55   | 112      | 0.491    |
+# | EfficientNetB0                 | (7, 7, 1280)    | 851  | 224      | 3.799 !  |
+# | EfficientNetB0_Block3          | (28, 28, 40)    | 67   | 224      | 0.299    |
+# | EfficientNetB0_Block4          | (14, 14, 80)    | 147  | 224      | 0.656    |
+# | EfficientNetB0_Block5          | (14, 14, 112)   | 339  | 224      | 1.513    |
+# | EfficientNetB0_Block6          | (7, 7, 192)     | 787  | 224      | 3.513 !  |
+# | EfficientNetB3                 | (10, 10, 1536)  | 1200 | 300      | 4.000 !  |
+# | EfficientNetB3_Block3          | (38, 38, 48)    | 111  | 300      | 0.370    |
+# | EfficientNetB3_Block4          | (19, 19, 96)    | 255  | 300      | 0.850    |
+# | EfficientNetB3_Block5          | (19, 19, 136)   | 575  | 300      | 1.917    |
+# | EfficientNetB3_Block6          | (10, 10, 232)   | 1200 | 300      | 4.000 !  |
+# | EfficientNetB6                 | (17, 17, 2304)  | 1056 | 528      | 2.000 !  |
+# | EfficientNetB6_Block3          | (66, 66, 72)    | 235  | 528      | 0.445    |
+# | EfficientNetB6_Block4          | (33, 33, 144)   | 475  | 528      | 0.900    |
+# | EfficientNetB6_Block5          | (33, 33, 200)   | 987  | 528      | 1.869    |
+# | EfficientNetB6_Block6          | (17, 17, 344)   | 1056 | 528      | 2.000 !  |
+# | MobileNetV2                    | (7, 7, 1280)    | 491  | 224      | 2.192 !  |
+# | MobileNetV2_Block12            | (14, 14, 96)    | 267  | 224      | 1.192    |
+# | MobileNetV2_Block14            | (7, 7, 160)     | 363  | 224      | 1.621    |
+# | MobileNetV2_Block16            | (7, 7, 320)     | 491  | 224      | 2.192 !  |
+# | MobileNetV2_Block3             | (28, 28, 32)    | 27   | 224      | 0.121    |
+# | MobileNetV2_Block6             | (14, 14, 64)    | 75   | 224      | 0.335    |
+# | MobileNetV2_Block9             | (14, 14, 64)    | 171  | 224      | 0.763    |
+# | ResNet50V2                     | (7, 7, 2048)    | 479  | 224      | 2.138 !  |
+# | ResNet50V2_LargeImage          | (15, 15, 2048)  | 479  | 449      | 1.067    |
+# | ResNet50V2_Stack3              | (14, 14, 512)   | 95   | 224      | 0.424    |
+# | ResNet50V2_Stack3_LargeImage   | (29, 29, 512)   | 95   | 449      | 0.212    |
+# | ResNet50V2_Stack4              | (7, 7, 1024)    | 287  | 224      | 1.281    |
+# | ResNet50V2_Stack4_LargeImage   | (15, 15, 1024)  | 287  | 449      | 0.639    |
+# | VGG16                          | (14, 14, 512)   | 181  | 224      | 0.808    |
+# | VGG16_Block3                   | (56, 56, 512)   | 37   | 224      | 0.165    |
+# | VGG16_Block4                   | (28, 28, 512)   | 85   | 224      | 0.379    |
