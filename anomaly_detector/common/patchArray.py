@@ -81,7 +81,8 @@ class PatchArray(np.recarray):
 
         contains_features  = False
         contains_locations = False
-        contains_bins      = {"bins_0.20": False, "bins_0.50": False}
+        contains_bins      = {"0.20": False, "0.50": False, "2.00": False}
+        rasterizations     = {"0.20": None, "0.50": None, "2.00": None}
         contains_mahalanobis_distances = False
 
         receptive_field = None
@@ -151,11 +152,12 @@ class PatchArray(np.recarray):
                     patches_dict["mahalanobis_distances_filtered"] = np.zeros(locations_shape, dtype=np.float64)
                 
                 for k in contains_bins.keys():
-                    if k in patches_dict.keys():
+                    if ("bins_" + k) in patches_dict.keys():
                         contains_bins[k] = True
+                        rasterizations[k] = np.array(hf["rasterization_" + k])
                     else:
                         contains_bins[k] = False
-                        patches_dict[k] = np.zeros(locations_shape, dtype=object)
+                        patches_dict["bins_" + k] = np.zeros(locations_shape, dtype=object)
 
                 # Broadcast metadata to the correct shape
                 if patches_dict["features"].shape[1:-1] != ():
@@ -189,6 +191,7 @@ class PatchArray(np.recarray):
         obj.contains_features  = contains_features
         obj.contains_locations = contains_locations
         obj.contains_bins      = contains_bins
+        obj.rasterizations     = rasterizations
         obj.contains_mahalanobis_distances = contains_mahalanobis_distances
 
         cls.root = obj
@@ -197,13 +200,14 @@ class PatchArray(np.recarray):
 
     def __array_finalize__(self, obj):
         if obj is None: return
-        self.filename    = getattr(obj, "filename", None)
-        self.images_path = getattr(obj, "images_path", consts.IMAGES_PATH)
-        self.receptive_field  = getattr(obj, "receptive_field", None)
-        self.image_size  = getattr(obj, "image_size", 224)
+        self.filename           = getattr(obj, "filename", None)
+        self.images_path        = getattr(obj, "images_path", consts.IMAGES_PATH)
+        self.receptive_field    = getattr(obj, "receptive_field", None)
+        self.image_size         = getattr(obj, "image_size", 224)
         self.contains_features  = getattr(obj, "contains_features", False)
         self.contains_locations = getattr(obj, "contains_locations", False)
-        self.contains_bins      = getattr(obj, "contains_bins", {"bins_0.20": False, "bins_0.50": False})
+        self.contains_bins      = getattr(obj, "contains_bins", {"0.20": False, "0.50": False, "2.00": False})
+        self.rasterizations     = getattr(obj, "rasterizations", {"0.20": None, "0.50": None, "2.00": None})
         self.contains_mahalanobis_distances = getattr(obj, "contains_mahalanobis_distances", False)
     
     def __setattr__(self, attr, val):
@@ -313,16 +317,12 @@ class PatchArray(np.recarray):
             bin (Tuple): (v, u) Tuple with the bin coordinates
             cell_size (float): 
         """
-        # Check if cell size is calculated
-        if not self.contains_bins or self.cell_size.flat[0] != cell_size:
+        key = "%.2f" % cell_size
+        # Check if cell size is already calculated
+        if not key in self.contains_bins.keys() or not self.contains_bins[key]:
             self.calculate_rasterization(cell_size)
         
-        b1 = self.bins.v == bin[0]
-        r1 = self[b1]
-        b2 = r1.bins.u == bin[1]
-        r2 = r1[b2]
-
-        return r2
+        return self.ravel()[self.rasterizations[key][bin]]
 
     def get_spatial_histogram(self, cell_size):
         # Get extent
@@ -339,10 +339,10 @@ class PatchArray(np.recarray):
         plt.show()
 
     def calculate_rasterization(self, cell_size):
-        key = "bins_%.2f" % cell_size
+        key = "%.2f" % cell_size
         # Check if cell size is already calculated
         if key in self.contains_bins.keys() and self.contains_bins[key]:
-            return self[key]
+            return self["bins_" + key]
         
         # Get extent
         x_min, y_min, x_max, y_max = self.get_extent(cell_size)
@@ -352,112 +352,90 @@ class PatchArray(np.recarray):
         bins_x = np.arange(x_min, x_max, cell_size)
         bin_area = cell_size * cell_size
 
-        # Create a search tree of spatial boxes
-        def _get_bins():
-            for v, y in enumerate(bins_y):
-                for u, x in enumerate(bins_x):
-                    b = box(y, x, y + cell_size, x + cell_size)
-                    b.u = u
-                    b.v = v
-                    b.patches = list()
-                    yield b
-            
-        grid = STRtree(list(_get_bins()))
-        
         shape = (len(bins_y), len(bins_x))
+
+        # Create the grid
+        self.rasterizations[key] = np.zeros(shape, dtype=object)
+        
+        for v, y in enumerate(bins_y):
+            for u, x in enumerate(bins_x):
+                b = box(y, x, y + cell_size, x + cell_size)
+                b.u = u
+                b.v = v
+                b.patches = list()
+                self.rasterizations[key][v, u] = b
+            
+        # Create a search tree of spatial boxes
+        grid = STRtree(self.rasterizations[key].ravel().tolist())
+        
+        rf_factor = self.receptive_field[0] / self.image_size
 
         logger.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
 
-        # # def _calc(i, y, x):
-        # #     f = self[i, y, x]
-        # #     poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
-        # #     bins = grid.query(poly)
-            
-        # #     # for b in bins:
-        # #         # Store info in patch ...
-        # #         # f[key].append((b.v, b.u, 1.0))
+        # @profile
+        def _bin(i):
+            for y, x in np.ndindex(self.shape[1:]):
+                if rf_factor < 2 or (y, x) == (0, 0):
+                    f = self[i, y, x]
+                    poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
+                    # poly = poly.buffer(0.99)
+                    bins = grid.query(poly)
 
-        # #         # ... and in the bin
-        # #         # b.patches.append((i, y, x, 1.0))
-
-        # def _calc(x):
-        #     print("STARTING %i" % (x))
-        #     for i, y in tqdm(np.ndindex(self.shape[:-1]), desc="%i" % x, total=np.prod(self.shape[:-1]), position=x, file=sys.stderr):
-        #         f = self[i, y, x]
-        #         poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
-        #         bins = grid.query(poly)
-        #         print("%i, %i, %i" % (i, y, x))
-                
-        #         # for b in bins:
-        #             # Store info in patch ...
-        #             # f[key].append((b.v, b.u, 1.0))
-
-        #             # ... and in the bin
-        #             # b.patches.append((i, y, x, 1.0))
-
-        # Reset this rasterization with empty arrays
-        for i, y, x in tqdm(np.ndindex(self.shape), desc="Emptying shiat bins", total=self.size, file=sys.stderr):
-            self[i, y, x][key] = np.array([], dtype=[("v", np.uint16), ("u", np.uint16), ("weight", np.float32)])
+                    # pr = prep(poly)
+                    # bins = filter(pr.intersects, bins)
+                    
+                def _loop():
+                    for b in bins:
+                        # weight = 1.0#b.intersection(poly).area / bin_area
+                        b.patches.append(np.ravel_multi_index((i, y, x), self.shape))
+                        yield np.ravel_multi_index((b.v, b.u), shape)
+                    
+                self[i, y, x]["bins_" + key] = np.array(list(_loop()), dtype=np.uint32)
 
         start = time.time()
-        # # process_map(_calc, np.ndindex(self.shape), max_workers=12, desc="Calculating bins", total=self.size, file=sys.stderr)
-        # p = Pool(12, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),))
-        # p.map(_calc, range(self.shape[-1]))
-        # # list(tqdm(p.imap(_calc, np.ndindex(self.shape)), desc="Calculating bins", total=self.size, file=sys.stderr))
-        # # p.close()
-        # # p.join()
-
-        # Get the corresponding bin for every feature
-        for i, y, x in tqdm(np.ndindex(self.shape), desc="Calculating bins", total=self.size, file=sys.stderr):
-            f = self[i, y, x]
-            poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
-            bins = grid.query(poly)
-            
-            if len(bins) > 0:
-                pr = prep(poly)
-                for b in filter(pr.intersects, bins):
-                    # weight = 1.0#b.intersection(poly).area / bin_area
-
-                    # if f[key] == None:
-                    #     f[key] = np.array([(b.v, b.u, 1.0)], dtype=[("v", np.uint16), ("u", np.uint16), ("weight", np.float32)])
-                    # else:
-                    # Store info in patch ...
-                    f[key] = np.append(f[key], np.array([(b.v, b.u, 1.0)], dtype=[("v", np.uint16), ("u", np.uint16), ("weight", np.float32)]))
-
-                    # ... and in the bin
-                    b.patches.append((i, y, x, 1.0))
         
+        # Get the corresponding bin for every feature
+        Parallel(n_jobs=2, prefer="threads")(
+            delayed(_bin)(i) for i in tqdm(range(self.shape[0]), desc="Calculating bins", file=sys.stderr))
+
         end = time.time()
+
+        logger.info("Opening %s" % self.filename)
 
         # Save to file
         with h5py.File(self.filename, "r+") as hf:
             # Remove the old dataset
-            if key in hf.keys():
-                del hf[key]
+            if "bins_" + key in hf.keys():
+                logger.info("Deleting old bins_%s from file" % key)
+                del hf["bins_" + key]
             
-            dt = h5py.vlen_dtype(np.dtype([("v", np.uint16), ("u", np.uint16), ("weight", np.float32)]))
-            hf.create_dataset(key, data=self[key], dtype=dt)
+            logger.info("Writing bins_%s to file" % key)
+            hf.create_dataset("bins_" + key, data=self["bins_" + key], dtype=h5py.vlen_dtype(np.uint32))
             
-            key = "rasterization_%.2f" % cell_size
             # Remove the old dataset
-            if key in hf.keys():
-                del hf[key]
+            if "rasterization_" + key in hf.keys():
+                logger.info("Deleting old rasterization_%s from file" % key)
+                del hf["rasterization_" + key]
 
-            if key + "_count" in hf.keys():
-                del hf[key + "_count"]
+            if "rasterization_" + key + "_count" in hf.keys():
+                logger.info("Deleting old rasterization_%s_count from file" % key)
+                del hf["rasterization_" + key + "_count"]
             
-            dt = h5py.vlen_dtype(np.dtype([("i", np.uint16), ("y", np.uint16), ("x", np.uint16), ("weight", np.float32)]))
-            rasterization = hf.create_dataset(key, shape=shape, dtype=dt)
-            rasterization_count = hf.create_dataset(key + "_count", shape=shape, dtype=np.uint16)
+            logger.info("Writing rasterization_%s and rasterization_%s_count to file" % (key, key))
+            rasterization       = hf.create_dataset("rasterization_" + key,            shape=shape, dtype=h5py.vlen_dtype(np.uint32))
+            rasterization_count = hf.create_dataset("rasterization_" + key + "_count", shape=shape, dtype=np.uint16)
 
             for b in grid._geoms:
                 rasterization[b.v, b.u] = b.patches
                 rasterization_count[b.v, b.u] = len(b.patches)
 
-            hf[key].attrs["Start"] = start
-            hf[key].attrs["End"] = end
-            hf[key].attrs["Duration"] = end - start
-            hf[key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
+            hf["rasterization_" + key].attrs["Start"] = start
+            hf["rasterization_" + key].attrs["End"] = end
+            hf["rasterization_" + key].attrs["Duration"] = end - start
+            hf["rasterization_" + key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
+
+        self.contains_bins[key] = True
+        self.rasterizations[key] = np.vectorize(lambda b: b.patches, otypes=[object])(self.rasterizations[key])
 
         return shape
 
@@ -630,7 +608,8 @@ class PatchArray(np.recarray):
 
 if __name__ == "__main__":
     p = PatchArray(consts.FEATURES_FILE)
-    p.calculate_rasterization(0.5)
+
+    # p.calculate_rasterization(2.0)
 
     # from common import Visualize
     # from scipy.misc import imresize

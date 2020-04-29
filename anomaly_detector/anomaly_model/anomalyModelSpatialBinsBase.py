@@ -23,6 +23,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         """
         AnomalyModelBase.__init__(self)
         self.CELL_SIZE = cell_size
+        self.KEY = "%.2f" % self.CELL_SIZE
         self.CREATE_ANOMALY_MODEL_FUNC = create_anomaly_model_func
         
         m = create_anomaly_model_func()
@@ -32,10 +33,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
         and the single variate Gaussian distribution along each dimension.
         """
-        if patch.cell_size.flat[0] != self.CELL_SIZE:
-            patch.base.calculate_rasterization(self.CELL_SIZE)
-
-        model = self.get_model(patch.bins)
+        model = self.models.flat[patch["bins_" + self.KEY]]
         if model is None:
             # logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
             return 0 # Unknown
@@ -44,52 +42,49 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     
     def __mahalanobis_distance__(self, patch):
         """Calculate the Mahalanobis distance between the input and the model"""
-        if patch.cell_size.flat[0] != self.CELL_SIZE:
-            patch.base.calculate_rasterization(self.CELL_SIZE)
-
-        model = self.get_model(patch.bins)
-        if model is None:
+        
+        model = self.models.flat[patch["bins_" + self.KEY]]
+        if np.all(model == None):
             # logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
             return np.nan # TODO: What should we do?
         
-        return model.__mahalanobis_distance__(patch)
+        return np.mean([m.__mahalanobis_distance__(patch) for m in model if m is not None])
+
+    def filter_training(self, patches):
+        return patches
 
     def __generate_model__(self, patches, silent=False):
         # Ensure locations are calculated
         patches.ensure_locations()
         
-        # Get extent
-        extent = self.get_extent(self.CELL_SIZE)
-        x_min, y_min, x_max, y_max = extent
+        # Check if cell size rasterization is already calculated
+        if not self.KEY in patches.contains_bins.keys() or not patches.contains_bins[self.KEY]:
+            patches.calculate_rasterization(self.CELL_SIZE)
         
-        shape = (int(np.ceil((x_max - x_min) / self.CELL_SIZE)),
-                 int(np.ceil((y_max - y_min) / self.CELL_SIZE)))
+        patches_flat = patches.ravel()
+        
+        raster = patches.rasterizations[self.KEY]
 
         # Empty grid that will contain the model for each bin
-        self.models = np.empty(shape=shape, dtype=object)
+        self.models = np.empty(shape=raster.shape, dtype=object)
         models_created = 0
 
         with tqdm(desc="Generating models", total=self.models.size, file=sys.stderr) as pbar:
-            for bin in np.ndindex(shape):
-                bin_features_flat = patches.bin(bin, self.CELL_SIZE)
-                
-                if bin_features_flat.size > 0:
-                    # Create a new model
-                    model = self.CREATE_ANOMALY_MODEL_FUNC()    # Instantiate a new model
-                    model.__generate_model__(bin_features_flat, silent=silent) # The model only gets flattened features
-                    self.models[bin] = model                    # Store the model
-                    models_created += 1
-                    pbar.set_postfix({"Models": models_created})
+            for bin in np.ndindex(raster.shape):
+                indices = raster[bin]
+
+                if len(indices) > 0:
+                    model_input = AnomalyModelBase.filter_training(self, patches_flat[indices])
+                    if model_input.size > 0:
+                        # Create a new model
+                        model = self.CREATE_ANOMALY_MODEL_FUNC()    # Instantiate a new model
+                        model.__generate_model__(model_input, silent=silent) # The model only gets flattened features
+                        self.models[bin] = model                    # Store the model
+                        models_created += 1
+                        pbar.set_postfix({"Models": models_created})
                 pbar.update()
         return True
     
-    def get_model(self, bin):
-        """ Return the respective model for the given bin """
-        # assert self.models is not None, "Please generate the models first."
-        if bin[0] >= self.models.shape[0] or bin[1] >= self.models.shape[1]:
-            return None
-        return self.models[bin[0], bin[1]]
-
     def __load_model_from_file__(self, h5file):
         """Load a SVG model from file"""
         if not "Models shape" in h5file.attrs.keys() or \
@@ -124,7 +119,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         
         models_count = 0
         for v, u in tqdm(np.ndindex(self.models.shape), desc="Saving models", total=self.models.size, file=sys.stderr):
-            model = self.get_model((v, u))
+            model = self.models[v, u]
             if model is not None:
                 g = h5file.create_group("%i/%i" % (v, u))
                 g.attrs["v"] = v
@@ -142,8 +137,8 @@ if __name__ == "__main__":
 
     patches = PatchArray(consts.FEATURES_FILE)
 
-    model = AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=0.2)
+    model = AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=2.0)
     
     if model.load_or_generate(patches):
-        patches.show_spatial_histogram(model.CELL_SIZE)
+        # patches.show_spatial_histogram(model.CELL_SIZE)
         model.visualize()

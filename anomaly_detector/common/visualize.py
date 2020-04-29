@@ -679,9 +679,9 @@ class Visualize(object):
         overlay = np.zeros(image.shape, dtype=np.uint8)
         
         # Loop over all patches
-        if self.patch_to_color_func[self.model_index] is not None or \
+        if self.patches.contains_mahalanobis_distances and (self.patch_to_color_func[self.model_index] is not None or \
             (self.patch_to_text_func[self.model_index] is not None and self.show_values) or \
-            self.pause_func is not None:
+            self.pause_func is not None):
              
             mahas = np.zeros(image.shape[:2], dtype=np.float64)
 
@@ -803,6 +803,6 @@ if __name__ == "__main__":
     from common import PatchArray
     import consts
     patches = PatchArray(consts.FEATURES_FILE)
-
-    vis = Visualize(patches)
+    
+    vis = Visualize(patches.validation().anomaly)
     vis.show()
