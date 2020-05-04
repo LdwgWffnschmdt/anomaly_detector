@@ -77,7 +77,7 @@ def extract_features():
     #     if b and i - 10 >= 0:
     #         f[i - 10:i] = True
 
-    patches = patches.training_and_validation()
+    patches = patches.training_and_validation
 
 
 

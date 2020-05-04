@@ -205,6 +205,10 @@ class Visualize(object):
         self._exiting = False
         self._mouse_down = False
 
+        self._mouse_image_x = -1
+        self._mouse_image_y = -1
+        self._image_shape = (1, 1, 3)
+
     def show(self):
         self.mode = 0 # 0: don't edit, 1: single, 2: continuous
         self._label = -1
@@ -360,7 +364,7 @@ class Visualize(object):
             fontScale              = 0.5
             thickness              = 1
 
-            model = self.patches.mahalanobis_distances.dtype.names[self.model_index - 1]
+            model = sorted(self.patches.mahalanobis_distances.dtype.names)[self.model_index - 1]
 
             cv2.putText(image,"Model:", (10, 20), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
             cv2.putText(image, model,    (65, 20), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
@@ -411,8 +415,8 @@ class Visualize(object):
 
             cv2.putText(image,"Patches > Threshold:   #            %", (10, 190), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
 
-            no_anomaly = self.patches.mahalanobis_distances_filtered[self.patches.labels == 1]
-            anomaly = self.patches.mahalanobis_distances_filtered[self.patches.labels == 2]
+            no_anomaly = self.patches.mahalanobis_distances_filtered[self.patches.patch_labels == 1]
+            anomaly = self.patches.mahalanobis_distances_filtered[self.patches.patch_labels == 2]
             f_no_anomaly = no_anomaly[no_anomaly > threshold]
             f_anomaly = anomaly[anomaly > threshold]
 
@@ -448,9 +452,19 @@ class Visualize(object):
     def __default_patch_to_color__(self, patch):
         b = 0#100 if patch in self.normal_distribution else 0
         g = 0
+        r = 0
         threshold = cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA)
         if cv2.getTrackbarPos("show_thresh", self.WINDOWS_MAHA):
-            r = 100 if patch.mahalanobis_distances_filtered > threshold else 0
+            anomaly = patch.mahalanobis_distances_filtered > threshold
+            if anomaly and patch.patch_labels == 2:         # Correct
+                g = 100
+                r = 0
+            elif anomaly and patch.patch_labels != 2:       # False positive
+                g = 0
+                r = 100
+            elif not anomaly and patch.patch_labels == 2:    # False negative
+                b = 100
+                r = 0
         elif threshold == 0:
             r = 0
         else:
@@ -481,7 +495,7 @@ class Visualize(object):
 
             if self.patches.contains_mahalanobis_distances:
                 cv2.namedWindow(self.WINDOWS_MAHA)
-                for n in self.patches.mahalanobis_distances.dtype.names:
+                for n in sorted(self.patches.mahalanobis_distances.dtype.names):
                     self.patch_to_color_func.append(self.__default_patch_to_color__)
                     self.patch_to_text_func.append(self.__default_patch_to_text__)
                     self.pause_func.append(None)
@@ -524,6 +538,7 @@ class Visualize(object):
             cv2.createTrackbar("index", self.WINDOWS_CONTROLS, 0,  self.patches.shape[0] - 1, self.__index_update__)
             
             cv2.namedWindow(self.WINDOWS_IMAGE)
+            cv2.setMouseCallback(self.WINDOWS_IMAGE, self.__mouse_image__)
 
             self._window_set_up = True
 
@@ -533,6 +548,21 @@ class Visualize(object):
             cv2.setTrackbarPos("index", self.WINDOWS_CONTROLS, self.patches.shape[0] * x / 640)
         elif event == cv2.EVENT_LBUTTONUP:
             self._mouse_down = False
+
+    def __mouse_image__(self, event, x, y, flags, param):
+        if not self.patches.contains_features:
+            return
+        if (event == cv2.EVENT_MOUSEMOVE and flags == cv2.EVENT_FLAG_LBUTTON) or event == cv2.EVENT_MBUTTONDOWN:
+            iy = int(y / float(self._image_shape[0]) * self.patches.shape[1])
+            ix = int(x / float(self._image_shape[1]) * self.patches.shape[2])
+            if self._mouse_image_y != iy or self._mouse_image_x != ix:
+                self._mouse_image_y = iy
+                self._mouse_image_x = ix
+                self.__draw__()
+        elif event == cv2.EVENT_LBUTTONUP:
+            self._mouse_image_y = -1
+            self._mouse_image_x = -1
+            self.__draw__()
 
     def __draw_controls__(self):
         if self._exiting:
@@ -617,6 +647,7 @@ class Visualize(object):
 
         # Get the image
         image = frame[0, 0].get_image()
+        self._image_shape = image.shape
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         if self._cur_glitch is None:
@@ -694,23 +725,27 @@ class Visualize(object):
             for y, x in np.ndindex(frame.shape):
                 patch = frame[y, x]
 
-                rf = self.patches.calculate_receptive_field(y + 0.5, x + 0.5, scale_y=image.shape[0] / float(self.patches.image_size)
-                                                                            , scale_x=image.shape[1] / float(self.patches.image_size))
+                # rf = self.patches.calculate_receptive_field(y + 0.5, x + 0.5, scale_y=image.shape[0] / float(self.patches.image_size)
+                #                                                             , scale_x=image.shape[1] / float(self.patches.image_size))
 
                 p1 = (int(x * patch_size[1]), int(y * patch_size[0]))               # (x, y)
                 p2 = (int(p1[0] + patch_size[1]), int(p1[1] + patch_size[0]))       # (x, y)
                 
-                mahas[int(rf[0][0]):int(rf[2][0]), int(rf[0][1]):int(rf[2][1])] += patch.mahalanobis_distances_filtered
+                # mahas[int(rf[0][0]):int(rf[2][0]), int(rf[0][1]):int(rf[2][1])] += patch.mahalanobis_distances_filtered
+                
+                if self.patch_to_color_func[self.model_index] is not None:
+                    cv2.rectangle(overlay, p1, p2, self.patch_to_color_func[self.model_index](patch), -1)
 
-                if show_thresh:
-                    if patch.mahalanobis_distances_filtered > threshold:
-                        cv2.rectangle(image, (int(rf[0][1]), int(rf[0][0])), (int(rf[2][1]), int(rf[2][0])), (0,0,255), 2)
-                else:
-                    color = (0, 0, min(255, int(patch.mahalanobis_distances_filtered * (255 / threshold))))
-                    cv2.rectangle(overlay, p1, p2, color, -1)
+                # if show_thresh:
+                #     if patch.mahalanobis_distances_filtered > threshold:
+                #         cv2.rectangle(overlay, p1, p2, (0, 0, 255), -1)
+                # else:
+                #     # color = (0, 0, min(255, int(patch.mahalanobis_distances_filtered * (255 / threshold))))
+                #     color = (0, 0, 255 if patch.patch_labels == 2 else 0)
+                #     cv2.rectangle(overlay, p1, p2, color, -1)
 
                 if self.patch_to_text_func[self.model_index] is not None and self.show_values:
-                    text = str(self.patch_to_text_func[self.model_index](patch))
+                    text = "%.2f" % patch.patch_labels_values
                     cv2.putText(overlay, text,
                         (p1[0] + 2, p1[1] + int(patch_size[0]) - 2),    # (x, y)
                         font,
@@ -751,6 +786,14 @@ class Visualize(object):
                     fontScale,
                     (255, 255, 255),
                     thickness, lineType=cv2.LINE_AA)
+
+        # Draw receptive field of hovered patch
+        if self.patches.contains_features and self._mouse_image_x > -1 and self._mouse_image_y > -1:
+            rf = self.patches.calculate_receptive_field(self._mouse_image_y + 0.5, self._mouse_image_x + 0.5,
+                                                        scale_y=image.shape[0] / float(self.patches.image_size),
+                                                        scale_x=image.shape[1] / float(self.patches.image_size))
+
+            cv2.rectangle(image, (int(rf[0][1]), int(rf[0][0])), (int(rf[2][1]), int(rf[2][0])), (0,0,255), 2)
 
         # Blend the overlay
         alpha = cv2.getTrackbarPos("overlay",self.WINDOWS_CONTROLS) / 100.0  # Transparency factor.
@@ -804,5 +847,5 @@ if __name__ == "__main__":
     import consts
     patches = PatchArray(consts.FEATURES_FILE)
     
-    vis = Visualize(patches.validation().anomaly)
+    vis = Visualize(patches.validation)
     vis.show()

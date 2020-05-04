@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from anomalyModelBase import AnomalyModelBase
 from common import utils, logger, PatchArray
+import consts
 
 class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     """ Base for anomaly models that create one model per spatial bin (grid cell) """
@@ -24,10 +25,11 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         AnomalyModelBase.__init__(self)
         self.CELL_SIZE = cell_size
         self.KEY = "%.2f" % self.CELL_SIZE
+        if consts.FAKE_RF: self.KEY = "fake_" + self.KEY
         self.CREATE_ANOMALY_MODEL_FUNC = create_anomaly_model_func
         
         m = create_anomaly_model_func()
-        self.NAME = "SpatialBin/%s/%.2f" % (m.__class__.__name__.replace("AnomalyModel", ""), cell_size)
+        self.NAME = "SpatialBin/%s/%s" % (m.__class__.__name__.replace("AnomalyModel", ""), self.KEY)
     
     def classify(self, patch, threshold=None):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
@@ -55,7 +57,8 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
 
     def __generate_model__(self, patches, silent=False):
         # Ensure locations are calculated
-        patches.ensure_locations()
+        assert patches.contains_features, "Can only compute patch locations if there are patches"
+        assert patches.contains_locations, "Can only compute patch locations if there are locations calculated"
         
         # Check if cell size rasterization is already calculated
         if not self.KEY in patches.contains_bins.keys() or not patches.contains_bins[self.KEY]:

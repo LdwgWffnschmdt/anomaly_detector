@@ -14,6 +14,7 @@ from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 import matplotlib.pyplot as plt
 import cv2
+from skimage.transform import resize
 
 from shapely.strtree import STRtree
 from shapely.geometry import Polygon, box
@@ -32,8 +33,11 @@ class Patch(np.record):
 
     # @cached(image_cache, key=lambda self, *args: self.times) # The cache should only be based on the timestamp
     def get_image(self, images_path=None):
+        return cv2.imread(self.get_image_path(images_path))
+
+    def get_image_path(self, images_path=None):
         if images_path is None: images_path = consts.IMAGES_PATH
-        return cv2.imread(os.path.join(images_path, "%i.jpg" % self.times))
+        return os.path.join(images_path, "%i.jpg" % self.times)
 
     def __setattr__(self, attr, val):
         if attr in self.dtype.names:
@@ -84,10 +88,12 @@ class PatchArray(np.recarray):
         # Add missing datasets
         metadata["changed"] = np.zeros_like(metadata["labels"], dtype=np.bool)
 
-        contains_features  = False
-        contains_locations = False
-        contains_bins      = {"0.20": False, "0.50": False, "2.00": False}
-        rasterizations     = {"0.20": None, "0.50": None, "2.00": None}
+        contains_features     = False
+        contains_locations    = False
+        contains_patch_labels = False
+        contains_bins         = {"fake_0.20": False, "fake_0.50": False, "fake_2.00": False} if consts.FAKE_RF else {"0.20": False, "0.50": False, "2.00": False}
+        rasterizations        = {"fake_0.20": None, "fake_0.50": None, "fake_2.00": None}    if consts.FAKE_RF else {"0.20": None, "0.50": None, "2.00": None}
+        
         contains_mahalanobis_distances = False
 
         receptive_field = None
@@ -119,7 +125,7 @@ class PatchArray(np.recarray):
                 patches_dict = dict()
                 mahalanobis_dict = dict()
 
-                add = ["features", "locations"]
+                add = ["features", "locations", "patch_labels"]
 
                 def _add(x, y):
                     if not isinstance(y, h5py.Dataset):
@@ -142,13 +148,20 @@ class PatchArray(np.recarray):
 
                 locations_shape = patches_dict["features"].shape[:-1]
 
-                if "locations" in patches_dict.keys():
+                locations_key = "fake_locations" if consts.FAKE_RF else "locations"
+                if locations_key in patches_dict.keys():
                     contains_locations = True
                 else:
-                    patches_dict["locations"] = np.zeros(locations_shape, dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
+                    patches_dict[locations_key] = np.zeros(locations_shape, dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
                                                                                  ("tr", [("y", np.float32), ("x", np.float32)]),
                                                                                  ("br", [("y", np.float32), ("x", np.float32)]),
                                                                                  ("bl", [("y", np.float32), ("x", np.float32)])])
+
+                if "patch_labels" in patches_dict.keys():
+                    contains_patch_labels = True
+                else:
+                    patches_dict["patch_labels"] = np.zeros(locations_shape, dtype=np.uint8)
+                    patches_dict["patch_labels_values"] = np.zeros(locations_shape)
 
                 if len(mahalanobis_dict) > 0:
                     contains_mahalanobis_distances = True
@@ -189,14 +202,15 @@ class PatchArray(np.recarray):
         
         obj = patches.view(cls)
 
-        obj.filename = filename
-        obj.images_path = images_path
+        obj.filename        = filename
+        obj.images_path     = images_path
         obj.receptive_field = receptive_field
-        obj.image_size = image_size
-        obj.contains_features  = contains_features
-        obj.contains_locations = contains_locations
-        obj.contains_bins      = contains_bins
-        obj.rasterizations     = rasterizations
+        obj.image_size      = image_size
+        obj.contains_features     = contains_features
+        obj.contains_locations    = contains_locations
+        obj.contains_bins         = contains_bins
+        obj.contains_patch_labels = contains_patch_labels
+        obj.rasterizations        = rasterizations
         obj.contains_mahalanobis_distances = contains_mahalanobis_distances
 
         cls.root = obj
@@ -205,14 +219,15 @@ class PatchArray(np.recarray):
 
     def __array_finalize__(self, obj):
         if obj is None: return
-        self.filename           = getattr(obj, "filename", None)
-        self.images_path        = getattr(obj, "images_path", consts.IMAGES_PATH)
-        self.receptive_field    = getattr(obj, "receptive_field", None)
-        self.image_size         = getattr(obj, "image_size", 224)
-        self.contains_features  = getattr(obj, "contains_features", False)
-        self.contains_locations = getattr(obj, "contains_locations", False)
-        self.contains_bins      = getattr(obj, "contains_bins", {"0.20": False, "0.50": False, "2.00": False})
-        self.rasterizations     = getattr(obj, "rasterizations", {"0.20": None, "0.50": None, "2.00": None})
+        self.filename              = getattr(obj, "filename", None)
+        self.images_path           = getattr(obj, "images_path", consts.IMAGES_PATH)
+        self.receptive_field       = getattr(obj, "receptive_field", None)
+        self.image_size            = getattr(obj, "image_size", 224)
+        self.contains_features     = getattr(obj, "contains_features", False)
+        self.contains_locations    = getattr(obj, "contains_locations", False)
+        self.contains_bins         = getattr(obj, "contains_bins", {"0.20": False, "0.50": False, "2.00": False})
+        self.contains_patch_labels = getattr(obj, "contains_patch_labels", False)
+        self.rasterizations        = getattr(obj, "rasterizations", {"0.20": None, "0.50": None, "2.00": None})
         self.contains_mahalanobis_distances = getattr(obj, "contains_mahalanobis_distances", False)
     
     def __setattr__(self, attr, val):
@@ -260,6 +275,7 @@ class PatchArray(np.recarray):
             return self[self.round_numbers[:] == round_number]
 
     
+    @property
     def training_and_validation(self):
         p = self.root[0::6, 0, 0]
 
@@ -282,6 +298,7 @@ class PatchArray(np.recarray):
         
         return self.root[0::6,...][f]
 
+    @property
     def training(self):
         round_number = 7
         label = 1
@@ -290,6 +307,7 @@ class PatchArray(np.recarray):
         else:
             return self[np.logical_and(self.round_numbers[:] == round_number, self.labels[:] == label)]
 
+    @property
     def validation(self):
         round_number = 7
         if self.ndim == 3:
@@ -314,21 +332,6 @@ class PatchArray(np.recarray):
     # Spatial stuff #
     #################
 
-    # @profile
-    def bin(self, bin, cell_size):
-        """ Get a view of only the features that are in a specific bin
-
-        Args:
-            bin (Tuple): (v, u) Tuple with the bin coordinates
-            cell_size (float): 
-        """
-        key = "%.2f" % cell_size
-        # Check if cell size is already calculated
-        if not key in self.contains_bins.keys() or not self.contains_bins[key]:
-            self.calculate_rasterization(cell_size)
-        
-        return self.ravel()[self.rasterizations[key][bin]]
-
     def get_spatial_histogram(self, cell_size):
         # Get extent
         x_min, y_min, x_max, y_max = self.get_extent(cell_size)
@@ -345,6 +348,8 @@ class PatchArray(np.recarray):
 
     def calculate_rasterization(self, cell_size):
         key = "%.2f" % cell_size
+        if consts.FAKE_RF: key = "fake_" + key
+
         # Check if cell size is already calculated
         if key in self.contains_bins.keys() and self.contains_bins[key]:
             return self["bins_" + key]
@@ -380,7 +385,7 @@ class PatchArray(np.recarray):
         # @profile
         def _bin(i):
             for y, x in np.ndindex(self.shape[1:]):
-                if rf_factor < 2 or (y, x) == (0, 0):
+                if consts.FAKE_RF or rf_factor < 2 or (y, x) == (0, 0):
                     f = self[i, y, x]
                     poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
                     # poly = poly.buffer(0.99)
@@ -470,34 +475,7 @@ class PatchArray(np.recarray):
         
         return (x_min, y_min, x_max, y_max)
 
-    def save_locations_to_file(self, filename=None):
-        """ Save the locations of every patch to filename """
-
-        if filename is None:
-            filename = self.filename
-
-        start = time.time()
-        self.calculate_patch_locations()
-        end = time.time()
-
-        with h5py.File(filename, "r+") as hf:
-            # Remove the old locations dataset
-            if "locations" in hf.keys():
-                del hf["locations"]
-            
-            hf.create_dataset("locations", data=self.locations)
-            
-            hf["locations"].attrs["Start"] = start
-            hf["locations"].attrs["End"] = end
-            hf["locations"].attrs["Duration"] = end - start
-            hf["locations"].attrs["Duration (formatted)"] = utils.format_duration(end - start)
-    
-    def ensure_locations(self):
-        assert self.contains_features, "Can only compute patch locations if there are patches"
-        if not self.contains_locations:
-            self.calculate_patch_locations()
-
-    def calculate_receptive_field(self, y, x, scale_y=1.0, scale_x=1.0):
+    def calculate_receptive_field(self, y, x, scale_y=1.0, scale_x=1.0, fake=False):
         """Calculate the receptive field of a patch
 
         Args:
@@ -514,8 +492,13 @@ class PatchArray(np.recarray):
         center_y = y / float(h) * image_h
         center_x = x / float(w) * image_w
 
-        rf_h = self.receptive_field[0] * scale_y / 2.0
-        rf_w = self.receptive_field[1] * scale_x / 2.0
+        if fake:
+            rf_h = self.image_size / float(self.shape[1]) * scale_y / 2.0
+            rf_w = self.image_size / float(self.shape[2]) * scale_x / 2.0
+        else:
+            rf_h = self.receptive_field[0] * scale_y / 2.0
+            rf_w = self.receptive_field[1] * scale_x / 2.0
+
         
         tl = (max(0, center_y - rf_h), max(0, center_x - rf_w))
         tr = (max(0, center_y - rf_h), min(image_w, center_x + rf_w))
@@ -526,8 +509,10 @@ class PatchArray(np.recarray):
 
     def calculate_patch_locations(self):
         """Calculate the real world coordinates of every feature"""
+
         assert self.contains_features, "Can only compute patch locations if there are patches"
 
+        start = time.time()
         ilu = ImageLocationUtility()
 
         logger.info("Calculating locations of every patch")
@@ -536,7 +521,7 @@ class PatchArray(np.recarray):
         image_locations = np.zeros((h, w, 4, 2), dtype=np.float32)
         
         for (y, x) in np.ndindex((h, w)):
-            rf = self.calculate_receptive_field(y + 0.5, x + 0.5)
+            rf = self.calculate_receptive_field(y + 0.5, x + 0.5, fake=consts.FAKE_RF)
             image_locations[y, x, 0] = rf[0]
             image_locations[y, x, 1] = rf[1]
             image_locations[y, x, 2] = rf[2]
@@ -551,6 +536,22 @@ class PatchArray(np.recarray):
             self.locations[i] = res
         
         self.contains_locations = True
+        end = time.time()
+
+        key = "locations"
+        if consts.FAKE_RF: key = "fake_" + key
+
+        with h5py.File(self.filename, "r+") as hf:
+            # Remove the old locations dataset
+            if key in hf.keys():
+                del hf[key]
+            
+            hf.create_dataset(key, data=self.locations)
+            
+            hf[key].attrs["Start"] = start
+            hf[key].attrs["End"] = end
+            hf[key].attrs["Duration"] = end - start
+            hf[key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
 
     #################
     # Calculations  #
@@ -657,6 +658,53 @@ class PatchArray(np.recarray):
 
         # plt.show()
         plt.savefig(self.filename.replace(".h5", "_TSNE.png"))
+
+
+    def calculate_patch_labels(self):
+        if not self.contains_features or self.filename is None:
+            logger.error("Can only do this on feature files")
+            return
+        
+        # Reset to unknown
+        self.patch_labels.fill(0)
+
+        for i in tqdm(range(self.shape[0]), desc="Calculating bins", file=sys.stderr):
+            frame = self[i, 0, 0]
+            if frame.labels == 2:
+                mask_file = frame.get_image_path().replace("Images", "Validation/Images/Anomaly/Masks inflated").replace(".jpg", "_mask.jpg")
+                if os.path.exists(mask_file):
+                    mask = numpy.array(cv2.imread(mask_file), dtype=np.uint8)
+                    mask = (mask[..., 0] <= 5) & (mask[..., 1] <= 5) & (mask[..., 2] >= 250)
+                    self.patch_labels[i, ...] = (resize(mask, self.shape[1:], order=0, anti_aliasing=False, mode="constant") > 0.5) + 1
+
+                    # mask = resize(mask, (self.image_size, self.image_size), order=0, anti_aliasing=False, mode="constant")
+
+                    # for y, x in np.ndindex(self.shape[1:]):
+                    #     rf = self.calculate_receptive_field(y, x, fake=True)
+                    #     mean = mask[int(rf[0][0]):int(rf[2][0]), int(rf[0][1]):int(rf[2][1])].mean()
+                    #     self.patch_labels[i, y, x] = 2 if (mean > 0.5) else 1
+                    #     self.patch_labels_values[i, y, x] = mean
+                    
+                    # fig, axs = plt.subplots(1, 3, constrained_layout=True)
+                    # axs[0].imshow(mask)
+                    # axs[0].set_title("Mask")
+
+                    # axs[1].imshow(self.patch_labels[i, ...])
+                    # axs[1].set_title("Patch labels")
+
+                    # axs[2].imshow(resize(mask, self.shape[1:], order=1, anti_aliasing=True, mode="constant") > 0.5)
+                    # axs[2].set_title("Mask resized")
+
+                    # plt.show()
+            else:
+                self.patch_labels[i, ...] = frame.labels
+
+        with h5py.File(self.filename, "r+") as hf:
+            # Remove the old locations dataset
+            if "patch_labels" in hf.keys():
+                del hf["patch_labels"]
+            
+            hf.create_dataset("patch_labels", data=self.patch_labels)
 
 if __name__ == "__main__":
     p = PatchArray(consts.FEATURES_FILE)
