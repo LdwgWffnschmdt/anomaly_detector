@@ -20,6 +20,7 @@ from shapely.strtree import STRtree
 from shapely.geometry import Polygon, box
 from shapely.prepared import prep
 
+from sklearn import metrics
 from sklearn.manifold import TSNE
 import seaborn as sns
 import pandas as pd
@@ -613,13 +614,14 @@ class PatchArray(np.recarray):
         return raw_dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     def calculate_tsne(self):
+        # TODO: Maybe only validation?
         features = self.features.reshape(-1, self.features.shape[-1])
 
-        feat_cols = ['feature' + str(i) for i in range(features.shape[1])]
+        feat_cols = ["feature" + str(i) for i in range(features.shape[1])]
 
         df = pd.DataFrame(features, columns=feat_cols)
         df["maha"] = self.mahalanobis_distances.SVG.ravel()
-        df["l"] = self.labels.ravel()
+        df["l"] = self.patch_labels.ravel()
         df["label"] = df["l"].apply(lambda l: "Anomaly" if l == 2 else "No anomaly")
 
         # For reproducability of the results
@@ -634,10 +636,10 @@ class PatchArray(np.recarray):
         time_start = time.time()
         tsne = TSNE(n_components=2, verbose=1)
         tsne_results = tsne.fit_transform(data_subset)
-        print('t-SNE done! Time elapsed: {} seconds'.format(time.time() - time_start))
+        logger.info("t-SNE done! Time elapsed: {} seconds".format(time.time() - time_start))
         
-        df_subset['tsne-2d-one'] = tsne_results[:,0]
-        df_subset['tsne-2d-two'] = tsne_results[:,1]
+        df_subset["tsne-2d-one"] = tsne_results[:,0]
+        df_subset["tsne-2d-two"] = tsne_results[:,1]
         fig = plt.figure(figsize=(16,10))
         fig.suptitle(os.path.basename(self.filename).replace(".h5", ""), fontsize=20)
 
@@ -659,6 +661,84 @@ class PatchArray(np.recarray):
         # plt.show()
         plt.savefig(self.filename.replace(".h5", "_TSNE.png"))
 
+    def calculate_roc(self):
+        assert self.contains_mahalanobis_distances, "Can't calculate ROC without mahalanobis distances calculated"
+
+        # (Name, ROC_AUC, AUC_PR, f1)
+        results = list()
+
+        extractor = os.path.basename(self.filename).replace(".h5", "")
+
+        val = self.validation
+        labels = val.patch_labels.ravel()
+
+        fig, ax = plt.subplots(1, 2, figsize=(10, 6), dpi=300)
+        fig.suptitle("Metrics for %s" % extractor)
+
+        lw = 1
+        
+        ax[0].plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
+
+        f_scores = np.linspace(0.2, 0.8, num=4)
+        for f_score in f_scores:
+            x = np.linspace(0.01, 1)
+            y = f_score * x / (2 * x - f_score)
+            l, = ax[1].plot(x[y >= 0], y[y >= 0], color="gray", alpha=0.2)
+            ax[1].annotate("f1=%.1f" % f_score, xy=(0.85, y[45] + 0.02), color="gray")
+        
+        for n in sorted(self.mahalanobis_distances.dtype.names):
+            logger.info("Calculating ROC for model %s" % n)
+            scores = val.mahalanobis_distances[n].ravel()
+            fpr, tpr, _ = metrics.roc_curve(labels, scores, pos_label=2)
+            roc_auc = metrics.auc(fpr, tpr)
+            
+            logger.info("Calculating precision/recall for model %s" % n)
+            precision, recall, thresholds = metrics.precision_recall_curve(labels, scores, pos_label=2)
+            auc_pr = metrics.auc(fpr, tpr)
+            f1 = [2 * ((p * r) / (p + r)) for p, r in zip(precision, recall)]
+            max_f1 = max(f1)
+
+            ax[0].plot(fpr, tpr, lw=lw, label="%s (ROC_AUC = %.2f, AUC_PR = %.2f, max. f1 = %.2f)" % (n, roc_auc, auc_pr, max_f1))
+
+            ax[1].plot(recall, precision, lw=lw)
+
+            results.append(("%s/%s" % (extractor, n), roc_auc, auc_pr, max_f1))
+            # ax[2].plot(f1, lw=lw)
+        
+        ax[0].set_xlim([0.0, 1.0])
+        ax[0].set_ylim([0.0, 1.05])
+        ax[0].set_xlabel("False Positive Rate")
+        ax[0].set_ylabel("True Positive Rate")
+        ax[0].set_title("ROC curve")
+        ax[0].grid(True, color="lightgray")
+        
+        ax[1].set_xlim([0.0, 1.0])
+        ax[1].set_ylim([0.0, 1.05])
+        ax[1].set_xlabel("Recall")
+        ax[1].set_ylabel("Precision")
+        ax[1].set_title("Precision/recall curve")
+        ax[1].grid(True, color="lightgray")
+        
+        # ax[2].set_xlabel("Threshold index")
+        # ax[2].set_ylabel("f1 score")
+        # ax[2].set_title("f1 score")
+        # ax[2].legend(loc="upper right")
+        
+        fig.subplots_adjust(left=0.08, right=0.95, top=0.90, bottom=0.3)
+
+        handles, labels = ax[0].get_legend_handles_labels()
+        legend = fig.legend(handles, labels, loc='lower center')
+
+        # get the width of your widest label, since every label will need 
+        # to shift by this amount after we align to the right
+        shift = max([t.get_window_extent(renderer=fig.canvas.get_renderer()).width for t in legend.get_texts()])
+        for t in legend.get_texts():
+            t.set_ha('right') # ha is alias for horizontalalignment
+            t.set_position((shift,0))
+
+        # plt.show()
+        plt.savefig(self.filename.replace(".h5", "_Metrics.png"), dpi=300)
+        return results
 
     def calculate_patch_labels(self):
         if not self.contains_features or self.filename is None:
@@ -707,13 +787,11 @@ class PatchArray(np.recarray):
             hf.create_dataset("patch_labels", data=self.patch_labels)
 
 if __name__ == "__main__":
-    p = PatchArray(consts.FEATURES_FILE)
+    p = PatchArray(consts.FEATURES_FILE).validation
 
-    p.calculate_tsne()
+    p.calculate_roc()
 
-    plt.show()
-
-    print "Finished"
+    # p.calculate_patch_labels()
 
     # p.calculate_rasterization(2.0)
 
