@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser(description="Benchmark the specified feature ex
 parser.add_argument("--files", metavar="F", dest="files", type=str, default=consts.EXTRACT_FILES_TEST,
                     help="File(s) to use for benchmarks (*.tfrecord, *.jpg)")
 
-parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs='*', type=str,
+parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs="*", type=str,
                     help="Extractor name. Leave empty for all extractors (default: \"\")")
 
 parser.add_argument("--output", metavar="OUT", dest="output", type=str,
@@ -40,7 +40,7 @@ import timeit
 from glob import glob
 
 import numpy as np
-import xlsxwriter
+import csv
 import tensorflow as tf
 from tqdm import tqdm
 import subprocess
@@ -68,43 +68,24 @@ def feature_extractor_benchmark():
         raise ValueError("Please specify at least one filename (%s)" % files)
         
     if args.output is None:
-        filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark.xlsx"))
+        filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark.csv"))
     else:
         filename = args.output
     
-    # Create a workbook and add a worksheet for meta data.
-    workbook = xlsxwriter.Workbook(filename)
-    heading_format = workbook.add_format({'bold': True, 'font_color': '#0071bc', "font_size": 20})
-    subheading_format = workbook.add_format({'bold': True, "font_size": 12})
+    write_header = not os.path.exists(filename)
 
-    try:
-        #Write metadata
-        worksheet_meta = workbook.add_worksheet("Meta")
-        worksheet_meta.set_column(0, 0, 25)
-        worksheet_meta.set_column(1, 1, 40)
+    csvfile = open(filename, "a")
+    fieldnames = ["Extractor", "Initialization", "Single"]
+    for b in args.batch_sizes:
+        fieldnames.append("Batch (%i)" % b)
+    
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-        
-        def add_meta(n, s="", format=None):
-            global row
-            worksheet_meta.write(row, 0, n, format)
-            worksheet_meta.write(row, 1, s, format)
-            row += 1
-
-        add_meta("Feature extractor benchmark", format=heading_format)
-
-        add_meta("Start", datetime.now().strftime("%d.%m.%Y, %H:%M:%S"))
-        add_meta("Batch size", str(args.batch_sizes))
-
-        computer_info = utils.getComputerInfo()
-
-        for key, value in computer_info.items():
-            add_meta(key, value)
-    except:
-        pass
-
-    # Get all the available feature extractor names
+    if write_header:
+        writer.writeheader()
 
     if args.extractor is None:
+        # Get all the available feature extractor names
         extractor_names = map(lambda e: e[0], inspect.getmembers(feature_extractor, inspect.isclass))
         extractor_names = filter(lambda f: f != "FeatureExtractorBase", extractor_names)
         args.extractor = extractor_names
@@ -113,7 +94,7 @@ def feature_extractor_benchmark():
     module = __import__("feature_extractor")
     
     if len(args.extractor) > 1:
-        workbook.close()
+        csvfile.close()
         for extractor_name in tqdm(args.extractor, desc="Benchmarking extractors", file=sys.stderr):
             command = "/home/ldwg/anomaly_detector/.env/bin/python /home/ldwg/anomaly_detector/anomaly_detector/scripts/feature_extractor_benchmark.py --extractor %s --output %s" % (extractor_name, filename)
             process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
@@ -122,33 +103,19 @@ def feature_extractor_benchmark():
             process.wait()
     else:
         extractor_name = args.extractor[0]
+        result = {"Extractor": extractor_name.replace("FeatureExtractor", "")}
+
         logger.info("Benchmarking %s" % extractor_name)
-
-        worksheet = workbook.add_worksheet(extractor_name.replace("FeatureExtractor", ""))
-        worksheet.set_column(0, 20, 20)
-
-        col = 0
 
         def log(s, times):
             """Log duration t with info string s"""
-            global col
-            
             logger.info("%-40s (%s): %.5fs  -  %.5fs" % (extractor_name, s, np.min(times), np.max(times)))
-            
-            worksheet.write(0, col, s, subheading_format)
-            for i, t in enumerate(times):
-                worksheet.write_number(i + 1, col, t)
-            col += 1
+            result[s] = np.min(times)
 
         def logerr(s, err):
             """Log duration t with info string s"""
-            global col
-            
             logger.error("%-40s (%s): %s" % (extractor_name, s, err))
-            
-            worksheet.write(0, col, s, subheading_format)
-            worksheet.write_string(1, col, err)
-            col += 1
+            result[s] = "-"
 
         try:
             _class = getattr(module, extractor_name)
@@ -174,43 +141,35 @@ def feature_extractor_benchmark():
             dataset = dataset.map(lambda image, time: (extractor.format_image(image), time),
                                 num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-            # Call internal transformations (eg. temporal windowing for 3D networks)
-            # dataset = extractor.__transform_dataset__(dataset)
-
-            mins = []
-
             # Test single image extraction
             try:
                 single = list(dataset.take(1).as_numpy_iterator())[0] # Get a single entry
                 times = np.array(timeit.repeat(lambda: extractor.extract(single[0]), number=1, repeat=args.extract_single_repeat))
-                mins.append(np.min(times))
-                log("Extract single", times)
+                log("Single", times)
             except (KeyboardInterrupt, SystemExit):
                 raise
             except:
-                logerr("Extract single", traceback.format_exc())
+                logerr("Single", traceback.format_exc())
             
             # Test batch extraction
             for batch_size in args.batch_sizes:
                 try:
                     batch = list(dataset.batch(batch_size).take(1).as_numpy_iterator())[0]
                     times = np.array(timeit.repeat(lambda: extractor.extract_batch(batch[0]), number=1, repeat=args.extract_batch_repeat))
-                    times = times / batch_size
-                    mins.append(np.min(times))
-                    log("Extract batch (%i)" % batch_size, times)
+                    times = times / float(batch_size)
+                    log("Batch (%i)" % batch_size, times)
                 except (KeyboardInterrupt, SystemExit):
                     raise
                 except:
-                    logerr("Extract batch (%i)" % batch_size, traceback.format_exc())
-
-            log("Extraction minima", mins)
+                    logerr("Batch (%i)" % batch_size, traceback.format_exc())
         except KeyboardInterrupt:
             logger.info("Cancelled")
             raise
         except:
             logerr("Error?", traceback.format_exc())
-            
-        workbook.close()
+
+        writer.writerow(result)
+        csvfile.close()
 
 if __name__ == "__main__":
     feature_extractor_benchmark()
