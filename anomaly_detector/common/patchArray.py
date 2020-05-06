@@ -2,6 +2,7 @@ import os
 import time
 import sys
 import ast
+import shutil
 from glob import glob
 from cachetools import cached, Cache, LRUCache
 from datetime import datetime
@@ -321,13 +322,17 @@ class PatchArray(np.recarray):
     def save_metadata(self, filename=None):
         if filename is None:
             filename = os.path.join(self.images_path, "metadata_cache.h5")
-        with h5py.File(filename, "w") as hf:
-            hf.attrs["Created"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
-            hf.create_dataset("camera_locations", data=self.camera_locations[:, 0, 0])
-            hf.create_dataset("times",            data=self.times[:, 0, 0])
-            hf.create_dataset("labels",           data=self.labels[:, 0, 0])
-            hf.create_dataset("directions",       data=self.directions[:, 0, 0])
-            hf.create_dataset("round_numbers",    data=self.round_numbers[:, 0, 0])
+        if os.path.exists(filename):
+            shutil.copyfile(filename, "%s_backup_%s" % (filename, datetime.now().strftime("%d_%m_%Y_%H_%M_%S")))
+        with h5py.File(filename, "r+") as hf:
+            hf.attrs["Last changed"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
+
+            indices = np.argwhere(np.isin(hf["times"], self.metadata_changed[:, 0, 0].times))
+            for index, frame in zip(indices, self.metadata_changed[:, 0, 0]):
+                hf["camera_locations"][index] = frame.camera_locations
+                hf["labels"][index]           = frame.labels
+                hf["directions"][index]       = frame.directions
+                hf["round_numbers"][index]    = frame.round_numbers
 
     #################
     # Spatial stuff #
