@@ -71,9 +71,9 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
         patches_flat = patches.ravel()
 
-        if patches_flat.shape[0] > self.initial_normal_features:
+        if patches_flat.shape[0] < self.initial_normal_features:
             self.initial_normal_features = patches_flat.shape[0]
-        # assert patches_flat.shape[0] > self.initial_normal_features, \
+        # assert patches_flat.shape[0] < self.initial_normal_features, \
         #     "Not enough initial features provided. Please decrease initial_normal_features (%i)" % self.initial_normal_features
 
         # Create initial set of "normal" vectors

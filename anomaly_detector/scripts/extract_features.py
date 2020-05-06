@@ -65,21 +65,7 @@ def extract_features():
     p = patches[:, 0, 0]
 
     ## WZL:
-    # f = np.zeros(p.shape, dtype=np.bool)
-    # f[:] = np.logical_and(p.directions == 1,                                   # CCW and
-    #                         np.logical_or(p.labels == 2,                         #   Anomaly or
-    #                                     np.logical_and(p.round_numbers >= 7,   #     Round between 2 and 5
-    #                                                     p.round_numbers <= 9)))
-
-    # # Let's make contiguous blocks of at least 10, so
-    # # we can do some meaningful temporal smoothing afterwards
-    # for i, b in enumerate(f):
-    #     if b and i - 10 >= 0:
-    #         f[i - 10:i] = True
-
     patches = patches.training_and_validation
-
-
 
     ## FieldSAFE:
     # f = p.round_numbers == 1
