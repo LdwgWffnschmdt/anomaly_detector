@@ -112,7 +112,7 @@ class FeatureExtractorBase(object):
             dataset = dataset.batch(batch_size)
 
         # IO stuff
-        hf = h5py.File(output_file, "w")
+        hf = h5py.File(output_file, "x")
     
         try:
             # Add metadata to the output file

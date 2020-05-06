@@ -21,6 +21,7 @@ from shapely.strtree import STRtree
 from shapely.geometry import Polygon, box
 from shapely.prepared import prep
 
+from scipy.ndimage.filters import gaussian_filter
 from sklearn import metrics
 from sklearn.manifold import TSNE
 import seaborn as sns
@@ -127,7 +128,9 @@ class PatchArray(np.recarray):
                 patches_dict = dict()
                 mahalanobis_dict = dict()
 
-                add = ["features", "locations", "patch_labels"]
+                locations_key = "fake_locations" if consts.FAKE_RF else "locations"
+
+                add = ["features", locations_key, "patch_labels"]
 
                 def _add(x, y):
                     if not isinstance(y, h5py.Dataset):
@@ -150,7 +153,6 @@ class PatchArray(np.recarray):
 
                 locations_shape = patches_dict["features"].shape[:-1]
 
-                locations_key = "fake_locations" if consts.FAKE_RF else "locations"
                 if locations_key in patches_dict.keys():
                     contains_locations = True
                 else:
@@ -158,6 +160,9 @@ class PatchArray(np.recarray):
                                                                                  ("tr", [("y", np.float32), ("x", np.float32)]),
                                                                                  ("br", [("y", np.float32), ("x", np.float32)]),
                                                                                  ("bl", [("y", np.float32), ("x", np.float32)])])
+
+                if consts.FAKE_RF:
+                    patches_dict["locations"] = patches_dict[locations_key]
 
                 if "patch_labels" in patches_dict.keys():
                     contains_patch_labels = True
@@ -394,7 +399,7 @@ class PatchArray(np.recarray):
                 if consts.FAKE_RF or rf_factor < 2 or (y, x) == (0, 0):
                     f = self[i, y, x]
                     poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
-                    # poly = poly.buffer(0.99)
+                    poly = poly.buffer(0.99)
                     bins = grid.query(poly)
 
                     # pr = prep(poly)
@@ -619,6 +624,8 @@ class PatchArray(np.recarray):
         return raw_dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     def calculate_tsne(self):
+        assert self.contains_mahalanobis_distances, "Can't calculate t-SNE without mahalanobis distances calculated"
+
         # TODO: Maybe only validation?
         features = self.features.reshape(-1, self.features.shape[-1])
 
@@ -666,23 +673,59 @@ class PatchArray(np.recarray):
         # plt.show()
         plt.savefig(self.filename.replace(".h5", "_TSNE.png"))
 
-    def calculate_roc(self):
+    def calculate_metrics(self):
         assert self.contains_mahalanobis_distances, "Can't calculate ROC without mahalanobis distances calculated"
-
         # (Name, ROC_AUC, AUC_PR, f1)
         results = list()
 
+        val = self.validation
+
         extractor = os.path.basename(self.filename).replace(".h5", "")
 
-        val = self.validation
-        labels = val.patch_labels.ravel()
+        ### Filter: None / Gauss (1,1,1) / Gauss (2,2,2) / Gauss (0,1,1) / Gauss (0,2,2)
+        filters = [None, (1,1,1), (2,2,2), (0,1,1), (0,2,2), (1,0,0), (2,0,0)]
+        variations = {
+            "per patch": (val.patch_labels.ravel(), lambda md: md.ravel()),
+            "per frame (max)": (val.labels[:,0,0], lambda md: np.max(md, axis=(1,2))),
+            "per frame (sum)": (val.labels[:,0,0], lambda md: np.sum(md, axis=(1,2)))
+        }
+        
+        for measure, v in variations.items():
+            for f in filters:
+                title = "Metrics for %s (%s, filter:%s)" % (extractor, measure, f)
+                logger.info("Calculating %s" % title)
+                
+                labels = v[0]
+                scores = dict()
+                for n in sorted(self.mahalanobis_distances.dtype.names):
+                    name = n.replace("fake", "simple")
+                    if f is not None:
+                        scores[name] = v[1](gaussian_filter(val.mahalanobis_distances[n], sigma=f))
+                    else:
+                        scores[name] = v[1](val.mahalanobis_distances[n])
 
-        fig, ax = plt.subplots(1, 2, figsize=(10, 6), dpi=300)
-        fig.suptitle("Metrics for %s" % extractor)
+                filename = os.path.join(consts.METRICS_PATH, "%s_%s_%s.jpg" % (extractor, measure, f))
+                result = self.calculate_roc(title, labels, scores, filename)
+                for model, roc_auc, auc_pr, max_f1 in result:
+                    results.append((extractor, measure, model, f, roc_auc, auc_pr, max_f1))
+        
+        return results
+
+
+    def calculate_roc(self, title, labels, scores, filename=None):
+        # (Name, ROC_AUC, AUC_PR, f1)
+        results = list()
+
+        no_skill = labels[labels == 2].size / float(labels.size)
+
+        dpi = 96 if filename is None else 300
+
+        fig, ax = plt.subplots(1, 2, figsize=(10, 6), dpi=dpi)
+        fig.suptitle(title)
 
         lw = 1
         
-        ax[0].plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
+        ax[0].plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--", label="No skill")
 
         f_scores = np.linspace(0.2, 0.8, num=4)
         for f_score in f_scores:
@@ -690,35 +733,42 @@ class PatchArray(np.recarray):
             y = f_score * x / (2 * x - f_score)
             l, = ax[1].plot(x[y >= 0], y[y >= 0], color="gray", alpha=0.2)
             ax[1].annotate("f1=%.1f" % f_score, xy=(0.85, y[45] + 0.02), color="gray")
+
+        ax[1].plot([0, 1], [no_skill, no_skill], color="navy", lw=lw, linestyle="--")
         
-        for n in sorted(self.mahalanobis_distances.dtype.names):
-            logger.info("Calculating ROC for model %s" % n)
-            scores = val.mahalanobis_distances[n].ravel()
-            fpr, tpr, _ = metrics.roc_curve(labels, scores, pos_label=2)
+        # with h5py.File(self.filename, "r+") as hf:
+        for name, score in scores.items():
+            fpr, tpr, thresholds_roc = metrics.roc_curve(labels, score, pos_label=2)
             roc_auc = metrics.auc(fpr, tpr)
             
-            logger.info("Calculating precision/recall for model %s" % n)
-            precision, recall, thresholds = metrics.precision_recall_curve(labels, scores, pos_label=2)
-            auc_pr = metrics.auc(fpr, tpr)
-            f1 = [2 * ((p * r) / (p + r)) for p, r in zip(precision, recall)]
-            max_f1 = max(f1)
+            precision, recall, thresholds_pr = metrics.precision_recall_curve(labels, score, pos_label=2)
+            auc_pr = metrics.auc(recall, precision)
+            f1 = [2 * ((p * r) / (p + r)) if (p + r) != 0 else 0 for p, r in zip(precision, recall)]
+            max_f1_index = np.argmax(f1)
+            max_f1 = f1[max_f1_index]
 
-            ax[0].plot(fpr, tpr, lw=lw, label="%s (ROC_AUC = %.2f, AUC_PR = %.2f, max. f1 = %.2f)" % (n, roc_auc, auc_pr, max_f1))
+            max_f1_index_roc = (np.abs(thresholds_roc - thresholds_pr[max_f1_index])).argmin()
+            l = ax[0].plot(fpr, tpr, lw=lw, label="%s (ROC_AUC = %.4f, AUC_PR = %.4f, max. f1 = %.4f)" % (name, roc_auc, auc_pr, max_f1))
+            ax[0].plot(fpr[max_f1_index_roc], tpr[max_f1_index_roc], marker='o', markersize=5, color=l[0]._color)
 
-            ax[1].plot(recall, precision, lw=lw)
+            ax[1].plot(recall, precision, lw=lw, color=l[0]._color)
+            ax[1].plot(recall[max_f1_index], precision[max_f1_index], marker='o', markersize=5, color=l[0]._color)
 
-            results.append(("%s/%s" % (extractor, n), roc_auc, auc_pr, max_f1))
+            results.append((name, roc_auc, auc_pr, max_f1))
             # ax[2].plot(f1, lw=lw)
+                # hf[n].attrs["ROC_AUC"] = roc_auc
+                # hf[n].attrs["AUC_PR"] = auc_pr
+                # hf[n].attrs["Max. f1"] = max_f1
         
         ax[0].set_xlim([0.0, 1.0])
-        ax[0].set_ylim([0.0, 1.05])
+        ax[0].set_ylim([0.0, 1.03])
         ax[0].set_xlabel("False Positive Rate")
         ax[0].set_ylabel("True Positive Rate")
         ax[0].set_title("ROC curve")
         ax[0].grid(True, color="lightgray")
         
         ax[1].set_xlim([0.0, 1.0])
-        ax[1].set_ylim([0.0, 1.05])
+        ax[1].set_ylim([0.0, 1.03])
         ax[1].set_xlabel("Recall")
         ax[1].set_ylabel("Precision")
         ax[1].set_title("Precision/recall curve")
@@ -729,7 +779,7 @@ class PatchArray(np.recarray):
         # ax[2].set_title("f1 score")
         # ax[2].legend(loc="upper right")
         
-        fig.subplots_adjust(left=0.08, right=0.95, top=0.90, bottom=0.3)
+        fig.subplots_adjust(left=0.08, right=0.95, top=0.90, bottom=0.35)
 
         handles, labels = ax[0].get_legend_handles_labels()
         legend = fig.legend(handles, labels, loc='lower center')
@@ -741,8 +791,13 @@ class PatchArray(np.recarray):
             t.set_ha('right') # ha is alias for horizontalalignment
             t.set_position((shift,0))
 
-        # plt.show()
-        plt.savefig(self.filename.replace(".h5", "_Metrics.png"), dpi=300)
+        if filename is not None:
+            plt.savefig(filename, dpi=dpi)
+        else:
+            plt.show()
+        
+        plt.close(fig)
+
         return results
 
     def calculate_patch_labels(self):
@@ -755,32 +810,31 @@ class PatchArray(np.recarray):
 
         for i in tqdm(range(self.shape[0]), desc="Calculating bins", file=sys.stderr):
             frame = self[i, 0, 0]
-            if frame.labels == 2:
-                mask_file = frame.get_image_path().replace("Images", "Validation/Images/Anomaly/Masks inflated").replace(".jpg", "_mask.jpg")
-                if os.path.exists(mask_file):
-                    mask = numpy.array(cv2.imread(mask_file), dtype=np.uint8)
-                    mask = (mask[..., 0] <= 5) & (mask[..., 1] <= 5) & (mask[..., 2] >= 250)
-                    self.patch_labels[i, ...] = (resize(mask, self.shape[1:], order=0, anti_aliasing=False, mode="constant") > 0.5) + 1
+            mask_file = frame.get_image_path().replace("Images", "Validation/Images/Anomaly/Masks inflated").replace(".jpg", "_mask.jpg")
+            if os.path.exists(mask_file):
+                mask = numpy.array(cv2.imread(mask_file), dtype=np.uint8)
+                mask = (mask[..., 0] <= 5) & (mask[..., 1] <= 5) & (mask[..., 2] >= 250)
+                self.patch_labels[i, ...] = (resize(mask, self.shape[1:], order=0, anti_aliasing=False, mode="constant") > 0.5) + 1
 
-                    # mask = resize(mask, (self.image_size, self.image_size), order=0, anti_aliasing=False, mode="constant")
+                # mask = resize(mask, (self.image_size, self.image_size), order=0, anti_aliasing=False, mode="constant")
 
-                    # for y, x in np.ndindex(self.shape[1:]):
-                    #     rf = self.calculate_receptive_field(y, x, fake=True)
-                    #     mean = mask[int(rf[0][0]):int(rf[2][0]), int(rf[0][1]):int(rf[2][1])].mean()
-                    #     self.patch_labels[i, y, x] = 2 if (mean > 0.5) else 1
-                    #     self.patch_labels_values[i, y, x] = mean
-                    
-                    # fig, axs = plt.subplots(1, 3, constrained_layout=True)
-                    # axs[0].imshow(mask)
-                    # axs[0].set_title("Mask")
+                # for y, x in np.ndindex(self.shape[1:]):
+                #     rf = self.calculate_receptive_field(y, x, fake=True)
+                #     mean = mask[int(rf[0][0]):int(rf[2][0]), int(rf[0][1]):int(rf[2][1])].mean()
+                #     self.patch_labels[i, y, x] = 2 if (mean > 0.5) else 1
+                #     self.patch_labels_values[i, y, x] = mean
+                
+                # fig, axs = plt.subplots(1, 3, constrained_layout=True)
+                # axs[0].imshow(mask)
+                # axs[0].set_title("Mask")
 
-                    # axs[1].imshow(self.patch_labels[i, ...])
-                    # axs[1].set_title("Patch labels")
+                # axs[1].imshow(self.patch_labels[i, ...])
+                # axs[1].set_title("Patch labels")
 
-                    # axs[2].imshow(resize(mask, self.shape[1:], order=1, anti_aliasing=True, mode="constant") > 0.5)
-                    # axs[2].set_title("Mask resized")
+                # axs[2].imshow(resize(mask, self.shape[1:], order=1, anti_aliasing=True, mode="constant") > 0.5)
+                # axs[2].set_title("Mask resized")
 
-                    # plt.show()
+                # plt.show()
             else:
                 self.patch_labels[i, ...] = frame.labels
 
@@ -792,9 +846,9 @@ class PatchArray(np.recarray):
             hf.create_dataset("patch_labels", data=self.patch_labels)
 
 if __name__ == "__main__":
-    p = PatchArray(consts.FEATURES_FILE).validation
-
-    p.calculate_roc()
+    p = PatchArray(consts.FEATURES_FILE)
+    p.calculate_metrics()
+    # p.calculate_roc()
 
     # p.calculate_patch_labels()
 
