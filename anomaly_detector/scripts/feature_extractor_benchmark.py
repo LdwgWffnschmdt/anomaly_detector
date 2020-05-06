@@ -93,6 +93,7 @@ def feature_extractor_benchmark():
 
     # Get all the available feature extractor names
     extractor_names = map(lambda e: e[0], inspect.getmembers(feature_extractor, inspect.isclass))
+    extractor_names = filter(lambda f: f != "FeatureExtractorBase", extractor_names)
 
     if args.extractor is None:
         args.extractor = extractor_names
