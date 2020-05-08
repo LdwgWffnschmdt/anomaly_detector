@@ -94,8 +94,8 @@ class PatchArray(np.recarray):
         contains_features     = False
         contains_locations    = False
         contains_patch_labels = False
-        contains_bins         = {"fake_0.20": False, "fake_0.50": False, "fake_2.00": False} if consts.FAKE_RF else {"0.20": False, "0.50": False, "2.00": False}
-        rasterizations        = {"fake_0.20": None, "fake_0.50": None, "fake_2.00": None}    if consts.FAKE_RF else {"0.20": None, "0.50": None, "2.00": None}
+        contains_bins         = {"fake_0.20": False, "fake_0.50": False, "fake_2.00": False, "0.20": False, "0.50": False, "2.00": False}
+        rasterizations        = {"fake_0.20": None, "fake_0.50": None, "fake_2.00": None, "0.20": None, "0.50": None, "2.00": None}
         
         contains_mahalanobis_distances = False
 
@@ -128,9 +128,7 @@ class PatchArray(np.recarray):
                 patches_dict = dict()
                 mahalanobis_dict = dict()
 
-                locations_key = "fake_locations" if consts.FAKE_RF else "locations"
-
-                add = ["features", locations_key, "patch_labels"]
+                add = ["features", "locations", "fake_locations", "patch_labels"]
 
                 def _add(x, y):
                     if not isinstance(y, h5py.Dataset):
@@ -153,16 +151,21 @@ class PatchArray(np.recarray):
 
                 locations_shape = patches_dict["features"].shape[:-1]
 
-                if locations_key in patches_dict.keys():
+                if "locations" in patches_dict.keys():
                     contains_locations = True
                 else:
-                    patches_dict[locations_key] = np.zeros(locations_shape, dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
+                    patches_dict["locations"] = np.zeros(locations_shape, dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
                                                                                  ("tr", [("y", np.float32), ("x", np.float32)]),
                                                                                  ("br", [("y", np.float32), ("x", np.float32)]),
                                                                                  ("bl", [("y", np.float32), ("x", np.float32)])])
 
-                if consts.FAKE_RF:
-                    patches_dict["locations"] = patches_dict[locations_key]
+                if "fake_locations" in patches_dict.keys():
+                    contains_locations = True
+                else:
+                    patches_dict["fake_locations"] = np.zeros(locations_shape, dtype=[("tl", [("y", np.float32), ("x", np.float32)]),
+                                                                                 ("tr", [("y", np.float32), ("x", np.float32)]),
+                                                                                 ("br", [("y", np.float32), ("x", np.float32)]),
+                                                                                 ("bl", [("y", np.float32), ("x", np.float32)])])
 
                 if "patch_labels" in patches_dict.keys():
                     contains_patch_labels = True
@@ -206,8 +209,10 @@ class PatchArray(np.recarray):
             # Create type
             t = [(x, metadata[x].dtype) for x in metadata]
             patches = np.rec.fromarrays(metadata.values(), dtype=t)
-        
+
         obj = patches.view(cls)
+
+        obj._ilu = ImageLocationUtility()
 
         obj.filename        = filename
         obj.images_path     = images_path
@@ -226,6 +231,7 @@ class PatchArray(np.recarray):
 
     def __array_finalize__(self, obj):
         if obj is None: return
+        self._ilu = getattr(obj, "_ilu", None)
         self.filename              = getattr(obj, "filename", None)
         self.images_path           = getattr(obj, "images_path", consts.IMAGES_PATH)
         self.receptive_field       = getattr(obj, "receptive_field", None)
@@ -322,6 +328,10 @@ class PatchArray(np.recarray):
         else:
             return self[self.round_numbers[:] != round_number]
 
+    @property
+    def benchmark(self):
+        return self[0:10]
+
     metadata_changed = property(lambda self: self[self.changed[:, 0, 0]] if self.ndim == 3 else self[self.changed[:]])
 
     def save_metadata(self, filename=None):
@@ -343,30 +353,12 @@ class PatchArray(np.recarray):
     # Spatial stuff #
     #################
 
-    def get_spatial_histogram(self, cell_size):
-        # Get extent
-        x_min, y_min, x_max, y_max = self.get_extent(cell_size)
-
-        bins_y = np.arange(y_min, y_max, cell_size)
-        bins_x = np.arange(x_min, x_max, cell_size)
-
-        return numpy.histogram2d(self.locations.y.ravel(), self.locations.x.ravel(), bins=[bins_y, bins_x])[0].T
-
-    def show_spatial_histogram(self, cell_size):
-        """ Show the spatial histogram of features (like a map) """
-        plt.imshow(self.get_spatial_histogram(cell_size), vmin=1)
-        plt.show()
-
-    def calculate_rasterization(self, cell_size):
+    def _calculate_grid(self, cell_size, fake=False):
         key = "%.2f" % cell_size
-        if consts.FAKE_RF: key = "fake_" + key
+        if fake: key = "fake_" + key
 
-        # Check if cell size is already calculated
-        if key in self.contains_bins.keys() and self.contains_bins[key]:
-            return self["bins_" + key]
-        
         # Get extent
-        x_min, y_min, x_max, y_max = self.get_extent(cell_size)
+        x_min, y_min, x_max, y_max = self.get_extent(cell_size, fake=fake)
 
         # Create the bins
         bins_y = np.arange(y_min, y_max, cell_size)
@@ -389,40 +381,29 @@ class PatchArray(np.recarray):
         # Create a search tree of spatial boxes
         grid = STRtree(self.rasterizations[key].ravel().tolist())
         
-        rf_factor = self.receptive_field[0] / self.image_size
+        return (grid, shape)
 
-        logger.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
+    def _bin(self, i, grid, shape, rf_factor, key, fake):
+        for y, x in np.ndindex(self.shape[1:]):
+            if fake or rf_factor < 2 or (y, x) == (0, 0):
+                f = self[i, y, x]
+                poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
+                poly = poly.buffer(0.99)
+                bins = grid.query(poly)
 
-        # @profile
-        def _bin(i):
-            for y, x in np.ndindex(self.shape[1:]):
-                if consts.FAKE_RF or rf_factor < 2 or (y, x) == (0, 0):
-                    f = self[i, y, x]
-                    poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
-                    poly = poly.buffer(0.99)
-                    bins = grid.query(poly)
+                # pr = prep(poly)
+                # bins = filter(pr.intersects, bins)
+                
+            def _loop():
+                for b in bins:
+                    # weight = 1.0#b.intersection(poly).area / bin_area
+                    b.patches.append(np.ravel_multi_index((i, y, x), self.shape))
+                    yield np.ravel_multi_index((b.v, b.u), shape)
+                
+            self[i, y, x]["bins_" + key] = np.array(list(_loop()), dtype=np.uint32)
 
-                    # pr = prep(poly)
-                    # bins = filter(pr.intersects, bins)
-                    
-                def _loop():
-                    for b in bins:
-                        # weight = 1.0#b.intersection(poly).area / bin_area
-                        b.patches.append(np.ravel_multi_index((i, y, x), self.shape))
-                        yield np.ravel_multi_index((b.v, b.u), shape)
-                    
-                self[i, y, x]["bins_" + key] = np.array(list(_loop()), dtype=np.uint32)
-
-        start = time.time()
-        
-        # Get the corresponding bin for every feature
-        Parallel(n_jobs=2, prefer="threads")(
-            delayed(_bin)(i) for i in tqdm(range(self.shape[0]), desc="Calculating bins", file=sys.stderr))
-
-        end = time.time()
-
+    def _save_rasterization(self, key, grid, shape, start=None, end=None):
         logger.info("Opening %s" % self.filename)
-
         # Save to file
         with h5py.File(self.filename, "r+") as hf:
             # Remove the old dataset
@@ -450,17 +431,42 @@ class PatchArray(np.recarray):
                 rasterization[b.v, b.u] = b.patches
                 rasterization_count[b.v, b.u] = len(b.patches)
 
-            hf["rasterization_" + key].attrs["Start"] = start
-            hf["rasterization_" + key].attrs["End"] = end
-            hf["rasterization_" + key].attrs["Duration"] = end - start
-            hf["rasterization_" + key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
+            if start is not None and end is not None:
+                hf["rasterization_" + key].attrs["Start"] = start
+                hf["rasterization_" + key].attrs["End"] = end
+                hf["rasterization_" + key].attrs["Duration"] = end - start
+                hf["rasterization_" + key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
 
+    def calculate_rasterization(self, cell_size, fake=False):
+        key = "%.2f" % cell_size
+        if fake: key = "fake_" + key
+
+        # Check if cell size is already calculated
+        if key in self.contains_bins.keys() and self.contains_bins[key]:
+            return self["bins_" + key]
+        
+        grid, shape = self._calculate_grid(cell_size, fake=fake)
+
+        rf_factor = self.receptive_field[0] / self.image_size
+
+        logger.info("%i bins in x and %i bins in y direction (with cell size %.2f)" % (shape + (cell_size,)))
+
+        start = time.time()
+        
+        # Get the corresponding bin for every feature
+        Parallel(n_jobs=2, prefer="threads")(
+            delayed(self._bin)(i, grid, shape, rf_factor, key, fake) for i in tqdm(range(self.shape[0]), desc="Calculating bins", file=sys.stderr))
+
+        end = time.time()
+
+        self._save_rasterization(key, grid, shape, start, end)
+        
         self.contains_bins[key] = True
         self.rasterizations[key] = np.vectorize(lambda b: b.patches, otypes=[object])(self.rasterizations[key])
 
         return shape
 
-    def get_extent(self, cell_size=None):
+    def get_extent(self, cell_size=None, fake=False):
         """Calculates the extent of the features
         
         Args:
@@ -469,13 +475,16 @@ class PatchArray(np.recarray):
         Returns:
             Tuple (x_min, y_min, x_max, y_max)
         """
+        key = "locations"
+        if fake: key = "fake_" + key
+
         assert self.contains_locations, "Can only compute extent if there are patch locations"
         
         # Get the extent
-        x_min = min(self.locations.tl.x.min(), self.locations.tr.x.min(), self.locations.br.x.min(), self.locations.bl.x.min())
-        y_min = min(self.locations.tl.y.min(), self.locations.tr.y.min(), self.locations.br.y.min(), self.locations.bl.y.min())
-        x_max = max(self.locations.tl.x.max(), self.locations.tr.x.max(), self.locations.br.x.max(), self.locations.bl.x.max())
-        y_max = max(self.locations.tl.y.max(), self.locations.tr.y.max(), self.locations.br.y.max(), self.locations.bl.y.max())
+        x_min = min(self[key].tl.x.min(), self[key].tr.x.min(), self[key].br.x.min(), self[key].bl.x.min())
+        y_min = min(self[key].tl.y.min(), self[key].tr.y.min(), self[key].br.y.min(), self[key].bl.y.min())
+        x_max = max(self[key].tl.x.max(), self[key].tr.x.max(), self[key].br.x.max(), self[key].bl.x.max())
+        y_max = max(self[key].tl.y.max(), self[key].tr.y.max(), self[key].br.y.max(), self[key].bl.y.max())
         
         # Increase the extent to fit the cell size
         if cell_size is not None:
@@ -518,51 +527,72 @@ class PatchArray(np.recarray):
         
         return (tl, tr, br, bl)
 
-    def calculate_patch_locations(self):
-        """Calculate the real world coordinates of every feature"""
-
-        assert self.contains_features, "Can only compute patch locations if there are patches"
-
-        start = time.time()
-        ilu = ImageLocationUtility()
-
-        logger.info("Calculating locations of every patch")
+    #################
+    #   Locations   #
+    #################
+    
+    def _get_receptive_fields(self, fake=False):
+        """ Get the receptive fields for each patch (in image coordinates) """
         n, h, w = self.locations.shape
         
         image_locations = np.zeros((h, w, 4, 2), dtype=np.float32)
         
         for (y, x) in np.ndindex((h, w)):
-            rf = self.calculate_receptive_field(y + 0.5, x + 0.5, fake=consts.FAKE_RF)
+            rf = self.calculate_receptive_field(y + 0.5, x + 0.5, fake=fake)
             image_locations[y, x, 0] = rf[0]
             image_locations[y, x, 1] = rf[1]
             image_locations[y, x, 2] = rf[2]
             image_locations[y, x, 3] = rf[3]
         
-        relative_locations = ilu.image_to_relative(image_locations, image_width=self.image_size, image_height=self.image_size)         # (h, w, 4, 2)
-        
-        for i in tqdm(range(n), desc="Calculating locations", file=sys.stderr):
-            res = ilu.relative_to_absolute(relative_locations, self[i, 0, 0].camera_locations)
-            res = np.rec.fromarrays(res.transpose(), dtype=[("y", np.float32), ("x", np.float32)]).transpose()
-            res = np.rec.fromarrays(res.transpose(), dtype=self.locations.dtype) # No transpose here smh
-            self.locations[i] = res
-        
-        self.contains_locations = True
-        end = time.time()
+        return image_locations
 
+    def _image_to_relative(self, image_locations):
+        return self._ilu.image_to_relative(image_locations, image_width=self.image_size, image_height=self.image_size)         # (h, w, 4, 2)
+    
+    def _relative_to_absolute(self, relative_locations, camera_locations):
+        res = self._ilu.relative_to_absolute(relative_locations, camera_locations)
+        res = np.rec.fromarrays(res.transpose(), dtype=[("y", np.float32), ("x", np.float32)]).transpose()
+        return np.rec.fromarrays(res.transpose(), dtype=self.locations.dtype) # No transpose here smh
+
+    def _save_patch_locations(self, fake=False, start=None, end=None):
         key = "locations"
-        if consts.FAKE_RF: key = "fake_" + key
+        if fake: key = "fake_" + key
 
         with h5py.File(self.filename, "r+") as hf:
             # Remove the old locations dataset
             if key in hf.keys():
                 del hf[key]
             
-            hf.create_dataset(key, data=self.locations)
+            hf.create_dataset(key, data=self[key])
             
-            hf[key].attrs["Start"] = start
-            hf[key].attrs["End"] = end
-            hf[key].attrs["Duration"] = end - start
-            hf[key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
+            if start is not None and end is not None:
+                hf[key].attrs["Start"] = start
+                hf[key].attrs["End"] = end
+                hf[key].attrs["Duration"] = end - start
+                hf[key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
+
+    def calculate_patch_locations(self, fake=False):
+        """Calculate the real world coordinates of every feature"""
+        key = "locations"
+        if fake: key = "fake_" + key
+
+        assert self.contains_features, "Can only compute patch locations if there are patches"
+
+        logger.info("Calculating locations of every patch")
+        
+        start = time.time()
+        image_locations = self._get_receptive_fields(fake)
+        
+        relative_locations = self._to_relative(image_locations)
+        
+        for i in tqdm(range(self[key].shape[0]), desc="Calculating locations", file=sys.stderr):
+            self[key][i] = self._relative_to_absolute(relative_locations, self[i, 0, 0].camera_locations)
+
+        end = time.time()
+
+        self.contains_locations = True
+
+        self._save_patch_locations(fake, start, end)
 
     #################
     # Calculations  #

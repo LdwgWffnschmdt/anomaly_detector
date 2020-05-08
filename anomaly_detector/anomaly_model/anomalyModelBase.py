@@ -103,29 +103,7 @@ class AnomalyModelBase(object):
 
         end = time.time()
 
-        logger.info("Writing model to: %s" % self.patches.filename)
-        with h5py.File(self.patches.filename, "a") as hf:
-            g = hf.get(self.NAME)
-
-            if g is not None:
-                del hf[self.NAME]
-            
-            g = hf.create_group(self.NAME)
-
-            # Add metadata to the output file
-            g.attrs["Number of features used"]   = model_input.size
-
-            computer_info = utils.getComputerInfo()
-            for key, value in computer_info.items():
-                g.attrs[key] = value
-
-            g.attrs["Start"] = start
-            g.attrs["End"] = end
-            g.attrs["Duration"] = end - start
-            g.attrs["Duration (formatted)"] = utils.format_duration(end - start)
-
-            self.__save_model_to_file__(g)
-        logger.info("Successfully written model to: %s" % self.patches.filename)
+        self.save_to_file(model_input.size, start, end)
 
         self.calculate_mahalanobis_distances()
 
@@ -143,6 +121,33 @@ class AnomalyModelBase(object):
                 return (False, False)
             else:
                 return (True, "mahalanobis_distances" in g.keys())
+
+    def save_to_file(self, num_features=0, start=None, end=None):
+        logger.info("Writing model to: %s" % self.patches.filename)
+        with h5py.File(self.patches.filename, "a") as hf:
+            g = hf.get(self.NAME)
+
+            if g is not None:
+                del hf[self.NAME]
+            
+            g = hf.create_group(self.NAME)
+
+            # Add metadata to the output file
+            g.attrs["Number of features used"] = num_features
+
+            computer_info = utils.getComputerInfo()
+            for key, value in computer_info.items():
+                g.attrs[key] = value
+
+            if start is not None and end is not None:
+                g.attrs["Start"] = start
+                g.attrs["End"] = end
+                g.attrs["Duration"] = end - start
+                g.attrs["Duration (formatted)"] = utils.format_duration(end - start)
+
+            self.__save_model_to_file__(g)
+        logger.info("Successfully written model to: %s" % self.patches.filename)
+
 
     def load_from_file(self, model_file, load_patches=False):
         """ Load a model from file """
@@ -177,8 +182,8 @@ class AnomalyModelBase(object):
 
             if g.get("mahalanobis_distances") is not None: del g["mahalanobis_distances"]
             m = g.create_dataset("mahalanobis_distances", data=maha)
-            m.attrs["max_no_anomaly"] = np.nanmax(no_anomaly)
-            m.attrs["max_anomaly"]    = np.nanmax(anomaly)
+            m.attrs["max_no_anomaly"] = np.nanmax(no_anomaly) if no_anomaly.size > 0 else np.NaN
+            m.attrs["max_anomaly"]    = np.nanmax(anomaly) if anomaly.size > 0 else np.NaN
 
             # hist1, bins = np.histogram(no_anomaly, bins="fd")
             # m.attrs["histogram_no_anomaly"] = hist1

@@ -65,7 +65,7 @@ def extract_features():
     p = patches[:, 0, 0]
 
     ## WZL:
-    patches = patches.training_and_validation
+    patches = patches.training_and_validation.benchmark
 
     ## FieldSAFE:
     # f = p.round_numbers == 1

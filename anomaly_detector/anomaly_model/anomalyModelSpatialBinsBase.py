@@ -15,7 +15,7 @@ import consts
 
 class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     """ Base for anomaly models that create one model per spatial bin (grid cell) """
-    def __init__(self, create_anomaly_model_func, cell_size=0.2):
+    def __init__(self, create_anomaly_model_func, cell_size=0.2, fake=False):
         """ Create a new spatial bin anomaly model
 
         Args:
@@ -25,8 +25,9 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         AnomalyModelBase.__init__(self)
         self.CELL_SIZE = cell_size
         self.KEY = "%.2f" % self.CELL_SIZE
-        if consts.FAKE_RF: self.KEY = "fake_" + self.KEY
+        if fake: self.KEY = "fake_" + self.KEY
         self.CREATE_ANOMALY_MODEL_FUNC = create_anomaly_model_func
+        self.FAKE = fake
         
         m = create_anomaly_model_func()
         self.NAME = "SpatialBin/%s/%s" % (m.__class__.__name__.replace("AnomalyModel", ""), self.KEY)
@@ -62,7 +63,7 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         
         # Check if cell size rasterization is already calculated
         if not self.KEY in patches.contains_bins.keys() or not patches.contains_bins[self.KEY]:
-            patches.calculate_rasterization(self.CELL_SIZE)
+            patches.calculate_rasterization(self.CELL_SIZE, self.FAKE)
         
         patches_flat = patches.ravel()
         
