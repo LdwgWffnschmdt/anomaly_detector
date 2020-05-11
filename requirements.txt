@@ -15,6 +15,10 @@ XlsxWriter
 
 opencv-python
 scikit-image
+scikit-learn
 pillow
+seaborn
+
+joblib
 
 git+https://github.com/LdwgWffnschmdt/efficientnet.git

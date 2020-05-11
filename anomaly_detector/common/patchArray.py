@@ -6,7 +6,6 @@ import shutil
 from glob import glob
 from cachetools import cached, Cache, LRUCache
 from datetime import datetime
-from pathos.multiprocessing import ProcessingPool as Pool
 
 import numpy as np
 import numpy.lib.recfunctions
