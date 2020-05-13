@@ -14,6 +14,41 @@ import cv2
 from tqdm import tqdm
 from glob import glob
 
+
+
+from scipy.ndimage.filters import correlate1d, _gaussian_kernel1d, _ni_support
+
+def gaussian_filter(input, sigma, order=0, output=None,
+                    mode="reflect", cval=0.0, truncate=4.0):
+    input = np.asarray(input)
+    output = _ni_support._get_output(output, input)
+    orders = _ni_support._normalize_sequence(order, input.ndim)
+    sigmas = _ni_support._normalize_sequence(sigma, input.ndim)
+    modes = _ni_support._normalize_sequence(mode, input.ndim)
+    axes = list(range(input.ndim))
+    axes = [(axes[ii], sigmas[ii], orders[ii], modes[ii])
+            for ii in range(len(axes)) if sigmas[ii] > 1e-15]
+    if len(axes) > 0:
+        for axis, sigma, order, mode in axes:
+            sd = float(sigma)
+            # make the radius of the filter equal to truncate standard deviations
+            lw = int(truncate * sd + 0.5)
+            # Since we are calling correlate, not convolve, revert the kernel
+            weights = _gaussian_kernel1d(sigma, order, lw)[::-1]
+
+            if input.ndim == 3 and axis == 0:
+                weights[weights.size // 2 + 1:] = 0
+
+            correlate1d(input, weights, axis, output, mode, cval, 0)
+            input = output
+    else:
+        output[...] = input[...]
+    return output
+
+
+
+
+
 ###############
 #  Images IO  #
 ###############
