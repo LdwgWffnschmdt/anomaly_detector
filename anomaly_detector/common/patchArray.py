@@ -734,14 +734,14 @@ class PatchArray(np.recarray):
         # (Name, ROC_AUC, AUC_PR, f1)
         results = list()
 
-        val = self.validation
-
         extractor = os.path.basename(self.filename).replace(".h5", "")
 
         gauss_filters = [None, (1,1,1), (2,2,2), (0,1,1), (0,2,2), (1,0,0), (2,0,0), (1,2,2), (2,1,1)]
         other_filters = [None, "erosion", "dilation"]
 
         for measure, v in self.METRICS.items():
+            val = self.validation[v[0](self.validation) != 0]
+            labels = v[0](val)
             for other_filter in other_filters:
                 for gauss_filter in gauss_filters:
                     # Don't compute gauss filters (in image space) for per frame measures (they take the average anyways)
@@ -751,7 +751,6 @@ class PatchArray(np.recarray):
                     title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, measure, gauss_filter, other_filter)
                     logger.info("Calculating %s" % title)
                     
-                    labels = v[0](val)
                     scores = dict()
                     for n in sorted(self.mahalanobis_distances.dtype.names):
                         name = n.replace("fake", "simple")
