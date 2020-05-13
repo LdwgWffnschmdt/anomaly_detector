@@ -3,6 +3,7 @@ import time
 import sys
 import ast
 import shutil
+import traceback
 from glob import glob
 from cachetools import cached, Cache, LRUCache
 from datetime import datetime
@@ -336,6 +337,7 @@ class PatchArray(np.recarray):
     def save_metadata(self, filename=None):
         if filename is None:
             filename = os.path.join(self.images_path, "metadata_cache.h5")
+        try:
         if os.path.exists(filename):
             shutil.copyfile(filename, "%s_backup_%s" % (filename, datetime.now().strftime("%d_%m_%Y_%H_%M_%S")))
         with h5py.File(filename, "r+") as hf:
@@ -345,8 +347,13 @@ class PatchArray(np.recarray):
             for index, frame in zip(indices, self.metadata_changed[:, 0, 0]):
                 hf["camera_locations"][index] = frame.camera_locations
                 hf["labels"][index]           = frame.labels
+                    hf["stop"][index]             = frame.stop
                 hf["directions"][index]       = frame.directions
                 hf["round_numbers"][index]    = frame.round_numbers
+            return True
+        except:
+            logger.error(traceback.format_exc())
+            return False
 
     #################
     # Spatial stuff #
