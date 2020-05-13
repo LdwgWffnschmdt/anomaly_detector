@@ -76,7 +76,7 @@ def metrics():
         if write_header:
             writer.writeheader()
         
-        with tqdm(total=len(files), file=sys.stderr, desc="Benchmarking anomaly models") as pbar:
+        with tqdm(total=len(files), file=sys.stderr, desc="Calculating metrics") as pbar:
             for features_file in files:
 
                 pbar.set_description(os.path.basename(features_file))

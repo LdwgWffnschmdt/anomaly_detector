@@ -744,10 +744,14 @@ class PatchArray(np.recarray):
         for measure, v in self.METRICS.items():
             for other_filter in other_filters:
                 for gauss_filter in gauss_filters:
+                    # Don't compute gauss filters (in image space) for per frame measures (they take the average anyways)
+                    if measure != "per patch" and gauss_filter != None and gauss_filter[1] > 0:
+                        continue
+
                     title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, measure, gauss_filter, other_filter)
                     logger.info("Calculating %s" % title)
                     
-                    labels = v[0](self)
+                    labels = v[0](val)
                     scores = dict()
                     for n in sorted(self.mahalanobis_distances.dtype.names):
                         name = n.replace("fake", "simple")
