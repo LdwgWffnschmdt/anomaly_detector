@@ -21,7 +21,7 @@ from shapely.strtree import STRtree
 from shapely.geometry import Polygon, box
 from shapely.prepared import prep
 
-from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage.morphology import generate_binary_structure, grey_erosion, grey_dilation
 from sklearn import metrics
 from sklearn.manifold import TSNE
 import seaborn as sns
@@ -338,18 +338,18 @@ class PatchArray(np.recarray):
         if filename is None:
             filename = os.path.join(self.images_path, "metadata_cache.h5")
         try:
-        if os.path.exists(filename):
-            shutil.copyfile(filename, "%s_backup_%s" % (filename, datetime.now().strftime("%d_%m_%Y_%H_%M_%S")))
-        with h5py.File(filename, "r+") as hf:
-            hf.attrs["Last changed"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
+            if os.path.exists(filename):
+                shutil.copyfile(filename, "%s_backup_%s" % (filename, datetime.now().strftime("%d_%m_%Y_%H_%M_%S")))
+            with h5py.File(filename, "r+") as hf:
+                hf.attrs["Last changed"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
 
-            indices = np.argwhere(np.isin(hf["times"], self.metadata_changed[:, 0, 0].times))
-            for index, frame in zip(indices, self.metadata_changed[:, 0, 0]):
-                hf["camera_locations"][index] = frame.camera_locations
-                hf["labels"][index]           = frame.labels
+                indices = np.argwhere(np.isin(hf["times"], self.metadata_changed[:, 0, 0].times))
+                for index, frame in zip(indices, self.metadata_changed[:, 0, 0]):
+                    hf["camera_locations"][index] = frame.camera_locations
+                    hf["labels"][index]           = frame.labels
                     hf["stop"][index]             = frame.stop
-                hf["directions"][index]       = frame.directions
-                hf["round_numbers"][index]    = frame.round_numbers
+                    hf["directions"][index]       = frame.directions
+                    hf["round_numbers"][index]    = frame.round_numbers
             return True
         except:
             logger.error(traceback.format_exc())
@@ -658,6 +658,26 @@ class PatchArray(np.recarray):
             output_shapes=((None, None, None, None), ()))
 
         return raw_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    
+    #################
+    #    Metrics    #
+    #################
+    
+    # def _get_stop_labels(self):
+    #     slack = 5
+    #     labels = self.stop[:,0,0].copy()
+    #     f = labels == 2
+    #     for i, b in enumerate(labels):
+    #         if b and i + slack < labels.size:
+    #             labels[i:i + slack] = 0
+    #     labels[f] = 2
+
+    METRICS = {
+        "per patch": (lambda self: self.patch_labels.ravel(), lambda md: md.ravel()),
+        # "per frame (max)": (lambda self: self.labels[:,0,0], lambda md: np.max(md, axis=(1,2))),
+        "per frame (sum)": (lambda self: self.labels[:,0,0], lambda md: np.sum(md, axis=(1,2))),
+        "per frame (stop)": (lambda self: self.stop[:,0,0], lambda md: np.sum(md, axis=(1,2)))
+    }
 
     def calculate_tsne(self):
         assert self.contains_mahalanobis_distances, "Can't calculate t-SNE without mahalanobis distances calculated"
@@ -718,32 +738,42 @@ class PatchArray(np.recarray):
 
         extractor = os.path.basename(self.filename).replace(".h5", "")
 
-        ### Filter: None / Gauss (1,1,1) / Gauss (2,2,2) / Gauss (0,1,1) / Gauss (0,2,2)
-        filters = [None, (1,1,1), (2,2,2), (0,1,1), (0,2,2), (1,0,0), (2,0,0)]
-        variations = {
-            "per patch": (val.patch_labels.ravel(), lambda md: md.ravel()),
-            "per frame (max)": (val.labels[:,0,0], lambda md: np.max(md, axis=(1,2))),
-            "per frame (sum)": (val.labels[:,0,0], lambda md: np.sum(md, axis=(1,2)))
-        }
-        
-        for measure, v in variations.items():
-            for f in filters:
-                title = "Metrics for %s (%s, filter:%s)" % (extractor, measure, f)
-                logger.info("Calculating %s" % title)
-                
-                labels = v[0]
-                scores = dict()
-                for n in sorted(self.mahalanobis_distances.dtype.names):
-                    name = n.replace("fake", "simple")
-                    if f is not None:
-                        scores[name] = v[1](gaussian_filter(val.mahalanobis_distances[n], sigma=f))
-                    else:
-                        scores[name] = v[1](val.mahalanobis_distances[n])
+        gauss_filters = [None, (1,1,1), (2,2,2), (0,1,1), (0,2,2), (1,0,0), (2,0,0), (1,2,2), (2,1,1)]
+        other_filters = [None, "erosion", "dilation"]
 
-                filename = os.path.join(consts.METRICS_PATH, "%s_%s_%s.jpg" % (extractor, measure, f))
-                result = self.calculate_roc(title, labels, scores, filename)
-                for model, roc_auc, auc_pr, max_f1 in result:
-                    results.append((extractor, measure, model, f, roc_auc, auc_pr, max_f1))
+        for measure, v in self.METRICS.items():
+            for other_filter in other_filters:
+                for gauss_filter in gauss_filters:
+                    title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, measure, gauss_filter, other_filter)
+                    logger.info("Calculating %s" % title)
+                    
+                    labels = v[0](self)
+                    scores = dict()
+                    for n in sorted(self.mahalanobis_distances.dtype.names):
+                        name = n.replace("fake", "simple")
+
+                        maha = val.mahalanobis_distances[n]
+
+                        if gauss_filter is not None:
+                            maha = utils.gaussian_filter(maha, sigma=gauss_filter)
+                        
+                        if other_filter is not None:
+                            struct = generate_binary_structure(2, 1)
+                            if struct.ndim == 2:
+                                z = np.zeros_like(struct, dtype=np.bool)
+                                struct = np.stack((z, struct, z))
+                            
+                            if other_filter == "erosion":
+                                maha = grey_erosion(maha, structure=struct)
+                            elif other_filter == "dilation":
+                                maha = grey_dilation(maha, structure=struct)
+
+                        scores[name] = v[1](maha)
+                        
+                    filename = os.path.join(consts.METRICS_PATH, "%s_%s_%s_%s.jpg" % (extractor, measure, gauss_filter, other_filter))
+                    result = self.calculate_roc(title, labels, scores, filename)
+                    for model, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5 in result:
+                        results.append((extractor, measure, model, gauss_filter, other_filter, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5))
         
         return results
 
@@ -772,6 +802,8 @@ class PatchArray(np.recarray):
 
         ax[1].plot([0, 1], [no_skill, no_skill], color="navy", lw=lw, linestyle="--")
         
+        tprs = [0.9, 0.95, 0.99, 0.995, 0.999, 0.9999]
+
         # with h5py.File(self.filename, "r+") as hf:
         for name, score in scores.items():
             fpr, tpr, thresholds_roc = metrics.roc_curve(labels, score, pos_label=2)
@@ -790,7 +822,9 @@ class PatchArray(np.recarray):
             ax[1].plot(recall, precision, lw=lw, color=l[0]._color)
             ax[1].plot(recall[max_f1_index], precision[max_f1_index], marker='o', markersize=5, color=l[0]._color)
 
-            results.append((name, roc_auc, auc_pr, max_f1))
+            fprs = tuple([fpr[(np.abs(tpr - t)).argmin()] for t in tprs])
+
+            results.append((name, roc_auc, auc_pr, max_f1) + fprs)
             # ax[2].plot(f1, lw=lw)
                 # hf[n].attrs["ROC_AUC"] = roc_auc
                 # hf[n].attrs["AUC_PR"] = auc_pr
