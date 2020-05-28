@@ -49,7 +49,7 @@ def metrics():
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
     if args.output is None:
-        filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), datetime.now().strftime("%Y_%m_%d_%H_%M_metrics.csv"))
+        filename = os.path.join(consts.METRICS_PATH, datetime.now().strftime("%Y_%m_%d_%H_%M_metrics.csv"))
     else:
         filename = args.output
     

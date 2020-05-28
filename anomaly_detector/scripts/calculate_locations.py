@@ -48,7 +48,7 @@ def calculate_locations():
         files_expanded += glob(s)
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
-    # files = filter(lambda f: f.endswith("C3D.h5"), files)
+    # files = filter(lambda f: f.endswith("VGG16.h5"), files)
 
     if args.index is not None:
         files = files[args.index::args.total]
@@ -66,12 +66,12 @@ def calculate_locations():
                 # Load the file
                 patches = PatchArray(features_file)
 
-                patches.calculate_patch_labels()
+                # patches.calculate_patch_labels()
 
                 models = [AnomalyModelSVG()]
 
                 # Calculate and save the locations
-                for fake in [True, False]:
+                for fake in [False]:
                     patches.calculate_patch_locations(fake=fake)
                     for cell_size in [0.2, 0.5]:
                         patches.calculate_rasterization(cell_size, fake=fake)
@@ -83,6 +83,8 @@ def calculate_locations():
                 if patches.contains_mahalanobis_distances and "SVG" in patches.mahalanobis_distances.dtype.names:
                     threshold_learning = int(np.mean(patches.mahalanobis_distances["SVG"]))
                     models.append(AnomalyModelBalancedDistributionSVG(initial_normal_features=500, threshold_learning=threshold_learning, pruning_parameter=0.5))
+
+                # models = [AnomalyModelBalancedDistributionSVG(initial_normal_features=500, threshold_learning=27, pruning_parameter=0.3)]
 
                 with tqdm(total=len(models), file=sys.stderr) as pbar2:
                     for m in models:
@@ -108,9 +110,9 @@ def calculate_locations():
                             logger.error("%s: %s" % (features_file, traceback.format_exc()))
                         pbar2.update()
                 
-                if patches.contains_mahalanobis_distances:
+                # if patches.contains_mahalanobis_distances:
                     # patches.calculate_tsne()
-                    metrics.extend(patches.calculate_metrics())
+                    # metrics.extend(patches.calculate_metrics())
 
             except (KeyboardInterrupt, SystemExit):
                 raise
@@ -118,11 +120,23 @@ def calculate_locations():
                 logger.error("%s: %s" % (features_file, traceback.format_exc()))
             pbar.update()
 
-
-        print("%-30s | %-15s | %-40s | %-10s | %-10s | %-10s | %-10s" % ("EXTRACTOR", "MEASURE", "MODEL", "FILTER", "ROC_AUC", "AUC_PR", "Max. f1"))
-        print("-" * 100)
-        for m in metrics:
-            print("%-30s | %-15s | %-40s | %-10s | %.8f | %.8f | %.8f" % m)
+        # print(["Extractor",
+        #     "Measure",
+        #     "Model",
+        #     "Gaussian filter",
+        #     "Other filter",
+        #     "ROC_AUC",
+        #     "AUC_PR",
+        #     "Max. f1",
+        #     "FPR at TPR=0.9",
+        #     "FPR at TPR=0.95",
+        #     "FPR at TPR=0.99",
+        #     "FPR at TPR=0.995",
+        #     "FPR at TPR=0.999",
+        #     "FPR at TPR=0.9999"], sep = ",")  
+        
+        # for m in metrics:
+        #     print(*m, sep=",")
 
 if __name__ == "__main__":
     calculate_locations()

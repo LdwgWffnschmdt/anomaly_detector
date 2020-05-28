@@ -276,6 +276,10 @@ class PatchArray(np.recarray):
     no_anomaly      = property(lambda self: self[self.labels[:, 0, 0] == 1] if self.ndim == 3 else self[self.labels[:] == 1])
     anomaly         = property(lambda self: self[self.labels[:, 0, 0] == 2] if self.ndim == 3 else self[self.labels[:] == 2])
     
+    stop_ok   = property(lambda self: self[self.stop[:, 0, 0] == 0] if self.ndim == 3 else self[self.stop[:] == 0])
+    stop_dont = property(lambda self: self[self.stop[:, 0, 0] == 1] if self.ndim == 3 else self[self.stop[:] == 1])
+    stop_do   = property(lambda self: self[self.stop[:, 0, 0] == 2] if self.ndim == 3 else self[self.stop[:] == 2])
+    
     direction_unknown = property(lambda self: self[self.directions[:, 0, 0] == 0] if self.ndim == 3 else self[self.directions[:] == 0])
     direction_ccw     = property(lambda self: self[self.directions[:, 0, 0] == 1] if self.ndim == 3 else self[self.directions[:] == 1])
     direction_cw      = property(lambda self: self[self.directions[:, 0, 0] == 2] if self.ndim == 3 else self[self.directions[:] == 2])
@@ -288,28 +292,42 @@ class PatchArray(np.recarray):
             return self[self.round_numbers[:] == round_number]
 
     
+    # @property
+    # def training_and_validation(self):
+    #     """ Subset of training and validation frames (FOR COMPARING ALL EXTRACTORS AND MODELS) """
+    #     p = self.root[::6, 0, 0]
+
+    #     f = np.zeros(p.shape, dtype=np.bool)
+    #     f[:] = np.logical_and(p.directions == 1,                                   # CCW and
+    #                           np.logical_or(p.labels == 2,                         #   Anomaly or
+    #                                         np.logical_and(p.round_numbers >= 7,   #     Round between 7 and 9
+    #                                                         p.round_numbers <= 7)))
+
+        
+    #     f[:] = np.logical_and(f[:], np.logical_and(p.camera_locations.translation.x > 20,
+    #                         np.logical_and(p.camera_locations.translation.x < 25,
+    #                         np.sqrt((p.camera_locations.rotation.z - (np.pi / 2)) ** 2) < 0.15)))
+
+    #     # Let's make contiguous blocks of at least 10, so
+    #     # we can do some meaningful temporal smoothing afterwards
+    #     for i, b in enumerate(f):
+    #         if b and i - 20 >= 0:
+    #             f[i - 20:i] = True
+        
+    #     return self.root[::6,...][f]
+
     @property
     def training_and_validation(self):
-        p = self.root[0::6, 0, 0]
+        """ Subset of training and validation frames (FOR CHECKING THE BEST EXTRACTORS AND MODELS) """
+        p = self.root[..., 0, 0]
 
         f = np.zeros(p.shape, dtype=np.bool)
-        f[:] = np.logical_and(p.directions == 1,                                   # CCW and
-                            np.logical_or(p.labels == 2,                         #   Anomaly or
-                                            np.logical_and(p.round_numbers >= 7,   #     Round between 7 and 9
-                                                            p.round_numbers <= 7)))
+        f[::6] = True
+        f[:] = np.logical_or(np.logical_and(f, p.labels != 0), p.labels == 2)
 
-        
-        f[:] = np.logical_and(f[:], np.logical_and(p.camera_locations.translation.x > 20,
-                            np.logical_and(p.camera_locations.translation.x < 25,
-                            np.sqrt((p.camera_locations.rotation.z - (np.pi / 2)) ** 2) < 0.15)))
+        f[:] = np.logical_and(f[:], np.sqrt((p.camera_locations.rotation.z + (np.pi / 2)) ** 2) < 0.15)
 
-        # Let's make contiguous blocks of at least 10, so
-        # we can do some meaningful temporal smoothing afterwards
-        for i, b in enumerate(f):
-            if b and i - 20 >= 0:
-                f[i - 20:i] = True
-        
-        return self.root[0::6,...][f]
+        return self.root[f]
 
     @property
     def training(self):
@@ -324,9 +342,9 @@ class PatchArray(np.recarray):
     def validation(self):
         round_number = 7
         if self.ndim == 3:
-            return self[self.round_numbers[:, 0, 0] != round_number]
+            return self[self.round_numbers[:, 0, 0] != round_number].direction_ccw
         else:
-            return self[self.round_numbers[:] != round_number]
+            return self[self.round_numbers[:] != round_number].direction_ccw
 
     @property
     def benchmark(self):
@@ -589,7 +607,7 @@ class PatchArray(np.recarray):
         start = time.time()
         image_locations = self._get_receptive_fields(fake)
         
-        relative_locations = self._to_relative(image_locations)
+        relative_locations = self._image_to_relative(image_locations)
         
         for i in tqdm(range(self[key].shape[0]), desc="Calculating locations", file=sys.stderr):
             self[key][i] = self._relative_to_absolute(relative_locations, self[i, 0, 0].camera_locations)
@@ -673,10 +691,11 @@ class PatchArray(np.recarray):
     #     labels[f] = 2
 
     METRICS = {
-        "per patch": (lambda self: self.patch_labels.ravel(), lambda md: md.ravel()),
-        # "per frame (max)": (lambda self: self.labels[:,0,0], lambda md: np.max(md, axis=(1,2))),
-        "per frame (sum)": (lambda self: self.labels[:,0,0], lambda md: np.sum(md, axis=(1,2))),
-        "per frame (stop)": (lambda self: self.stop[:,0,0], lambda md: np.sum(md, axis=(1,2)))
+        # "patch": (lambda self: self.patch_labels.ravel(), lambda md: md.ravel()),
+        "frame (max)": (lambda self: self.labels[:,0,0], lambda md: np.max(md, axis=(1,2))),
+        "frame (sum)": (lambda self: self.labels[:,0,0], lambda md: np.sum(md, axis=(1,2)), -1),
+        "stop (sum)": (lambda self: self.stop[:,0,0], lambda md: np.sum(md, axis=(1,2)), -1),
+        "stop (max)": (lambda self: self.stop[:,0,0], lambda md: np.max(md, axis=(1,2)), -1)
     }
 
     def calculate_tsne(self):
@@ -736,7 +755,11 @@ class PatchArray(np.recarray):
 
         extractor = os.path.basename(self.filename).replace(".h5", "")
 
-        gauss_filters = [None, (1,1,1), (2,2,2), (0,1,1), (0,2,2), (1,0,0), (2,0,0), (1,2,2), (2,1,1)]
+        gauss_filters = [None,    (0,1,1), (0,2,2),
+                         (1,0,0), (1,1,1), (1,2,2)]
+        # gauss_filters = [None,    (0,1,1), (0,2,2), (0,3,3),
+        #                  (1,0,0), (1,1,1), (1,2,2), (1,3,3),
+        #                  (2,0,0), (2,1,1), (2,2,2), (2,3,3)]
         other_filters = [None, "erosion", "dilation"]
 
         for measure, v in self.METRICS.items():
@@ -744,8 +767,8 @@ class PatchArray(np.recarray):
             labels = v[0](val)
             for other_filter in other_filters:
                 for gauss_filter in gauss_filters:
-                    # Don't compute gauss filters (in image space) for per frame measures (they take the average anyways)
-                    if measure != "per patch" and gauss_filter != None and gauss_filter[1] > 0:
+                    # Don't compute gauss filters (in image space) for per sum measures (they take the average anyways)
+                    if measure.endswith("(sum)") and gauss_filter != None and gauss_filter[1] > 0:
                         continue
 
                     title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, measure, gauss_filter, other_filter)
@@ -919,21 +942,21 @@ class PatchArray(np.recarray):
             hf.create_dataset("patch_labels", data=self.patch_labels)
 
 if __name__ == "__main__":
-    p = PatchArray(consts.FEATURES_FILE)
-    p.calculate_metrics()
+    # p = PatchArray(consts.FEATURES_FILE)
+    # p.calculate_metrics()
     # p.calculate_roc()
 
     # p.calculate_patch_labels()
 
     # p.calculate_rasterization(2.0)
 
-    # from common import Visualize
+    from common import Visualize
     # from scipy.misc import imresize
 
-    # patches = PatchArray().anomaly
+    p = PatchArray().training_and_validation
 
-    # vis = Visualize(p)
-    # vis.show()
+    vis = Visualize(p)
+    vis.show()
     # for p in patches:
     #     from feature_extractor.Models.C3D.sports1M_utils import preprocess_input_python
     #     b = preprocess_input_python(patches.get_batch(p.times[0, 0], 16))

@@ -181,7 +181,11 @@ class Visualize(object):
         
         if self.patches.contains_mahalanobis_distances:
             self._metrics_fig, self._metrics_ax1 = plt.subplots(1, 1)
+            self._metrics_ax1.set_yscale("log")
             # self._metrics_ax2 = self._metrics_ax1.twinx()
+
+            mng = plt.get_current_fig_manager()
+            mng.full_screen_toggle()
 
             self._histogram_fig, (self._histogram_ax1, self._histogram_ax2) = plt.subplots(2, 1, sharex=True)
 
@@ -190,7 +194,7 @@ class Visualize(object):
             
             self._histogram_fig.suptitle("Mahalanobis distances")
 
-            plt.ion()
+            # plt.ion()
             self._metrics_fig.show()
             self._histogram_fig.show()
         
@@ -208,7 +212,7 @@ class Visualize(object):
             self._absolute_locations = self._ilu.span_grid(self.extent[3] - self.extent[1], self.extent[2] - self.extent[0],
                                                                    offset_y=self.extent[1],         offset_x=self.extent[0])
 
-            plt.ion()
+            # plt.ion()
             self._map_fig.show()
         else:
             self.show_grid = False
@@ -237,6 +241,7 @@ class Visualize(object):
         self._image_shape = (1, 1, 3)
 
     def show(self):
+        """ Main function """
         self.mode = 0 # 0: don't edit, 1: single, 2: continuous
         self._label = -1
         self._direction = -1
@@ -339,7 +344,7 @@ class Visualize(object):
                 if self.mode == 2:
                     for i in indices:
                         if self._label != -1:
-                            self.patches[i, 0, 0].labels = self._label
+                            self.patches[i, 0, 0].stop = self._label
                         
                         if self._direction != -1:
                             self.patches[i, 0, 0].directions = self._direction
@@ -351,7 +356,7 @@ class Visualize(object):
                     if new_label == self._label:
                         new_label = -1
                     elif new_label != -1:
-                        self.patches[self.index, 0, 0].labels = new_label
+                        self.patches[self.index, 0, 0].stop = new_label
                     self._label = new_label
                     self.__draw__()
                     
@@ -438,18 +443,26 @@ class Visualize(object):
                     self.patches.mahalanobis_distances_filtered = utils.gaussian_filter(self.patches.mahalanobis_distances_filtered, sigma=sigma_2)
             
             # Add some statistics
-            threshold = float(cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA)) / 1000.0
+            threshold = float(cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA)) / 10000.0
 
-            cv2.putText(image,"                        TPR        FPR        Threshold", (10, 190), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+            cv2.putText(image, "                        TPR        FPR        Threshold", (10, 190), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
 
             self._metrics_ax1.clear()
             # self._metrics_ax2.clear()
 
+            self._metrics_ax1.set_yscale("log")
+            
             for i, (measure, v) in enumerate(PatchArray.METRICS.items()):
                 labels = v[0](self.patches)
                 scores = v[1](self.patches.mahalanobis_distances_filtered)
                 
-                thresh = np.max(scores) * threshold
+                if v[2] == -1:
+                    m = np.max(scores)
+                    PatchArray.METRICS[measure] = (v[0], v[1], m)
+                else:
+                    m = v[2]
+
+                thresh = m * threshold
 
                 negavites = scores[labels == 1]
                 positives = scores[labels == 2]
@@ -457,10 +470,10 @@ class Visualize(object):
                 false_negavites = np.count_nonzero(negavites >= thresh)
                 true_positives = np.count_nonzero(positives >= thresh)
 
-                tpr = true_positives / float(positives.size) * 100.0
-                fpr = false_negavites / float(negavites.size) * 100.0
+                tpr = true_positives / float(positives.size) * 100.0 if float(positives.size) > 0 else 0
+                fpr = false_negavites / float(negavites.size) * 100.0 if float(negavites.size) > 0 else 0
 
-                if i == cv2.getTrackbarPos("metric", self.WINDOWS_MAHA) + 1:
+                if measure != "per patch" and i == cv2.getTrackbarPos("metric", self.WINDOWS_MAHA):
                     self._labels = labels
                     self._scores = scores
                     self._thresh = thresh
@@ -514,9 +527,9 @@ class Visualize(object):
         b = 0#100 if patch in self.normal_distribution else 0
         g = 0
         r = 0
-        threshold = cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA) / 1000.0
+        threshold = cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA) / 10000.0
         if cv2.getTrackbarPos("show_thresh", self.WINDOWS_MAHA):
-            anomaly = patch.mahalanobis_distances_filtered > (np.max(self.patches.mahalanobis_distances_filtered) * threshold)
+            anomaly = patch.mahalanobis_distances_filtered > self._thresh
             if anomaly and patch.patch_labels == 2:         # Correct
                 g = 100
                 r = 0
@@ -529,7 +542,7 @@ class Visualize(object):
         elif threshold == 0:
             r = 0
         else:
-            r = min(255, int(patch.mahalanobis_distances_filtered * (255.0 / (np.max(self.patches.mahalanobis_distances_filtered) * threshold))))
+            r = min(255, int(patch.mahalanobis_distances_filtered * (255.0 / self._thresh)))
         return (b, g, r)
 
     def __default_patch_to_text__(self, patch):
@@ -561,7 +574,7 @@ class Visualize(object):
                     self.patch_to_text_func.append(self.__default_patch_to_text__)
                     self.pause_func.append(None)
                 
-                cv2.createTrackbar("threshold", self.WINDOWS_MAHA, 500, 1000, lambda x: self.__maha__(only_refresh_image=True))
+                cv2.createTrackbar("threshold", self.WINDOWS_MAHA, 5000, 10000, lambda x: self.__maha__(only_refresh_image=True))
                 cv2.createTrackbar("show_thresh", self.WINDOWS_MAHA, 1, 1, self.__draw__)
 
                 cv2.createTrackbar("0_gaussian_0", self.WINDOWS_MAHA, 0, 10, self.__maha__)
@@ -578,7 +591,7 @@ class Visualize(object):
                 cv2.createTrackbar("2_gaussian_1", self.WINDOWS_MAHA, 0, 10, self.__maha__)
                 cv2.createTrackbar("2_gaussian_2", self.WINDOWS_MAHA, 0, 10, self.__maha__)
                 
-                cv2.createTrackbar("metric", self.WINDOWS_MAHA, 0, 2, self.__maha__)
+                cv2.createTrackbar("metric", self.WINDOWS_MAHA, 0, 2, lambda x: self.__maha__(only_refresh_image=True))
                 cv2.createTrackbar("model", self.WINDOWS_MAHA, 0, len(self.patches.mahalanobis_distances.dtype.names), self.__model__)
 
             cv2.createTrackbar("optical_flow", self.WINDOWS_CONTROLS, 0, 1, self.__draw__)
@@ -587,6 +600,10 @@ class Visualize(object):
             cv2.setTrackbarMin("label", self.WINDOWS_CONTROLS, -1)
             cv2.setTrackbarPos("label", self.WINDOWS_CONTROLS, -1)
 
+            cv2.createTrackbar("stop_label", self.WINDOWS_CONTROLS, -1,  2, self.__change_frames__)
+            cv2.setTrackbarMin("stop_label", self.WINDOWS_CONTROLS, -1)
+            cv2.setTrackbarPos("stop_label", self.WINDOWS_CONTROLS, -1)
+
             cv2.createTrackbar("direction", self.WINDOWS_CONTROLS, -1,  2, self.__change_frames__)
             cv2.setTrackbarMin("direction", self.WINDOWS_CONTROLS, -1)
             cv2.setTrackbarPos("direction", self.WINDOWS_CONTROLS, -1)
@@ -594,6 +611,8 @@ class Visualize(object):
             cv2.createTrackbar("round_number", self.WINDOWS_CONTROLS, -1,  30, self.__change_frames__)
             cv2.setTrackbarMin("round_number", self.WINDOWS_CONTROLS, -1)
             cv2.setTrackbarPos("round_number", self.WINDOWS_CONTROLS, -1)
+
+            cv2.createTrackbar("error", self.WINDOWS_CONTROLS, 0,  2, self.__change_frames__)
 
             cv2.createTrackbar("delay", self.WINDOWS_CONTROLS, 1,  1000, self.__draw__)
             cv2.createTrackbar("skip",  self.WINDOWS_CONTROLS, 1,  1000, lambda x: None)
@@ -775,7 +794,7 @@ class Visualize(object):
             patch_size = (float(image.shape[0]) / float(frame.shape[0]),
                           float(image.shape[1]) / float(frame.shape[1]))
 
-            threshold = cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA) / 1000.0
+            threshold = cv2.getTrackbarPos("threshold", self.WINDOWS_MAHA) / 10000.0
             show_thresh = cv2.getTrackbarPos("show_thresh", self.WINDOWS_MAHA)
 
             for y, x in np.ndindex(frame.shape):
@@ -869,12 +888,17 @@ class Visualize(object):
         alpha = cv2.getTrackbarPos("overlay",self.WINDOWS_CONTROLS) / 100.0  # Transparency factor.
         image_new = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
 
+        cv2.ellipse(image_new, (320, 480), (280, 280), 0, 0, 360, (0,0,255), 3, lineType=cv2.LINE_AA)
+
         # Draw current label
         self.image_write_label(image_new, frame[0, 0])
         cv2.imshow(self.WINDOWS_IMAGE, image_new)
     
     def __model__(self, new_model_index=None):
         self.model_index = new_model_index
+        
+        for measure, v in PatchArray.METRICS.items():
+            PatchArray.METRICS[measure] = (v[0], v[1], -1)
         self.__maha__()
 
     def __index_update__(self, new_index=None):
@@ -885,16 +909,31 @@ class Visualize(object):
 
     def __change_frames__(self, *args):
         label        = cv2.getTrackbarPos("label", self.WINDOWS_CONTROLS)
+        stop_label   = cv2.getTrackbarPos("stop_label", self.WINDOWS_CONTROLS)
         direction    = cv2.getTrackbarPos("direction", self.WINDOWS_CONTROLS)
         round_number = cv2.getTrackbarPos("round_number", self.WINDOWS_CONTROLS)
+        error        = cv2.getTrackbarPos("error", self.WINDOWS_CONTROLS)
 
         self.patches = self.orig_patches
+
+        if error == 1:   # False positive
+            self.patches = self.patches[np.logical_and(self._labels == 1, self._scores >= self._thresh)]
+        elif error == 2: # False negative
+            self.patches = self.patches[np.logical_and(self._labels == 2, self._scores < self._thresh)]
+
         if label == 0:
             self.patches = self.patches.unknown_anomaly
         elif label == 1:
             self.patches = self.patches.no_anomaly
         elif label == 2:
             self.patches = self.patches.anomaly
+
+        if stop_label == 0:
+            self.patches = self.patches.stop_ok
+        elif stop_label == 1:
+            self.patches = self.patches.stop_dont
+        elif stop_label == 2:
+            self.patches = self.patches.stop_do
 
         if direction == 0:
             self.patches = self.patches.direction_unknown
@@ -908,6 +947,8 @@ class Visualize(object):
 
         cv2.setTrackbarPos("index", self.WINDOWS_CONTROLS, 0)
         cv2.setTrackbarMax("index", self.WINDOWS_CONTROLS, max(0, self.patches.shape[0] - 1))
+
+        self.__maha__(only_refresh_image=True)
 
         self.__draw__()
 
