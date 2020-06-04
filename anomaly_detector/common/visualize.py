@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+
 import matplotlib.pyplot as plt
 
 from scipy.ndimage.morphology import generate_binary_structure, grey_erosion, grey_dilation
@@ -27,12 +28,14 @@ class Visualize(object):
     }
 
     STOP_TEXTS = {
+        -1: "Not set",
         0: "It's OK to stop",
         1: "Don't stop",
         2: "STOP!"
     }
 
     STOP_COLORS = {
+        -1: (100, 100, 100),   # Not set
         0: (54//2, 67//2, 244//2),  # It's OK to stop
         1: (80, 175, 76),           # Don't stop
         2: (54, 67, 244)            # STOP!
@@ -184,8 +187,8 @@ class Visualize(object):
             self._metrics_ax1.set_yscale("log")
             # self._metrics_ax2 = self._metrics_ax1.twinx()
 
-            mng = plt.get_current_fig_manager()
-            mng.full_screen_toggle()
+            # mng = plt.get_current_fig_manager()
+            # mng.full_screen_toggle()
 
             self._histogram_fig, (self._histogram_ax1, self._histogram_ax2) = plt.subplots(2, 1, sharex=True)
 
@@ -194,7 +197,7 @@ class Visualize(object):
             
             self._histogram_fig.suptitle("Mahalanobis distances")
 
-            # plt.ion()
+            
             self._metrics_fig.show()
             self._histogram_fig.show()
         
@@ -212,11 +215,12 @@ class Visualize(object):
             self._absolute_locations = self._ilu.span_grid(self.extent[3] - self.extent[1], self.extent[2] - self.extent[0],
                                                                    offset_y=self.extent[1],         offset_x=self.extent[0])
 
-            # plt.ion()
             self._map_fig.show()
         else:
             self.show_grid = False
             self.show_map = False
+
+        plt.ion()
 
         self._prev_gray = None
         self._cur_glitch = None
@@ -250,11 +254,16 @@ class Visualize(object):
         self._exiting = False
         self._mouse_down = False
 
+
         self.__setup_window__()
         self.__draw__()
+        plt.show()#block=False)
 
         while True:
-            key = cv2.waitKey(0 if self.pause else cv2.getTrackbarPos("delay", self.WINDOWS_CONTROLS))
+            # plt.draw()
+            plt.pause(0.001)
+
+            key = cv2.waitKey(cv2.getTrackbarPos("delay", self.WINDOWS_CONTROLS))
             
             if key == 27:    # [esc] => Quit
                 if self._exiting:
@@ -267,27 +276,29 @@ class Visualize(object):
                 else:
                     cv2.destroyAllWindows()
                     return
-            elif key == 121 and self._exiting: # [y] => save changes
+            elif key == ord("y") and self._exiting: # [y] => save changes
                 if self.orig_patches.save_metadata():
                     cv2.destroyAllWindows()
                     return
-            elif key == 110 and self._exiting: # [n] => save changes
+            elif key == ord("n") and self._exiting: # [n] => save changes
                 cv2.destroyAllWindows()
                 return
-            elif key == 32:  # [space] => Pause
+            elif key == ord("5"): # [5] => extract current patches
+                self.patches.extract_current_patches()
+            elif key == ord(" "):  # [space] => Pause
                 self.pause = not self.pause
                 continue
-            elif key == 100: # [d] => Seek forward + pause
+            elif key == ord("d"): # [d] => Seek forward + pause
                 self.index += 1
                 self.pause = True
-            elif key == 97:  # [a] => Seek backward + pause
+            elif key == ord("a"):  # [a] => Seek backward + pause
                 self.index -= 1
                 self.pause = True
-            elif key == 101: # [e] => Seek 20 forward
+            elif key == ord("e"): # [e] => Seek 20 forward
                 self.index += 20
-            elif key == 113: # [q] => Seek 20 backward
+            elif key == ord("q"): # [q] => Seek 20 backward
                 self.index -= 20
-            elif key == -1:  # No input, continue
+            elif key == -1 and not self.pause:  # No input, continue
                 self.index += cv2.getTrackbarPos("skip", self.WINDOWS_CONTROLS)
 
             if self.index >= self.patches.shape[0] - 1:
@@ -301,7 +312,7 @@ class Visualize(object):
                 self.key_func(key)
 
             
-            if key == 115:  # [s]   => Switch single / continuous mode
+            if key == ord("s"):  # [s]   => Switch single / continuous mode
                 self.mode += 1
                 if self.mode == 3:
                     self.mode = 0
@@ -311,26 +322,26 @@ class Visualize(object):
                 self.__draw__()
             
             if self.mode > 0:
-                if key == 48: # [0]   => Unknown
+                if   key == ord("0"): # [0]   => Unknown
                     new_label = 0
-                elif key == 49: # [1]   => No anomaly
+                elif key == ord("1"): # [1]   => No anomaly
                     new_label = 1
-                elif key == 50: # [2]   => Contains anomaly
+                elif key == ord("2"): # [2]   => Contains anomaly
                     new_label = 2
 
-                elif key == 35: # [#]   => Direction unknown
+                elif key == ord("#"): # [#]   => Direction unknown
                     new_direction = 0
-                elif key == 44: # [,]   => Direction is CCW
+                elif key == ord(","): # [,]   => Direction is CCW
                     new_direction = 1
-                elif key == 46: # [.]   => Direction is CW
+                elif key == ord("."): # [.]   => Direction is CW
                     new_direction = 2
 
-                elif key == 43: # [+]   => Increase round number by 1
+                elif key == ord("+"): # [+]   => Increase round number by 1
                     new_round_number = self._round_number + 1
-                elif key == 45: # [-]   => Decrease round number by 1
+                elif key == ord("-"): # [-]   => Decrease round number by 1
                     new_round_number = self._round_number - 1
                     if new_round_number <= -1: new_round_number = -1
-                elif key == 120:# [x]   => Don't set the round number
+                elif key == ord("x"):# [x]   => Don't set the round number
                     new_round_number = -1
                 
                 # If we skipped back
@@ -352,7 +363,7 @@ class Visualize(object):
                         if self._round_number != -1:
                             self.patches[i, 0, 0].round_numbers = self._round_number
 
-                if key == 48 or key == 49 or key == 50:
+                if key == ord("0") or key == ord("1") or key == ord("2"):
                     if new_label == self._label:
                         new_label = -1
                     elif new_label != -1:
@@ -360,7 +371,7 @@ class Visualize(object):
                     self._label = new_label
                     self.__draw__()
                     
-                if key == 35 or key == 44 or key == 46:
+                if key == ord("#") or key == ord(",") or key == ord("."):
                     if new_direction == self._direction:
                         new_direction = -1
                     elif new_direction != -1:
@@ -368,7 +379,7 @@ class Visualize(object):
                     self._direction = new_direction
                     self.__draw__()
                     
-                if key == 43 or key == 45 or key == 120:
+                if key == ord("+") or key == ord("-") or key == ord("x"):
                     if new_round_number != -1:
                         self.patches[self.index, 0, 0].round_numbers = new_round_number
                     self._round_number = new_round_number
@@ -390,7 +401,7 @@ class Visualize(object):
         return cv2.getTrackbarPos(name, self.WINDOWS_CONTROLS)
     
     def __maha__(self, x=None, only_refresh_image=False):
-        image = np.zeros((330, 480, 3), dtype=np.uint8)
+        image = np.zeros((350, 480, 3), dtype=np.uint8)
         if self.model_index > 0 and self.patches.contains_mahalanobis_distances:
             font                   = cv2.FONT_HERSHEY_SIMPLEX
             fontScale              = 0.5
@@ -452,15 +463,15 @@ class Visualize(object):
 
             self._metrics_ax1.set_yscale("log")
             
-            for i, (measure, v) in enumerate(PatchArray.METRICS.items()):
-                labels = v[0](self.patches)
-                scores = v[1](self.patches.mahalanobis_distances_filtered)
+            for i, (metric_name, metric) in enumerate(sorted(PatchArray.METRICS.items())):
+                labels = metric.get_labels(self.patches)
+                scores = metric.get_values(self.patches.mahalanobis_distances_filtered)
                 
-                if v[2] == -1:
+                if metric.current_threshold == -1:
                     m = np.max(scores)
-                    PatchArray.METRICS[measure] = (v[0], v[1], m)
+                    metric.current_threshold = m
                 else:
-                    m = v[2]
+                    m = metric.current_threshold
 
                 thresh = m * threshold
 
@@ -473,7 +484,7 @@ class Visualize(object):
                 tpr = true_positives / float(positives.size) * 100.0 if float(positives.size) > 0 else 0
                 fpr = false_negavites / float(negavites.size) * 100.0 if float(negavites.size) > 0 else 0
 
-                if measure != "per patch" and i == cv2.getTrackbarPos("metric", self.WINDOWS_MAHA):
+                if metric_name != "per patch" and i == cv2.getTrackbarPos("metric", self.WINDOWS_MAHA):
                     self._labels = labels
                     self._scores = scores
                     self._thresh = thresh
@@ -491,10 +502,10 @@ class Visualize(object):
                         self._metrics_ax1.axvspan(r[0], r[1], facecolor='b', alpha=0.2)
 
                     self._metrics_ax1.set_ylim(0, np.max(scores))
-                    self._metrics_ax1.plot(scores, lw=1, label=measure, color="black")
+                    self._metrics_ax1.plot(scores, lw=1, label=metric_name, color="black")
                     # self._metrics_ax1.axvline(x=self.index, linewidth=0.5, color="black")
                     self._metrics_ax1.axhline(y=thresh, linewidth=0.5, color="black")
-                    self._metrics_fig.suptitle(measure)
+                    self._metrics_fig.suptitle(metric_name)
                     
                     if not only_refresh_image:
                         self._histogram_ax1.clear()
@@ -512,7 +523,7 @@ class Visualize(object):
                         
                         self._histogram_fig.canvas.draw()
 
-                cv2.putText(image, measure, (40, 220 + i*30), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
+                cv2.putText(image, metric_name, (40, 220 + i*30), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
                 cv2.putText(image, "%.2f" % tpr, (200, 220 + i*30), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
                 cv2.putText(image, "%.2f" % fpr, (300, 220 + i*30), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
                 cv2.putText(image, "%.2f" % thresh, (400, 220 + i*30), font, fontScale, (255,255,255), thickness, lineType=cv2.LINE_AA)
@@ -591,7 +602,7 @@ class Visualize(object):
                 cv2.createTrackbar("2_gaussian_1", self.WINDOWS_MAHA, 0, 10, self.__maha__)
                 cv2.createTrackbar("2_gaussian_2", self.WINDOWS_MAHA, 0, 10, self.__maha__)
                 
-                cv2.createTrackbar("metric", self.WINDOWS_MAHA, 0, 2, lambda x: self.__maha__(only_refresh_image=True))
+                cv2.createTrackbar("metric", self.WINDOWS_MAHA, 0, len(PatchArray.METRICS) - 1, lambda x: self.__maha__(only_refresh_image=True))
                 cv2.createTrackbar("model", self.WINDOWS_MAHA, 0, len(self.patches.mahalanobis_distances.dtype.names), self.__model__)
 
             cv2.createTrackbar("optical_flow", self.WINDOWS_CONTROLS, 0, 1, self.__draw__)
@@ -752,21 +763,37 @@ class Visualize(object):
                 self._map_ax.clear()
                 self._map_ax.set_xlim([self.extent[0], self.extent[2]])
                 self._map_ax.set_ylim([self.extent[1], self.extent[3]])
+                self._map_ax.set_aspect(1)
+                
+                self._map_ax.set_xticks(np.arange(self.extent[0], self.extent[2], 0.5), minor=True)
+                self._map_ax.set_yticks(np.arange(self.extent[1], self.extent[3], 0.5), minor=True)
+                
+                self._map_ax.grid(linestyle="-", alpha=0.3, which="both")
 
                 # Draw FOV polygon
                 self._map_ax.fill([frame[0 ,  0].locations.tl.x,
-                                   frame[-1,  0].locations.bl.x,
+                                   frame[0 , -1].locations.bl.x,
                                    frame[-1, -1].locations.br.x,
-                                   frame[0 , -1].locations.tr.x],
+                                   frame[-1,  0].locations.tr.x],
                                   [frame[0 ,  0].locations.tl.y,
-                                   frame[-1,  0].locations.bl.y,
+                                   frame[0 , -1].locations.bl.y,
                                    frame[-1, -1].locations.br.y,
-                                   frame[0 , -1].locations.tr.y])
+                                   frame[-1,  0].locations.tr.y], alpha=0.2)
 
-                self._map_ax.plot(frame[0 ,  0].locations.tl.x, frame[0 ,  0].locations.tl.y, "g+", markersize=2, linewidth=2)
-                self._map_ax.plot(frame[-1,  0].locations.bl.x, frame[-1,  0].locations.bl.y, "b+", markersize=2, linewidth=2)
-                self._map_ax.plot(frame[0 , -1].locations.br.x, frame[0 , -1].locations.br.y, "r+", markersize=2, linewidth=2)
-                self._map_ax.plot(frame[-1, -1].locations.tr.x, frame[-1, -1].locations.tr.y, "y+", markersize=2, linewidth=2)
+                for l in [(0, 0), (-1, 0), (-1, -1), (0, -1)]:# np.ndindex(frame.shape):
+                    self._map_ax.fill([frame[l].locations.tl.x,
+                                       frame[l].locations.bl.x,
+                                       frame[l].locations.br.x,
+                                       frame[l].locations.tr.x],
+                                      [frame[l].locations.tl.y,
+                                       frame[l].locations.bl.y,
+                                       frame[l].locations.br.y,
+                                       frame[l].locations.tr.y], alpha=0.5)
+
+                self._map_ax.plot(frame[0 ,  0].locations.tl.x, frame[0 ,  0].locations.tl.y, "y+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[0 , -1].locations.bl.x, frame[0 , -1].locations.bl.y, "b+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[-1, -1].locations.br.x, frame[-1, -1].locations.br.y, "r+", markersize=2, linewidth=2)
+                self._map_ax.plot(frame[-1,  0].locations.tr.x, frame[-1,  0].locations.tr.y, "g+", markersize=2, linewidth=2)
                 
                 # Draw camera position
                 self._map_ax.plot(frame.camera_locations[0, 0].translation.x, 
@@ -897,8 +924,8 @@ class Visualize(object):
     def __model__(self, new_model_index=None):
         self.model_index = new_model_index
         
-        for measure, v in PatchArray.METRICS.items():
-            PatchArray.METRICS[measure] = (v[0], v[1], -1)
+        for metric_name, metric in PatchArray.METRICS.items():
+            metric.current_threshold = -1
         self.__maha__()
 
     def __index_update__(self, new_index=None):
@@ -955,7 +982,7 @@ class Visualize(object):
 
 if __name__ == "__main__":
     import consts
-    patches = PatchArray()
+    patches = PatchArray().training_and_validation
     
     vis = Visualize(patches)
     vis.show()

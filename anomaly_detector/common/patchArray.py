@@ -272,25 +272,24 @@ class PatchArray(np.recarray):
     #     Views     #
     #################
 
-    unknown_anomaly = property(lambda self: self[self.labels[:, 0, 0] == 0] if self.ndim == 3 else self[self.labels[:] == 0])
-    no_anomaly      = property(lambda self: self[self.labels[:, 0, 0] == 1] if self.ndim == 3 else self[self.labels[:] == 1])
-    anomaly         = property(lambda self: self[self.labels[:, 0, 0] == 2] if self.ndim == 3 else self[self.labels[:] == 2])
-    
-    stop_ok   = property(lambda self: self[self.stop[:, 0, 0] == 0] if self.ndim == 3 else self[self.stop[:] == 0])
-    stop_dont = property(lambda self: self[self.stop[:, 0, 0] == 1] if self.ndim == 3 else self[self.stop[:] == 1])
-    stop_do   = property(lambda self: self[self.stop[:, 0, 0] == 2] if self.ndim == 3 else self[self.stop[:] == 2])
-    
-    direction_unknown = property(lambda self: self[self.directions[:, 0, 0] == 0] if self.ndim == 3 else self[self.directions[:] == 0])
-    direction_ccw     = property(lambda self: self[self.directions[:, 0, 0] == 1] if self.ndim == 3 else self[self.directions[:] == 1])
-    direction_cw      = property(lambda self: self[self.directions[:, 0, 0] == 2] if self.ndim == 3 else self[self.directions[:] == 2])
-    
-    round_number_unknown = property(lambda self: self[self.round_numbers[:, 0, 0] == 0] if self.ndim == 3 else self[self.round_numbers[:] == 0])
-    def round_number(self, round_number):
-        if self.ndim == 3:
-            return self[self.round_numbers[:, 0, 0] == round_number]
-        else:
-            return self[self.round_numbers[:] == round_number]
+    def _filter(self, name, f):
+        return self[f(self[name][:, 0, 0])] if self.ndim == 3 else self[f(self[name][:])]
 
+    unknown_anomaly = property(lambda self: self._filter("labels", lambda f: f == 0))
+    no_anomaly      = property(lambda self: self._filter("labels", lambda f: f == 1))
+    anomaly         = property(lambda self: self._filter("labels", lambda f: f == 2))
+    
+    stop_ok   = property(lambda self: self._filter("stop", lambda f: f == 0))
+    stop_dont = property(lambda self: self._filter("stop", lambda f: f == 1))
+    stop_do   = property(lambda self: self._filter("stop", lambda f: f == 2))
+    
+    direction_unknown = property(lambda self: self._filter("directions", lambda f: f == 0))
+    direction_ccw     = property(lambda self: self._filter("directions", lambda f: f == 1))
+    direction_cw      = property(lambda self: self._filter("directions", lambda f: f == 2))
+    
+    round_number_unknown = property(lambda self: self._filter("round_numbers", lambda f: f == 0))
+    def round_number(self, round_number):
+        return self._filter("round_numbers", lambda f: f == round_number)
     
     # @property
     # def training_and_validation(self):
@@ -321,30 +320,26 @@ class PatchArray(np.recarray):
         """ Subset of training and validation frames (FOR CHECKING THE BEST EXTRACTORS AND MODELS) """
         p = self.root[..., 0, 0]
 
-        f = np.zeros(p.shape, dtype=np.bool)
-        f[::6] = True
-        f[:] = np.logical_or(np.logical_and(f, p.labels != 0), p.labels == 2)
+        # f = np.zeros(p.shape, dtype=np.bool)
+        # f[::6] = True
+        # f[:] = np.logical_or(np.logical_and(f, p.stop != 0), p.stop == 2)
 
-        f[:] = np.logical_and(f[:], np.sqrt((p.camera_locations.rotation.z + (np.pi / 2)) ** 2) < 0.15)
+        # f[:] = np.logical_and(f[:], np.sqrt((p.camera_locations.rotation.z + (np.pi / 2)) ** 2) < 0.15)
 
-        return self.root[f]
+        return self.root[::6,...]
 
     @property
     def training(self):
-        round_number = 7
-        label = 1
-        if self.ndim == 3:
-            return self[np.logical_and(self.round_numbers[:, 0, 0] == round_number, self.labels[:, 0, 0] == label)]
-        else:
-            return self[np.logical_and(self.round_numbers[:] == round_number, self.labels[:] == label)]
+        return self.direction_ccw
 
     @property
     def validation(self):
-        round_number = 7
-        if self.ndim == 3:
-            return self[self.round_numbers[:, 0, 0] != round_number].direction_ccw
-        else:
-            return self[self.round_numbers[:] != round_number].direction_ccw
+        return self.direction_cw
+        # round_number = 7
+        # if self.ndim == 3:
+        #     return self[self.round_numbers[:, 0, 0] != round_number].direction_ccw
+        # else:
+        #     return self[self.round_numbers[:] != round_number].direction_ccw
 
     @property
     def benchmark(self):
@@ -363,11 +358,27 @@ class PatchArray(np.recarray):
 
                 indices = np.argwhere(np.isin(hf["times"], self.metadata_changed[:, 0, 0].times))
                 for index, frame in zip(indices, self.metadata_changed[:, 0, 0]):
-                    hf["camera_locations"][index] = frame.camera_locations
-                    hf["labels"][index]           = frame.labels
-                    hf["stop"][index]             = frame.stop
-                    hf["directions"][index]       = frame.directions
-                    hf["round_numbers"][index]    = frame.round_numbers
+                    for meta in self.__metadata_attrs__:
+                        hf[meta][index] = frame[meta]
+            return True
+        except:
+            logger.error(traceback.format_exc())
+            return False
+
+    def extract_current_patches(self):
+        """ Create a new metadata file and copy images to a new subfolder """
+        folder = os.path.join(consts.BASE_PATH, "Images_subset_%s" % datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
+        os.mkdir(folder)
+
+        try:
+            for i in tqdm(range(self.shape[0]), desc="Copying images", file=sys.stderr):
+                image = self[i, 0, 0].get_image_path()
+                shutil.copyfile(image, os.path.join(folder, os.path.basename(image)))
+
+            with h5py.File(os.path.join(folder, "metadata_cache.h5"), "w") as hf:
+                hf.attrs["Last changed"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
+                for meta in self.__metadata_attrs__:
+                    hf[meta] = self[:,0,0][meta]
             return True
         except:
             logger.error(traceback.format_exc())
@@ -652,11 +663,12 @@ class PatchArray(np.recarray):
 
     isview = property(lambda self: np.shares_memory(self, self.root))
 
-    def get_batch(self, time, temporal_batch_size):
-        time_index = np.argwhere(self.root.times == time).flat[0]
+    def get_batch(self, frame, temporal_batch_size):
+        current_round = self.root.round_number(frame.round_numbers)
+        time_index = np.argwhere(current_round.times == frame.times).flat[0]
         res = None
         for res_i, arr_i in enumerate(range(time_index - temporal_batch_size, time_index)):
-            image = cv2.cvtColor(self.root[max(0, arr_i), 0, 0].get_image(), cv2.COLOR_BGR2RGB)
+            image = cv2.cvtColor(current_round[max(0, arr_i), 0, 0].get_image(), cv2.COLOR_BGR2RGB)
             if res is None:
                 res = np.zeros((temporal_batch_size,) + image.shape)
             res[res_i,...] = image
@@ -667,7 +679,7 @@ class PatchArray(np.recarray):
 
         def _gen():
             for i in range(self.shape[0]):
-                temporal_batch = self.get_batch(self[i, 0, 0].times, temporal_batch_size)
+                temporal_batch = self.get_batch(self[i, 0, 0], temporal_batch_size)
                 yield (temporal_batch, self[i, 0, 0].times)
 
         raw_dataset = tf.data.Dataset.from_generator(
@@ -690,12 +702,37 @@ class PatchArray(np.recarray):
     #             labels[i:i + slack] = 0
     #     labels[f] = 2
 
+    class Metric(object):
+        def __init__(self, label_name, per_patch=False, sum=False):
+            self.label_name = label_name
+            self.per_patch = per_patch
+            self.sum = sum
+        
+            self.current_threshold = -1
+
+        def get_relevant(self, patches):
+            return patches[patches[self.label_name][:,0,0] != 0]
+
+        def get_labels(self, patches):
+            if self.per_patch:
+                return patches[self.label_name].ravel()
+            else:
+                return patches[self.label_name][:,0,0]
+        
+        def get_values(self, mahalanobis_distances):
+            if self.per_patch:
+                return mahalanobis_distances.ravel()
+            elif self.sum:
+                return np.sum(mahalanobis_distances, axis=(1,2))
+            else:
+                return np.max(mahalanobis_distances, axis=(1,2))
+    
     METRICS = {
-        # "patch": (lambda self: self.patch_labels.ravel(), lambda md: md.ravel()),
-        "frame (max)": (lambda self: self.labels[:,0,0], lambda md: np.max(md, axis=(1,2))),
-        "frame (sum)": (lambda self: self.labels[:,0,0], lambda md: np.sum(md, axis=(1,2)), -1),
-        "stop (sum)": (lambda self: self.stop[:,0,0], lambda md: np.sum(md, axis=(1,2)), -1),
-        "stop (max)": (lambda self: self.stop[:,0,0], lambda md: np.max(md, axis=(1,2)), -1)
+        "patch":       Metric("patch_labels", per_patch=True),
+        "frame (sum)": Metric("labels", sum=True),
+        "frame (max)": Metric("labels"),
+        "stop (sum)":  Metric("stop", sum=True),
+        "stop (max)":  Metric("stop")
     }
 
     def calculate_tsne(self):
@@ -762,23 +799,23 @@ class PatchArray(np.recarray):
         #                  (2,0,0), (2,1,1), (2,2,2), (2,3,3)]
         other_filters = [None, "erosion", "dilation"]
 
-        for measure, v in self.METRICS.items():
-            val = self.validation[v[0](self.validation) != 0]
-            labels = v[0](val)
+        for metric_name, metric in self.METRICS.items():
+            relevant = metric.get_relevant(self)
+            labels = metric.get_labels(relevant)
             for other_filter in other_filters:
                 for gauss_filter in gauss_filters:
-                    # Don't compute gauss filters (in image space) for per sum measures (they take the average anyways)
-                    if measure.endswith("(sum)") and gauss_filter != None and gauss_filter[1] > 0:
+                    # Don't compute gauss filters (in image space) for per sum metrics (they take the average anyways)
+                    if metric_name.endswith("(sum)") and gauss_filter != None and gauss_filter[1] > 0:
                         continue
 
-                    title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, measure, gauss_filter, other_filter)
+                    title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, metric_name, gauss_filter, other_filter)
                     logger.info("Calculating %s" % title)
                     
                     scores = dict()
                     for n in sorted(self.mahalanobis_distances.dtype.names):
                         name = n.replace("fake", "simple")
 
-                        maha = val.mahalanobis_distances[n]
+                        maha = relevant.mahalanobis_distances[n]
 
                         if gauss_filter is not None:
                             maha = utils.gaussian_filter(maha, sigma=gauss_filter)
@@ -794,12 +831,12 @@ class PatchArray(np.recarray):
                             elif other_filter == "dilation":
                                 maha = grey_dilation(maha, structure=struct)
 
-                        scores[name] = v[1](maha)
+                        scores[name] = metric.get_values(maha)
                         
-                    filename = os.path.join(consts.METRICS_PATH, "%s_%s_%s_%s.jpg" % (extractor, measure, gauss_filter, other_filter))
+                    filename = os.path.join(consts.METRICS_PATH, "%s_%s_%s_%s.jpg" % (extractor, metric_name, gauss_filter, other_filter))
                     result = self.calculate_roc(title, labels, scores, filename)
                     for model, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5 in result:
-                        results.append((extractor, measure, model, gauss_filter, other_filter, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5))
+                        results.append((extractor, metric_name, model, gauss_filter, other_filter, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5))
         
         return results
 
@@ -888,6 +925,7 @@ class PatchArray(np.recarray):
             t.set_position((shift,0))
 
         if filename is not None:
+            
             plt.savefig(filename, dpi=dpi)
         else:
             plt.show()
@@ -904,13 +942,13 @@ class PatchArray(np.recarray):
         # Reset to unknown
         self.patch_labels.fill(0)
 
-        for i in tqdm(range(self.shape[0]), desc="Calculating bins", file=sys.stderr):
-            frame = self[i, 0, 0]
-            mask_file = frame.get_image_path().replace("Images", "Validation/Images/Anomaly/Masks inflated").replace(".jpg", "_mask.jpg")
+        for i in tqdm(range(self.root.shape[0]), desc="Calculating patch labels", file=sys.stderr):
+            frame = self.root[i, 0, 0]
+            mask_file = frame.get_image_path().replace("Images", "Labels")
             if os.path.exists(mask_file):
                 mask = numpy.array(cv2.imread(mask_file), dtype=np.uint8)
                 mask = (mask[..., 0] <= 5) & (mask[..., 1] <= 5) & (mask[..., 2] >= 250)
-                self.patch_labels[i, ...] = (resize(mask, self.shape[1:], order=0, anti_aliasing=False, mode="constant") > 0.5) + 1
+                self.root.patch_labels[i, ...] = (resize(mask, self.shape[1:], order=0, anti_aliasing=False, mode="constant") > 0.5) + 1
 
                 # mask = resize(mask, (self.image_size, self.image_size), order=0, anti_aliasing=False, mode="constant")
 
@@ -942,18 +980,18 @@ class PatchArray(np.recarray):
             hf.create_dataset("patch_labels", data=self.patch_labels)
 
 if __name__ == "__main__":
-    # p = PatchArray(consts.FEATURES_FILE)
+    p = PatchArray(consts.FEATURES_FILE)
+    p.calculate_patch_labels()
     # p.calculate_metrics()
     # p.calculate_roc()
 
-    # p.calculate_patch_labels()
 
     # p.calculate_rasterization(2.0)
 
     from common import Visualize
     # from scipy.misc import imresize
 
-    p = PatchArray().training_and_validation
+    # p = PatchArray().training_and_validation
 
     vis = Visualize(p)
     vis.show()
