@@ -42,7 +42,7 @@ def extract_features():
     tf.keras.applications.vgg16.preprocess_input(temp)
 
     # Get all the available feature extractor names
-    extractor_names = ["FeatureExtractorVGG16"]# list([e[0] for e in inspect.getmembers(feature_extractor, inspect.isclass) if e[0] != "FeatureExtractorBase"])
+    extractor_names = list([e[0] for e in inspect.getmembers(feature_extractor, inspect.isclass) if e[0] != "FeatureExtractorBase"])
 
     module = __import__("feature_extractor")
 

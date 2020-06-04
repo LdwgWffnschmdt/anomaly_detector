@@ -48,11 +48,16 @@ def metrics():
         files_expanded += glob(s)
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
+    files = filter(lambda f: not "EfficientNet" in f, files)
+
     if args.output is None:
         filename = os.path.join(consts.METRICS_PATH, datetime.now().strftime("%Y_%m_%d_%H_%M_metrics.csv"))
     else:
         filename = args.output
-    
+
+    if not os.path.exists(os.path.dirname(filename)):
+        os.makedirs(os.path.dirname(filename))
+
     write_header = not os.path.exists(filename)
 
     with open(filename, "a") as csvfile:
@@ -87,6 +92,8 @@ def metrics():
 
                 # Load the file
                 patches = PatchArray(features_file)
+                
+                patches.calculate_patch_labels()
                 
                 res = patches.calculate_metrics()
 

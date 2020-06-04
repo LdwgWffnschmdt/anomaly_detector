@@ -105,6 +105,8 @@ def rosbag_to_images():
     if len(bag_files) > 1:
         bag_files = tqdm(bag_files, desc="Bag files", file=sys.stderr)
 
+    meta = list()
+
     for bag_file in bag_files:
         # Check parameters
         if bag_file == "" or not os.path.exists(bag_file) or not os.path.isfile(bag_file):
@@ -142,8 +144,6 @@ def rosbag_to_images():
 
             skipped_count = 0
 
-            meta = list()
-
             with tqdm(desc="Writing images", total=expected_im_count, file=sys.stderr) as pbar:
                 for topic, msg, t in bag.read_messages(topics=image_topic):
                     output_file = os.path.join(output_dir, str(t.to_nsec()))
@@ -160,32 +160,34 @@ def rosbag_to_images():
                                                                             msg_tf.transform.rotation.z,
                                                                             msg_tf.transform.rotation.w])
 
-                        # # Get the image
-                        # if msg._type == "sensor_msgs/CompressedImage":
-                        #     image_arr = np.fromstring(msg.data, np.uint8)
-                        #     cv_image = cv2.imdecode(image_arr, cv2.IMREAD_COLOR)
-                        # elif msg._type == "sensor_msgs/Image":
-                        #     cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
-                        # else:
-                        #     raise ValueError("Image topic type must be either \"sensor_msgs/Image\" or \"sensor_msgs/CompressedImage\".")
+                        # Get the image
+                        if msg._type == "sensor_msgs/CompressedImage":
+                            image_arr = np.fromstring(msg.data, np.uint8)
+                            cv_image = cv2.imdecode(image_arr, cv2.IMREAD_COLOR)
+                        elif msg._type == "sensor_msgs/Image":
+                            cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+                        else:
+                            raise ValueError("Image topic type must be either \"sensor_msgs/Image\" or \"sensor_msgs/CompressedImage\".")
                         
-                        # # Crop the image
-                        # if args.image_crop is not None:
-                        #     cv_image = cv_image[args.image_crop[1]:args.image_crop[1] + args.image_crop[3], # y:y+h
-                        #                         args.image_crop[0]:args.image_crop[0] + args.image_crop[2]] # x:x+w
+                        # Crop the image
+                        if args.image_crop is not None:
+                            cv_image = cv_image[args.image_crop[1]:args.image_crop[1] + args.image_crop[3], # y:y+h
+                                                args.image_crop[0]:args.image_crop[0] + args.image_crop[2]] # x:x+w
 
-                        # # Scale the image
-                        # if args.image_scale != 1.0:
-                        #     cv_image = cv2.resize(cv_image, (int(cv_image.shape[1] * args.image_scale),
-                        #                                     int(cv_image.shape[0] * args.image_scale)), cv2.INTER_AREA)
+                        # Scale the image
+                        if args.image_scale != 1.0:
+                            cv_image = cv2.resize(cv_image, (int(cv_image.shape[1] * args.image_scale),
+                                                            int(cv_image.shape[0] * args.image_scale)), cv2.INTER_AREA)
 
-                        # cv2.imwrite(output_file + ".jpg", cv_image)
+                        cv2.imwrite(output_file + ".jpg", cv_image)
                         
                         meta.append((((translation.x, translation.y, translation.z), (euler[0], euler[1], euler[2])),
                                     t.to_nsec(),
                                     label, # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
                                     -1,
-                                    -1))
+                                    -1,
+                                    -1,
+                                    bag_file_name))
 
                     except KeyboardInterrupt:
                         logger.info("Cancelled")
@@ -197,21 +199,28 @@ def rosbag_to_images():
                     pbar.set_postfix({"Skipped": skipped_count})
                     pbar.update()
 
-            metadata = np.rec.array(meta, dtype=[('camera_locations', [('translation', [('x', '<f4'), ('y', '<f4'), ('z', '<f4')]),
-                                                                       ('rotation', [('x', '<f4'), ('y', '<f4'), ('z', '<f4')])]),
-                                                 ('times', '<u8'),
-                                                 ('labels', 'i1'),
-                                                 ('directions', 'i1'),
-                                                 ('round_numbers', 'i1')])
+    logger.info("Writing metadata")
 
-            meta_filename = os.path.join(output_dir, "metadata_cache.h5")
-            with h5py.File(meta_filename, "w") as hf:
-                hf.attrs["Created"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
-                camera_locations = hf.create_dataset("camera_locations", data=metadata.camera_locations)
-                times =            hf.create_dataset("times",            data=metadata.times)
-                labels =           hf.create_dataset("labels",           data=metadata.labels)
-                directions =       hf.create_dataset("directions",       data=metadata.directions)
-                round_numbers =    hf.create_dataset("round_numbers",    data=metadata.round_numbers)
+    dt = h5py.string_dtype(encoding='ascii')
+    metadata = np.rec.array(meta, dtype=[('camera_locations', [('translation', [('x', '<f4'), ('y', '<f4'), ('z', '<f4')]),
+                                                                ('rotation', [('x', '<f4'), ('y', '<f4'), ('z', '<f4')])]),
+                                            ('times', '<u8'),
+                                            ('labels', 'i1'),
+                                            ('directions', 'i1'),
+                                            ('round_numbers', 'i1'),
+                                            ('stop', 'i1'),
+                                            ('bag_file', dt)])
+
+    meta_filename = os.path.join(output_dir, "metadata_cache.h5")
+    with h5py.File(meta_filename, "w") as hf:
+        hf.attrs["Created"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
+        hf.create_dataset("camera_locations", data=metadata.camera_locations)
+        hf.create_dataset("times",            data=metadata.times)
+        hf.create_dataset("labels",           data=metadata.labels)
+        hf.create_dataset("directions",       data=metadata.directions)
+        hf.create_dataset("round_numbers",    data=metadata.round_numbers)
+        hf.create_dataset("stop",             data=metadata.stop)
+        hf.create_dataset("bag_file",         data=metadata.bag_file)
                 
     cv2.destroyAllWindows()
 
