@@ -81,50 +81,72 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
         self._calculate_mean_and_covariance()
 
+        if patches.size <= self.initial_normal_features:
+            return True
+
         # Loop over the remaining feature vectors
-        with tqdm(desc="Creating balanced distribution",
+        if not silent:
+            pbar = tqdm(desc="Creating balanced distribution",
                     initial=self.initial_normal_features,
                     total=patches_flat.shape[0],
-                    file=sys.stderr) as pbar:
-            for patch in patches_flat[self.initial_normal_features:]:
-                # Calculate the Mahalanobis distance to the "normal" distribution
-                dist = self.__mahalanobis_distance__(patch)
-                if dist > self.threshold_learning:
-                    # Add the vector to the "normal" distribution
-                    self.balanced_distribution = np.append(self.balanced_distribution, [patch], axis=0)
+                    file=sys.stderr)
 
-                    # Recalculate mean and covariance
-                    self._calculate_mean_and_covariance()
-                
+        for patch in patches_flat[self.initial_normal_features:]:
+            # Calculate the Mahalanobis distance to the "normal" distribution
+            dist = self.__mahalanobis_distance__(patch)
+            if dist > self.threshold_learning:
+                # Add the vector to the "normal" distribution
+                self.balanced_distribution = np.append(self.balanced_distribution, [patch], axis=0)
+
+                # Recalculate mean and covariance
+                self._calculate_mean_and_covariance()
+            
+            if not silent:
                 # Print progress
                 pbar.set_postfix({"Balanced Distribution": len(self.balanced_distribution)})
                 pbar.update()
+        
+        if not silent:
+            pbar.close()
+
+        # Abort early if there are very few entries in the balanced distribution
+        if self.balanced_distribution.size <= self.initial_normal_features:
+            return True
 
         # Prune the distribution
         
-        if not silent: logger.info(np.mean(np.array([self.__mahalanobis_distance__(f) for f in self.balanced_distribution])))
+        if not silent:
+            logger.info(np.mean(np.array([self.__mahalanobis_distance__(f) for f in self.balanced_distribution])))
+            pbar = tqdm(desc="Pruning balanced distribution",
+                    total=len(self.balanced_distribution),
+                    file=sys.stderr)
 
         prune_filter = np.empty(self.balanced_distribution.shape, dtype=np.bool)
         pruned = 0
-        
-        with tqdm(desc="Pruning balanced distribution",
-                    total=len(self.balanced_distribution),
-                    file=sys.stderr) as pbar:
-            for i, patch in enumerate(self.balanced_distribution):
-                not_prune = self.__mahalanobis_distance__(patch) > self.threshold_learning * self.pruning_parameter
-                prune_filter[i] = not_prune
+    
+        for i, patch in enumerate(self.balanced_distribution):
+            not_prune = self.__mahalanobis_distance__(patch) > self.threshold_learning * self.pruning_parameter
+            prune_filter[i] = not_prune
 
-                if not not_prune:
-                    pruned += 1
+            if not not_prune:
+                pruned += 1
 
+            if not silent:
                 # Print progress
                 pbar.set_postfix({"Pruned": pruned})
                 pbar.update()
 
-        self.balanced_distribution = self.balanced_distribution[prune_filter]
+        # Only apply pruning if it wouldn't result in an empty distribution
+        if self.balanced_distribution[prune_filter].size > 0:
+            self.balanced_distribution = self.balanced_distribution[prune_filter]
 
-        if not silent: logger.info("Generated Balanced Distribution with %i entries" % len(self.balanced_distribution))
+        if not silent:
+            pbar.close()
+            logger.info("Generated Balanced Distribution with %i entries" % len(self.balanced_distribution))
     
+        if len(self.balanced_distribution) <= 0:
+            logger.error("No entry in balanced distribution")
+
         self._calculate_mean_and_covariance()
         return True
 
