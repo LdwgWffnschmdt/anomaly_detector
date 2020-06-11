@@ -407,7 +407,7 @@ class PatchArray(np.recarray):
         
         for v, y in enumerate(bins_y):
             for u, x in enumerate(bins_x):
-                b = box(y, x, y + cell_size, x + cell_size)
+                b = box(x, y, x + cell_size, y + cell_size)#Point(x + cell_size / 2, y + cell_size / 2)# 
                 b.u = u
                 b.v = v
                 b.patches = list()
@@ -418,17 +418,27 @@ class PatchArray(np.recarray):
         
         return (grid, shape)
 
-    def _bin(self, i, grid, shape, rf_factor, key, fake):
+    # @profile
+    def _bin(self, i, grid, shape, rf_factor, key, fake, cell_size):
+        locations_key = "locations"
+        if fake: locations_key = "fake_" + locations_key
+
         for y, x in np.ndindex(self.shape[1:]):
             if fake or rf_factor < 2 or (y, x) == (0, 0):
                 f = self[i, y, x]
-                poly = Polygon([f.locations.tl, f.locations.tr, f.locations.br, f.locations.bl])
-                poly = poly.buffer(0.99)
+                poly = Polygon([(f[locations_key].tl.x, f[locations_key].tl.y),
+                                (f[locations_key].tr.x, f[locations_key].tr.y),
+                                (f[locations_key].br.x, f[locations_key].br.y),
+                                (f[locations_key].bl.x, f[locations_key].bl.y)])
+                
                 bins = grid.query(poly)
 
-                # pr = prep(poly)
-                # bins = filter(pr.intersects, bins)
+                # # pr = prep(poly)
+                bins = filter(poly.intersects, bins)
                 
+                # if len(bins) == 0:
+                #     bins = [grid.nearest(poly)]
+
             def _loop():
                 for b in bins:
                     # weight = 1.0#b.intersection(poly).area / bin_area
@@ -490,7 +500,7 @@ class PatchArray(np.recarray):
         
         # Get the corresponding bin for every feature
         Parallel(n_jobs=2, prefer="threads")(
-            delayed(self._bin)(i, grid, shape, rf_factor, key, fake) for i in tqdm(range(self.shape[0]), desc="Calculating bins", file=sys.stderr))
+            delayed(self._bin)(i, grid, shape, rf_factor, key, fake, cell_size) for i in tqdm(range(self.shape[0]), desc="Calculating bins", file=sys.stderr))
 
         end = time.time()
 

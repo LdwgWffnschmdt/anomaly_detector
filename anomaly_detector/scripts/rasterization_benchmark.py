@@ -125,7 +125,7 @@ def rasterization_benchmark():
                         
                         # Get the corresponding bin for every feature
                         Parallel(n_jobs=2, prefer="threads")(
-                            delayed(patches._bin)(i, grid, shape, rf_factor, key, fake) for i in tqdm(range(patches.shape[0]), desc="Calculating bins", file=sys.stderr))
+                            delayed(patches._bin)(i, grid, shape, rf_factor, key, fake, cell_size) for i in tqdm(range(patches.shape[0]), desc="Calculating bins", file=sys.stderr))
 
                         end = time.time()
 
@@ -136,7 +136,7 @@ def rasterization_benchmark():
 
                         # Time individual blocks
                         log("Grid [%.2f, f: %s]" % (cell_size, fake), np.array(timeit.repeat(lambda: patches._calculate_grid(cell_size, fake=fake), number=1, repeat=3)))
-                        log("Bins [%.2f, f: %s]" % (cell_size, fake), np.array(timeit.repeat(lambda: patches._bin(0, grid, shape, rf_factor, key, fake), number=1, repeat=3)))
+                        log("Bins [%.2f, f: %s]" % (cell_size, fake), np.array(timeit.repeat(lambda: patches._bin(0, grid, shape, rf_factor, key, fake, cell_size), number=1, repeat=3)))
 
                 if writer is None:
                     writer = csv.DictWriter(csvfile, fieldnames=result.keys())
