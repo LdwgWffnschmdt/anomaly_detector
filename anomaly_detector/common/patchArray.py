@@ -8,6 +8,9 @@ from glob import glob
 from cachetools import cached, Cache, LRUCache
 from datetime import datetime
 
+import matplotlib as mpl
+mpl.rcParams['savefig.dpi'] = 300
+
 import numpy as np
 import numpy.lib.recfunctions
 import h5py
@@ -18,7 +21,7 @@ import cv2
 from skimage.transform import resize
 
 from shapely.strtree import STRtree
-from shapely.geometry import Polygon, box
+from shapely.geometry import Polygon, box, Point
 from shapely.prepared import prep
 
 from scipy.ndimage.morphology import generate_binary_structure, grey_erosion, grey_dilation
@@ -741,11 +744,25 @@ class PatchArray(np.recarray):
     #     labels[f] = 2
 
     class Metric(object):
-        def __init__(self, label_name, per_patch=False, sum=False):
+        COLORS = {
+            -1: (100, 100, 100),
+            0: (150, 150, 150),
+            1: (80, 175, 76),
+            2: (54, 67, 244)
+        }
+        
+        def __init__(self, name, label_name, per_patch=False, sum=False, names=None, colors=None):
+            self.name = name
             self.label_name = label_name
             self.per_patch = per_patch
             self.sum = sum
-        
+
+            self.names = names if names is not None else {
+                0: "Unknown",
+                1: "No anomaly",
+                2: "Anomaly"
+            }
+
             self.current_threshold = -1
 
         def get_relevant(self, patches):
@@ -765,13 +782,13 @@ class PatchArray(np.recarray):
             else:
                 return np.max(mahalanobis_distances, axis=(1,2))
     
-    METRICS = {
-        "patch":       Metric("patch_labels", per_patch=True),
-        "frame (sum)": Metric("labels", sum=True),
-        "frame (max)": Metric("labels"),
-        "stop (sum)":  Metric("stop", sum=True),
-        "stop (max)":  Metric("stop")
-    }
+    METRICS = [
+        Metric("patch",       "patch_labels", per_patch=True),
+        Metric("frame (sum)", "labels", sum=True),
+        Metric("frame (max)", "labels"),
+        Metric("stop (sum)",  "stop", sum=True, names={-1: "Not set", 0: "It's OK to stop", 1: "Don't stop", 2: "Stop"}),
+        Metric("stop (max)",  "stop", names={-1: "Not set", 0: "It's OK to stop", 1: "Don't stop", 2: "Stop"})
+    ]
 
     def calculate_tsne(self):
         assert self.contains_mahalanobis_distances, "Can't calculate t-SNE without mahalanobis distances calculated"
@@ -835,18 +852,20 @@ class PatchArray(np.recarray):
         # gauss_filters = [None,    (0,1,1), (0,2,2), (0,3,3),
         #                  (1,0,0), (1,1,1), (1,2,2), (1,3,3),
         #                  (2,0,0), (2,1,1), (2,2,2), (2,3,3)]
-        other_filters = [None, "erosion", "dilation"]
+        other_filters = [None, "erosion", "dilation", "erosion+dilation"]
 
-        for metric_name, metric in self.METRICS.items():
-            relevant = metric.get_relevant(self)
+        val = self.validation
+
+        for metric in self.METRICS:
+            relevant = metric.get_relevant(val)
             labels = metric.get_labels(relevant)
             for other_filter in other_filters:
                 for gauss_filter in gauss_filters:
                     # Don't compute gauss filters (in image space) for per sum metrics (they take the average anyways)
-                    if metric_name.endswith("(sum)") and gauss_filter != None and gauss_filter[1] > 0:
+                    if metric.name.endswith("(sum)") and gauss_filter != None and gauss_filter[1] > 0:
                         continue
 
-                    title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, metric_name, gauss_filter, other_filter)
+                    title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, metric.name, gauss_filter, other_filter)
                     logger.info("Calculating %s" % title)
                     
                     scores = dict()
@@ -868,13 +887,16 @@ class PatchArray(np.recarray):
                                 maha = grey_erosion(maha, structure=struct)
                             elif other_filter == "dilation":
                                 maha = grey_dilation(maha, structure=struct)
+                            elif other_filter == "erosion+dilation":
+                                maha = grey_erosion(maha, structure=struct)
+                                maha = grey_dilation(maha, structure=struct)
 
                         scores[name] = metric.get_values(maha)
                         
-                    filename = os.path.join(consts.METRICS_PATH, "%s_%s_%s_%s.jpg" % (extractor, metric_name, gauss_filter, other_filter))
+                    filename = os.path.join(consts.METRICS_PATH, "%s_%s_%s_%s.jpg" % (extractor, metric.name, gauss_filter, other_filter))
                     result = self.calculate_roc(title, labels, scores, filename)
                     for model, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5 in result:
-                        results.append((extractor, metric_name, model, gauss_filter, other_filter, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5))
+                        results.append((extractor, metric.name, model, gauss_filter, other_filter, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5))
         
         return results
 
@@ -892,7 +914,7 @@ class PatchArray(np.recarray):
 
         lw = 1
         
-        ax[0].plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--", label="No skill")
+        ax[0].plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--", label="No skill", alpha=0.5)
 
         f_scores = np.linspace(0.2, 0.8, num=4)
         for f_score in f_scores:
@@ -901,7 +923,7 @@ class PatchArray(np.recarray):
             l, = ax[1].plot(x[y >= 0], y[y >= 0], color="gray", alpha=0.2)
             ax[1].annotate("f1=%.1f" % f_score, xy=(0.85, y[45] + 0.02), color="gray")
 
-        ax[1].plot([0, 1], [no_skill, no_skill], color="navy", lw=lw, linestyle="--")
+        ax[1].plot([0, 1], [no_skill, no_skill], color="navy", lw=lw, linestyle="--", alpha=0.5)
         
         tprs = [0.9, 0.95, 0.99, 0.995, 0.999, 0.9999]
 
@@ -916,12 +938,43 @@ class PatchArray(np.recarray):
             max_f1_index = np.argmax(f1)
             max_f1 = f1[max_f1_index]
 
-            max_f1_index_roc = (np.abs(thresholds_roc - thresholds_pr[max_f1_index])).argmin()
-            l = ax[0].plot(fpr, tpr, lw=lw, label="%s (ROC_AUC = %.4f, AUC_PR = %.4f, max. f1 = %.4f)" % (name, roc_auc, auc_pr, max_f1))
-            ax[0].plot(fpr[max_f1_index_roc], tpr[max_f1_index_roc], marker='o', markersize=5, color=l[0]._color)
+            if "SpatialBinSingle" in name:
+                if "simple" in name:
+                    if ".50" in name:
+                        color = "#90CAF9"   # blue lighten-3
+                    else:
+                        color = "#2196F3"   # blue
+                else:
+                    if ".50" in name:
+                        color = "#CE93D8"   # purple lighten-3
+                    else:
+                        color = "#9C27B0"   # purple
+            elif "SpatialBin" in name:
+                if "simple" in name:
+                    if ".50" in name:
+                        color = "#A5D6A7"   # green lighten-3
+                    else:
+                        color = "#4CAF50"   # green
+                else:
+                    if ".50" in name:
+                        color = "#FFE082"   # amber lighten-3
+                    else:
+                        color = "#FFC107"   # amber
+            else:
+                color = "#F44336"   # red  
 
-            ax[1].plot(recall, precision, lw=lw, color=l[0]._color)
-            ax[1].plot(recall[max_f1_index], precision[max_f1_index], marker='o', markersize=5, color=l[0]._color)
+            if "Balanced" in name:
+                style = ":"    # dashed line style
+            else:
+                style = "-"     # solid line style
+            
+
+            max_f1_index_roc = (np.abs(thresholds_roc - thresholds_pr[max_f1_index])).argmin()
+            l = ax[0].plot(fpr, tpr, linestyle=style, color=color, lw=lw, label=name)
+            ax[0].plot(fpr[max_f1_index_roc], tpr[max_f1_index_roc], marker='o', markersize=5, color=color)
+
+            ax[1].plot(recall, precision, linestyle=style, color=color, lw=lw)
+            ax[1].plot(recall[max_f1_index], precision[max_f1_index], marker='o', markersize=5, color=color)
 
             fprs = tuple([fpr[(np.abs(tpr - t)).argmin()] for t in tprs])
 
@@ -950,17 +1003,17 @@ class PatchArray(np.recarray):
         # ax[2].set_title("f1 score")
         # ax[2].legend(loc="upper right")
         
-        fig.subplots_adjust(left=0.08, right=0.95, top=0.90, bottom=0.35)
+        fig.subplots_adjust(left=0.08, right=0.95, top=0.90, bottom=0.3)
 
         handles, labels = ax[0].get_legend_handles_labels()
-        legend = fig.legend(handles, labels, loc='lower center')
+        legend = fig.legend(handles, labels, loc='lower center', prop={'size': 5}, ncol=2)
 
-        # get the width of your widest label, since every label will need 
-        # to shift by this amount after we align to the right
-        shift = max([t.get_window_extent(renderer=fig.canvas.get_renderer()).width for t in legend.get_texts()])
-        for t in legend.get_texts():
-            t.set_ha('right') # ha is alias for horizontalalignment
-            t.set_position((shift,0))
+        # # get the width of your widest label, since every label will need 
+        # # to shift by this amount after we align to the right
+        # shift = max([t.get_window_extent(renderer=fig.canvas.get_renderer()).width for t in legend.get_texts()])
+        # for t in legend.get_texts():
+        #     t.set_ha('right') # ha is alias for horizontalalignment
+        #     t.set_position((shift,0))
 
         if filename is not None:
             
@@ -1019,12 +1072,12 @@ class PatchArray(np.recarray):
 
 if __name__ == "__main__":
     p = PatchArray(consts.FEATURES_FILE)
-    p.calculate_patch_labels()
-    # p.calculate_metrics()
+    # p.calculate_patch_labels()
+    p.calculate_metrics()
     # p.calculate_roc()
 
 
-    # p.calculate_rasterization(2.0)
+    # p.calculate_rasterization(0.2, fake=False)
 
     from common import Visualize
     # from scipy.misc import imresize
