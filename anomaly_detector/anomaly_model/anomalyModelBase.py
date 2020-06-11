@@ -199,31 +199,39 @@ class AnomalyModelBase(object):
     def visualize(self, **kwargs):
         """ Visualize the result of a anomaly model """
 
-        if "threshold" not in kwargs:
-            kwargs["threshold"] = 60
-        
-        if "patch_to_color_func" not in kwargs:
-            def _default_patch_to_color(v, patch):
-                b = 0#100 if patch in self.normal_distribution else 0
-                g = 0
-                threshold = v.get_trackbar("threshold")
-                if v.get_trackbar("show_thresh"):
-                    r = 100 if self.__mahalanobis_distance__(patch) > threshold else 0
-                elif threshold == 0:
-                    r = 0
-                else:
-                    r = min(255, int(self.__mahalanobis_distance__(patch) * (255 / threshold)))
-                return (b, g, r)
-            kwargs["patch_to_color_func"] = _default_patch_to_color
-
-        if "patch_to_text_func" not in kwargs:
-            def _default_patch_to_text(v, patch):
-                return round(self.__mahalanobis_distance__(patch), 2)
-            kwargs["patch_to_text_func"] = _default_patch_to_text
-
         vis = Visualize(self.patches, **kwargs)
 
-        vis.create_trackbar("threshold", int(kwargs["threshold"]), 1000)
-        vis.create_trackbar("show_thresh", 1, 1)
-        
+        # if "patch_to_color" not in kwargs:
+        #     def patch_to_color(patch):
+        #         b = 0#100 if patch in self.normal_distribution else 0
+        #         g = 0
+        #         threshold = vis.get_trackbar("threshold")
+        #         if vis.get_trackbar("show_thresh"):
+        #             r = 100 if self.__mahalanobis_distance__(patch) > threshold else 0
+        #         elif threshold == 0:
+        #             r = 0
+        #         else:
+        #             r = min(255, int(self.__mahalanobis_distance__(patch) * (255 / threshold)))
+        #         return (b, g, r)
+        #     kwargs["patch_to_color"] = patch_to_color
+        # vis.patch_to_color = kwargs.get("patch_to_color")
+
+        # if "patch_to_text" not in kwargs:
+        #     def patch_to_text(patch):
+        #         return round(self.__mahalanobis_distance__(patch), 2)
+        #     kwargs["patch_to_text"] = patch_to_text
+        # vis.patch_to_text = kwargs.get("patch_to_text")
+
+        patch_to_color = kwargs.get("patch_to_color", None)
+        if patch_to_color is not None:
+            vis.patch_to_color = patch_to_color
+            
+        patch_to_text = kwargs.get("patch_to_text", None)
+        if patch_to_text is not None:
+            vis.patch_to_text = patch_to_text
+            
+        click = kwargs.get("click", None)
+        if click is not None:
+            vis.click = click
+            
         vis.show()

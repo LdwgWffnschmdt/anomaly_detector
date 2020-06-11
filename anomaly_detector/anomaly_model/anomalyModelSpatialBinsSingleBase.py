@@ -9,13 +9,17 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
+from shapely.strtree import STRtree
+from shapely.geometry import Polygon, box, Point
+from shapely.prepared import prep
+
 from anomalyModelBase import AnomalyModelBase
 from common import utils, logger, PatchArray
 import consts
 
-class AnomalyModelSpatialBinsBase(AnomalyModelBase):
+class AnomalyModelSpatialBinsSingleBase(AnomalyModelBase):
     """ Base for anomaly models that create one model per spatial bin (grid cell) """
-    def __init__(self, create_anomaly_model_func, cell_size=0.2, fake=False):
+    def __init__(self, create_anomaly_model_func, patches, cell_size=0.2, fake=False):
         """ Create a new spatial bin anomaly model
 
         Args:
@@ -29,8 +33,32 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         self.CREATE_ANOMALY_MODEL_FUNC = create_anomaly_model_func
         self.FAKE = fake
         
+        # Get extent
+        x_min, y_min, x_max, y_max = patches.get_extent(cell_size, fake=fake)
+
+        # Create the bins
+        bins_y = np.arange(y_min, y_max, cell_size)
+        bins_x = np.arange(x_min, x_max, cell_size)
+        
+        shape = (len(bins_y), len(bins_x))
+
+        # Create the grid
+        raster = np.zeros(shape, dtype=object)
+        
+        for v, y in enumerate(bins_y):
+            for u, x in enumerate(bins_x):
+                b = box(x, y, x + cell_size, y + cell_size)#Point(x + cell_size / 2, y + cell_size / 2)# 
+                b.u = u
+                b.v = v
+                b.patches = list()
+                raster[v, u] = b
+            
+        # Create a search tree of spatial boxes
+        self._grid = STRtree(raster.ravel().tolist())
+        
+
         m = create_anomaly_model_func()
-        self.NAME = "SpatialBin/%s/%s" % (m.__class__.__name__.replace("AnomalyModel", ""), self.KEY)
+        self.NAME = "SpatialBinSingle/%s/%s" % (m.__class__.__name__.replace("AnomalyModel", ""), self.KEY)
     
     def classify(self, patch, threshold=None):
         """The anomaly measure is defined as the Mahalanobis distance between a feature sample
@@ -46,12 +74,26 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     def __mahalanobis_distance__(self, patch):
         """Calculate the Mahalanobis distance between the input and the model"""
         
-        model = self.models.flat[patch["bins_" + self.KEY]]
-        if np.all(model == None):
+        poly = Polygon([(patch.locations.tl.x, patch.locations.tl.y),
+                        (patch.locations.tr.x, patch.locations.tr.y),
+                        (patch.locations.br.x, patch.locations.br.y),
+                        (patch.locations.bl.x, patch.locations.bl.y)])
+        
+
+        bin = self._grid.query(poly.centroid)
+
+        # # pr = prep(poly)
+        bin = filter(poly.centroid.intersects, bin)
+        
+        if len(bin) == 0:
+            bin = [self._grid.nearest(poly.centroid)]
+
+        model = self.models[bin[0].v, bin[0].u]
+        if model == None:
             # logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
             return np.nan # TODO: What should we do?
         
-        return np.mean([m.__mahalanobis_distance__(patch) for m in model if m is not None])
+        return model.__mahalanobis_distance__(patch)
 
     def filter_training(self, patches):
         return patches
@@ -141,7 +183,7 @@ if __name__ == "__main__":
 
     patches = PatchArray(consts.FEATURES_FILE)
 
-    model = AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=0.2)
+    model = AnomalyModelSpatialBinsSingleBase(AnomalyModelSVG, patches, cell_size=0.2)
     
     if model.load_or_generate(patches):
         # patches.show_spatial_histogram(model.CELL_SIZE)

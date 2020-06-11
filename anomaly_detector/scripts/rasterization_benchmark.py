@@ -50,6 +50,8 @@ def rasterization_benchmark():
         files_expanded += glob(s)
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
+    files = filter(lambda f: not "EfficientNet" in f, files)
+
     if args.output is None:
         filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark_rasterization.csv"))
     else:
@@ -99,7 +101,7 @@ def rasterization_benchmark():
 
                     patches.contains_locations = True
 
-                    patches._save_patch_locations(fake, start, end)
+                    patches._save_patch_locations(key, start, end)
 
                     patches.contains_locations = True
 

@@ -591,6 +591,17 @@ class PatchArray(np.recarray):
         
         return image_locations
 
+    def _get_centers(self):
+        """ Get the center for each patch (in image coordinates) """
+        n, h, w = self.locations.shape
+        
+        image_locations = np.zeros((h, w, 2), dtype=np.float32)
+        
+        for (y, x) in np.ndindex((h, w)):
+            image_locations[y, x] = (y + 0.5, x + 0.5)
+        
+        return image_locations
+
     def _image_to_relative(self, image_locations):
         return self._ilu.image_to_relative(image_locations, image_width=self.image_size, image_height=self.image_size)         # (h, w, 4, 2)
     
@@ -599,10 +610,7 @@ class PatchArray(np.recarray):
         res = np.rec.fromarrays(res.transpose(), dtype=[("y", np.float32), ("x", np.float32)]).transpose()
         return np.rec.fromarrays(res.transpose(), dtype=self.locations.dtype) # No transpose here smh
 
-    def _save_patch_locations(self, fake=False, start=None, end=None):
-        key = "locations"
-        if fake: key = "fake_" + key
-
+    def _save_patch_locations(self, key, start=None, end=None):
         with h5py.File(self.filename, "r+") as hf:
             # Remove the old locations dataset
             if key in hf.keys():
@@ -637,7 +645,27 @@ class PatchArray(np.recarray):
 
         self.contains_locations = True
 
-        self._save_patch_locations(fake, start, end)
+        self._save_patch_locations(key, start, end)
+
+    def calculate_patch_center_locations(self):
+        """Calculate the real world coordinates of the center of every feature"""
+        key = "locations_center"
+
+        assert self.contains_features, "Can only compute patch locations if there are patches"
+
+        logger.info("Calculating locations of every patch")
+        
+        start = time.time()
+        image_locations = self._get_centers()
+        
+        relative_locations = self._image_to_relative(image_locations)
+        
+        for i in tqdm(range(self[key].shape[0]), desc="Calculating locations", file=sys.stderr):
+            self[key][i] = self._relative_to_absolute(relative_locations, self[i, 0, 0].camera_locations)
+
+        end = time.time()
+
+        self._save_patch_locations(key, start, end)
 
     #################
     # Calculations  #
