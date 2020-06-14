@@ -62,7 +62,7 @@ def feature_extractor_benchmark():
         raise ValueError("Please specify at least one filename (%s)" % files)
         
     if args.output is None:
-        filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark_extractor.csv"))
+        filename = os.path.join(consts.BENCHMARK_PATH, datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark_extractor.csv"))
     else:
         filename = args.output
     

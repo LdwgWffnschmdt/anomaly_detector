@@ -35,11 +35,12 @@ import time
 import traceback
 from glob import glob
 
+import h5py
 from tqdm import tqdm
 import numpy as np
 
 from common import utils, logger, PatchArray
-from anomaly_model import AnomalyModelSVG, AnomalyModelBalancedDistribution, AnomalyModelBalancedDistributionSVG, AnomalyModelSpatialBinsBase
+from anomaly_model import AnomalyModelSVG, AnomalyModelBalancedDistribution, AnomalyModelBalancedDistributionSVG, AnomalyModelSpatialBinsBase, AnomalyModelSpatialBinsSingleBase
 
 def calculate_locations():
     ################
@@ -60,7 +61,17 @@ def calculate_locations():
         files_expanded += glob(s)
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
-    files = filter(lambda f: not "EfficientNet" in f, files)
+    # files = filter(lambda f: "EfficientNet" in f, files)
+    # files = filter(lambda f: f not in ["/media/ldwg/DataBig/data/WZL/Features/EfficientNetB6_Level9.h5",
+    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB3_Level9.h5",
+    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB0_Level9.h5",
+    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB6_Level7.h5",
+    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB3_Level7.h5",
+    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB0_Level7.h5",
+    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB3_Level6.h5",
+    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB0_Level6.h5",
+    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB0_Level8.h5",
+    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB3_Level8.h5"], files)
 
     if args.index is not None:
         files = files[args.index::args.total]
@@ -74,19 +85,37 @@ def calculate_locations():
                 continue
 
             try:
+                # keys = ["rasterization_fake_0.20_count", "rasterization_fake_0.20", "rasterization_0.20_count", "rasterization_0.20",
+                #         "rasterization_fake_0.50_count", "rasterization_fake_0.50", "rasterization_0.50_count", "rasterization_0.50",
+                #         "bins_0.20","bins_fake_0.20","bins_0.50","bins_fake_0.50",
+                #         "SpatialBin"]
+                # with h5py.File(features_file, "r+") as hf:
+                #     # Remove the old shit
+                #     for k in keys:
+                #         if k in hf.keys():
+                #             logger.info("Deleting %s from %s" % (k, features_file))
+                #             del hf[k]
+                # pbar.update()
+                # continue
+
                 # Load the file
                 patches = PatchArray(features_file)
 
-                models = [AnomalyModelSVG()]
+                models =[AnomalyModelSVG()]
 
                 # Calculate and save the locations
-                for fake in [False]:
+                for fake in [True, False]:
                     patches.calculate_patch_locations(fake=fake)
                     for cell_size in [0.2, 0.5]:
+                        key = "%.2f" % cell_size
+                        if fake: key = "fake_" + key
+
                         patches.calculate_rasterization(cell_size, fake=fake)
 
-                        models.append(AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=cell_size, fake=fake))
-                        # models.append(AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistributionSVG(initial_normal_features=10, threshold_learning=threshold_learning, pruning_parameter=0.5), cell_size=cell_size, fake=fake))
+                        models.append(AnomalyModelSpatialBinsBase(AnomalyModelSVG, patches, cell_size=cell_size, fake=fake))
+
+                        threshold_learning = int(np.mean(patches.mahalanobis_distances["SpatialBin/SVG/%s" % key]))
+                        models.append(AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistributionSVG(initial_normal_features=10, threshold_learning=threshold_learning, pruning_parameter=0.5), patches, cell_size=cell_size, fake=fake))
 
                 # Calculate anomaly models
                 if patches.contains_mahalanobis_distances and "SVG" in patches.mahalanobis_distances.dtype.names:

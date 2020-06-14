@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Benchmark the specified anomaly models.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.FEATURES_PATH + "Benchmark/*.h5",
+parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.FEATURES_PATH + "*.h5",
                     help="The feature file(s). Supports \"path/to/*.h5\"")
 
 parser.add_argument("--output", metavar="OUT", dest="output", type=str,
@@ -50,19 +50,24 @@ def anomaly_model_benchmark():
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
     if args.output is None:
-        filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark_anomaly_model.csv"))
+        filename = os.path.join(consts.BENCHMARK_PATH, datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark_anomaly_model.csv"))
     else:
         filename = args.output
     
     write_header = not os.path.exists(filename)
 
-    with tqdm(total=len(files), file=sys.stderr, desc="Calculating SVG") as pbar:
-        for features_file in files:
-            # Load the file
-            patches = PatchArray(features_file)
-            m = AnomalyModelSVG()
-            m.load_or_generate(patches, silent=True)
-            pbar.update()
+    # Calculate SVG already so we know the balanced distribution parameters
+    # with tqdm(total=len(files), file=sys.stderr, desc="Calculating SVG") as pbar:
+    #     for features_file in files:
+    #         # Load the file
+    #         patches = PatchArray(features_file)
+    #         models = [AnomalyModelSVG()]
+    #         for fake in [True, False]:
+    #             for cell_size in [0.2, 0.5]:
+    #                 models.append(AnomalyModelSpatialBinsBase(AnomalyModelSVG, patches, cell_size=cell_size, fake=fake))
+    #         for m in models:
+    #             m.load_or_generate(patches, silent=True)
+    #         pbar.update()
             
     with open(filename, "a") as csvfile:
         writer = None
@@ -91,8 +96,13 @@ def anomaly_model_benchmark():
 
                 for fake in [True, False]:
                     for cell_size in [0.2, 0.5]:
-                        models.append(AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=cell_size, fake=fake))
-                        # models.append(AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistributionSVG(initial_normal_features=10, threshold_learning=threshold_learning, pruning_parameter=0.5), cell_size=cell_size, fake=fake))
+                        key = "%.2f" % cell_size
+                        if fake: key = "fake_" + key
+
+                        models.append(AnomalyModelSpatialBinsBase(AnomalyModelSVG, patches, cell_size=cell_size, fake=fake))
+
+                        threshold_learning = int(np.mean(patches.mahalanobis_distances["SpatialBin/SVG/%s" % key]))
+                        models.append(AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistributionSVG(initial_normal_features=10, threshold_learning=threshold_learning, pruning_parameter=0.5), patches, cell_size=cell_size, fake=fake))
 
                 # Calculate anomaly models
                 if patches.contains_mahalanobis_distances and "SVG" in patches.mahalanobis_distances.dtype.names:
@@ -101,18 +111,21 @@ def anomaly_model_benchmark():
 
                 with tqdm(total=len(models), file=sys.stderr) as pbar2:
                     for m in models:
+                        base_name = m.NAME
+                        if not "Spatial" in base_name and "Balanced" in base_name:
+                            base_name = "BalancedDistributionSVG"
                         try:
-                            pbar2.set_description(m.NAME)
-                            logger.info("Calculating %s" % m.NAME)
+                            pbar2.set_description(base_name)
+                            logger.info("Calculating %s" % base_name)
                             
-                            log("%s (Creation)" % m.NAME, np.array(timeit.repeat(lambda: m.__generate_model__(patches, silent=True), number=1, repeat=3)))
+                            log("%s (Creation)" % base_name, np.array(timeit.repeat(lambda: m.__generate_model__(patches, silent=True), number=1, repeat=1)))
                             
                             def _evaluate_frame():
                                 for i in np.ndindex(patches.shape):
                                     m.__mahalanobis_distance__(patches[i])
                             
-                            log("%s (Maha per patch)" % m.NAME, np.array(timeit.repeat(lambda: m.__mahalanobis_distance__(patches[0, 0, 0]), number=1, repeat=10)))
-                            log("%s (Maha per frame)" % m.NAME, np.array(timeit.repeat(lambda: _evaluate_frame(), number=1, repeat=10)) / float(patches.shape[0]))
+                            log("%s (Maha per patch)" % base_name, np.array(timeit.repeat(lambda: m.__mahalanobis_distance__(patches[0, 0, 0]), number=1, repeat=3)))
+                            log("%s (Maha per frame)" % base_name, np.array(timeit.repeat(lambda: _evaluate_frame(), number=1, repeat=3)) / float(patches.shape[0]))
 
                         except (KeyboardInterrupt, SystemExit):
                             raise

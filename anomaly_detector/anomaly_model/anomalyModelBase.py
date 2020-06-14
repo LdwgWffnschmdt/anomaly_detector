@@ -185,14 +185,6 @@ class AnomalyModelBase(object):
             m.attrs["max_no_anomaly"] = np.nanmax(no_anomaly) if no_anomaly.size > 0 else np.NaN
             m.attrs["max_anomaly"]    = np.nanmax(anomaly) if anomaly.size > 0 else np.NaN
 
-            # hist1, bins = np.histogram(no_anomaly, bins="fd")
-            # m.attrs["histogram_no_anomaly"] = hist1
-
-            # hist2, _ = np.histogram(anomaly, bins=bins)
-            # m.attrs["histogram_anomaly"] = hist2
-            
-            # m.attrs["histogram_edges"] = bins
-
             logger.info("Saved Mahalanobis distances to file")
             return True
 

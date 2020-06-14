@@ -48,7 +48,8 @@ def metrics():
         files_expanded += glob(s)
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
-    files = filter(lambda f: not "EfficientNet" in f, files)
+    # files = filter(lambda f: "EfficientNetB6" in f, files)
+    # files = filter(lambda f: "EfficientNetB6_Level6" not in f, files)
 
     if args.output is None:
         filename = os.path.join(consts.METRICS_PATH, datetime.now().strftime("%Y_%m_%d_%H_%M_metrics.csv"))

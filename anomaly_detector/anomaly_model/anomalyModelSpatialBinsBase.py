@@ -9,17 +9,22 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
+from shapely.strtree import STRtree
+from shapely.geometry import Polygon, box, Point
+from shapely.prepared import prep
+
 from anomalyModelBase import AnomalyModelBase
 from common import utils, logger, PatchArray
 import consts
 
 class AnomalyModelSpatialBinsBase(AnomalyModelBase):
     """ Base for anomaly models that create one model per spatial bin (grid cell) """
-    def __init__(self, create_anomaly_model_func, cell_size=0.2, fake=False):
+    def __init__(self, create_anomaly_model_func, patches, cell_size=0.2, fake=False):
         """ Create a new spatial bin anomaly model
 
         Args:
             create_anomaly_model_func (func): Method that returns an anomaly model
+            patches (PatchArray): The patches are needed to get the rasterization
             cell_size (float): Width and height of spatial bin in meter
         """
         AnomalyModelBase.__init__(self)
@@ -29,13 +34,34 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         self.CREATE_ANOMALY_MODEL_FUNC = create_anomaly_model_func
         self.FAKE = fake
         
+        # Get extent
+        x_min, y_min, x_max, y_max = patches.get_extent(cell_size, fake=fake)
+
+        # Create the bins
+        bins_y = np.arange(y_min, y_max, cell_size)
+        bins_x = np.arange(x_min, x_max, cell_size)
+        
+        shape = (len(bins_y), len(bins_x))
+
+        # Create the grid
+        raster = np.zeros(shape, dtype=object)
+        
+        for v, y in enumerate(bins_y):
+            for u, x in enumerate(bins_x):
+                b = box(x, y, x + cell_size, y + cell_size)#Point(x + cell_size / 2, y + cell_size / 2)# 
+                b.u = u
+                b.v = v
+                b.patches = list()
+                raster[v, u] = b
+            
+        # Create a search tree of spatial boxes
+        self._grid = STRtree(raster.ravel().tolist())
+        
         m = create_anomaly_model_func()
         self.NAME = "SpatialBin/%s/%s" % (m.__class__.__name__.replace("AnomalyModel", ""), self.KEY)
     
     def classify(self, patch, threshold=None):
-        """The anomaly measure is defined as the Mahalanobis distance between a feature sample
-        and the single variate Gaussian distribution along each dimension.
-        """
+        """The anomaly measure is defined as the Mahalanobis distance"""
         model = self.models.flat[patch["bins_" + self.KEY]]
         if model is None:
             # logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
@@ -44,15 +70,40 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         return model.classify(patch)
     
     def __mahalanobis_distance__(self, patch):
-        """Calculate the Mahalanobis distance between the input and the model"""
+        """Calculate the Mahalanobis distance between the input and the models
+        in each bin that intersects the receptive field """
         
         model = self.models.flat[patch["bins_" + self.KEY]]
         if np.all(model == None):
             # logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
             return np.nan # TODO: What should we do?
         
+        # Use the mean of Mahalanobis distances to each model
         return np.mean([m.__mahalanobis_distance__(patch) for m in model if m is not None])
 
+    def __mahalanobis_distance_single__(self, patch):
+        """Calculate the Mahalanobis distance between the input and the model in the closest bin"""
+        
+        poly = Polygon([(patch.locations.tl.x, patch.locations.tl.y),
+                        (patch.locations.tr.x, patch.locations.tr.y),
+                        (patch.locations.br.x, patch.locations.br.y),
+                        (patch.locations.bl.x, patch.locations.bl.y)])
+        
+        bin = self._grid.query(poly.centroid)
+
+        # # pr = prep(poly)
+        bin = filter(poly.centroid.intersects, bin)
+        
+        if len(bin) == 0:
+            bin = [self._grid.nearest(poly.centroid)]
+
+        model = self.models[bin[0].v, bin[0].u]
+        if model == None:
+            # logger.warning("No model available for this bin (%i, %i)" % (patch.bins.v, patch.bins.u))
+            return np.nan # TODO: What should we do?
+        
+        return model.__mahalanobis_distance__(patch)
+    
     def filter_training(self, patches):
         return patches
 
@@ -133,6 +184,48 @@ class AnomalyModelSpatialBinsBase(AnomalyModelBase):
         h5file.attrs["Num models"] = models_count
         return True
     	
+    def calculate_mahalanobis_distances(self):
+        """ Calculate all the Mahalanobis distances and save them to the file """
+        with h5py.File(self.patches.filename, "r+") as hf:
+            ### Calculate Mahalanobis distances based on a single bin
+            g = hf.get(self.NAME)
+
+            if g is None:
+                raise ValueError("The model needs to be saved first")
+            
+            maha = np.zeros(self.patches.shape, dtype=np.float64)
+            
+            for i in tqdm(np.ndindex(self.patches.shape), desc="Calculating mahalanobis distances (mean)", total=self.patches.size, file=sys.stderr):
+                maha[i] = self.__mahalanobis_distance__(self.patches[i])
+
+            no_anomaly = maha[self.patches.labels == 1]
+            anomaly = maha[self.patches.labels == 2]
+
+            if g.get("mahalanobis_distances") is not None: del g["mahalanobis_distances"]
+            m = g.create_dataset("mahalanobis_distances", data=maha)
+            m.attrs["max_no_anomaly"] = np.nanmax(no_anomaly) if no_anomaly.size > 0 else np.NaN
+            m.attrs["max_anomaly"]    = np.nanmax(anomaly) if anomaly.size > 0 else np.NaN
+
+            logger.info("Saved Mahalanobis distances to file")
+            
+            ### Calculate Mahalanobis distances based on a single bin
+            maha = np.zeros(self.patches.shape, dtype=np.float64)
+            
+            for i in tqdm(np.ndindex(self.patches.shape), desc="Calculating mahalanobis distances (single)", total=self.patches.size, file=sys.stderr):
+                maha[i] = self.__mahalanobis_distance_single__(self.patches[i])
+
+            no_anomaly = maha[self.patches.labels == 1]
+            anomaly = maha[self.patches.labels == 2]
+
+            if g.get("Single/mahalanobis_distances") is not None: del g["Single/mahalanobis_distances"]
+            m = g.create_dataset("Single/mahalanobis_distances", data=maha)
+            m.attrs["max_no_anomaly"] = np.nanmax(no_anomaly) if no_anomaly.size > 0 else np.NaN
+            m.attrs["max_anomaly"]    = np.nanmax(anomaly) if anomaly.size > 0 else np.NaN
+
+            logger.info("Saved Mahalanobis distances to file")
+
+            return True
+
         
 # Only for tests
 if __name__ == "__main__":
@@ -141,7 +234,7 @@ if __name__ == "__main__":
 
     patches = PatchArray(consts.FEATURES_FILE)
 
-    model = AnomalyModelSpatialBinsBase(AnomalyModelSVG, cell_size=0.2)
+    model = AnomalyModelSpatialBinsBase(AnomalyModelSVG, patches, cell_size=0.2)
     
     if model.load_or_generate(patches):
         # patches.show_spatial_histogram(model.CELL_SIZE)

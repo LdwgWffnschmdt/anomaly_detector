@@ -57,28 +57,27 @@ def extract_features():
     if args.extractor is None:
         args.extractor = extractor_names
 
+    # args.extractor = filter(lambda f: "EfficientNet" in f, args.extractor)
+
     if isinstance(args.files, basestring):
         args.files = [args.files]
 
     patches = PatchArray(args.files)
 
-    p = patches[:, 0, 0]
 
     ## WZL:
     patches = patches.training_and_validation
+    # For the benchmark subset:
+    # patches = patches.training_and_validation[0:10]
 
     ## FieldSAFE:
+    # p = patches[:, 0, 0]
     # f = p.round_numbers == 1
     # patches = patches[f]
 
     # vis = Visualize(patches)
     # vis.show()
 
-    # patches = getattr(patches, args.filter, None)
-    # assert patches is not None, "The filter was not valid."
-    # if args.filter_argument is not None:
-    #     patches = patches(args.filter_argument)
-    #     assert patches is not None, "The filter argument was not valid."
     dataset = patches.to_dataset()
     dataset_3D = patches.to_temporal_dataset(16)
     total = patches.shape[0]
@@ -90,7 +89,7 @@ def extract_features():
     for extractor_name in args.extractor:
         try:
             bs = getattr(module, extractor_name).TEMPORAL_BATCH_SIZE
-            shape = getattr(module, extractor_name).OUTPUT_SHAPE
+            # shape = getattr(module, extractor_name).OUTPUT_SHAPE
             # if np.prod(shape) > 300000:
             #     logger.warning("Skipping %s (output too big)" % extractor_name)
             #     continue
@@ -111,39 +110,36 @@ def extract_features():
 if __name__ == "__main__":
     extract_features()
 
-# | NAME                           | OUTPUT SHAPE    | RF   | IMG SIZE | RF / IMG |
-# |--------------------------------|-----------------|------|----------|----------|
-# | C3D                            | (7, 7, 512)     | 119  | 112      | 1.062    |
-# | C3D_Block3                     | (28, 28, 256)   | 23   | 112      | 0.205    |
-# | C3D_Block4                     | (14, 14, 512)   | 55   | 112      | 0.491    |
-# | EfficientNetB0                 | (7, 7, 1280)    | 851  | 224      | 3.799 !  |
-# | EfficientNetB0_Block3          | (28, 28, 40)    | 67   | 224      | 0.299    |
-# | EfficientNetB0_Block4          | (14, 14, 80)    | 147  | 224      | 0.656    |
-# | EfficientNetB0_Block5          | (14, 14, 112)   | 339  | 224      | 1.513    |
-# | EfficientNetB0_Block6          | (7, 7, 192)     | 787  | 224      | 3.513 !  |
-# | EfficientNetB3                 | (10, 10, 1536)  | 1200 | 300      | 4.000 !  |
-# | EfficientNetB3_Block3          | (38, 38, 48)    | 111  | 300      | 0.370    |
-# | EfficientNetB3_Block4          | (19, 19, 96)    | 255  | 300      | 0.850    |
-# | EfficientNetB3_Block5          | (19, 19, 136)   | 575  | 300      | 1.917    |
-# | EfficientNetB3_Block6          | (10, 10, 232)   | 1200 | 300      | 4.000 !  |
-# | EfficientNetB6                 | (17, 17, 2304)  | 1056 | 528      | 2.000 !  |
-# | EfficientNetB6_Block3          | (66, 66, 72)    | 235  | 528      | 0.445    |
-# | EfficientNetB6_Block4          | (33, 33, 144)   | 475  | 528      | 0.900    |
-# | EfficientNetB6_Block5          | (33, 33, 200)   | 987  | 528      | 1.869    |
-# | EfficientNetB6_Block6          | (17, 17, 344)   | 1056 | 528      | 2.000 !  |
-# | MobileNetV2                    | (7, 7, 1280)    | 491  | 224      | 2.192 !  |
-# | MobileNetV2_Block12            | (14, 14, 96)    | 267  | 224      | 1.192    |
-# | MobileNetV2_Block14            | (7, 7, 160)     | 363  | 224      | 1.621    |
-# | MobileNetV2_Block16            | (7, 7, 320)     | 491  | 224      | 2.192 !  |
-# | MobileNetV2_Block3             | (28, 28, 32)    | 27   | 224      | 0.121    |
-# | MobileNetV2_Block6             | (14, 14, 64)    | 75   | 224      | 0.335    |
-# | MobileNetV2_Block9             | (14, 14, 64)    | 171  | 224      | 0.763    |
-# | ResNet50V2                     | (7, 7, 2048)    | 479  | 224      | 2.138 !  |
-# | ResNet50V2_LargeImage          | (15, 15, 2048)  | 479  | 449      | 1.067    |
-# | ResNet50V2_Stack3              | (14, 14, 512)   | 95   | 224      | 0.424    |
-# | ResNet50V2_Stack3_LargeImage   | (29, 29, 512)   | 95   | 449      | 0.212    |
-# | ResNet50V2_Stack4              | (7, 7, 1024)    | 287  | 224      | 1.281    |
-# | ResNet50V2_Stack4_LargeImage   | (15, 15, 1024)  | 287  | 449      | 0.639    |
-# | VGG16                          | (14, 14, 512)   | 181  | 224      | 0.808    |
-# | VGG16_Block3                   | (56, 56, 512)   | 37   | 224      | 0.165    |
-# | VGG16_Block4                   | (28, 28, 512)   | 85   | 224      | 0.379    |
+# NAME                           | OUTPUT SHAPE    | RF   | IMG SIZE | RF / IMG
+# --------------------------------------------------------------------------------
+# C3D                            | (7, 7, 512)     | 119  | 112      | 1.062 
+# C3D_Block3                     | (28, 28, 256)   | 23   | 112      | 0.205 
+# C3D_Block4                     | (14, 14, 512)   | 55   | 112      | 0.491 
+# EfficientNetB0_Level6          | (14, 14, 112)   | 339  | 224      | 1.513 
+# EfficientNetB0_Level7          | (7, 7, 192)     | 787  | 224      | 3.513 !
+# EfficientNetB0_Level8          | (7, 7, 320)     | 819  | 224      | 3.656 !
+# EfficientNetB0_Level9          | (7, 7, 1280)    | 851  | 224      | 3.799 !
+# EfficientNetB3_Level6          | (19, 19, 136)   | 575  | 300      | 1.917 
+# EfficientNetB3_Level7          | (10, 10, 232)   | 1200 | 300      | 4.000 !
+# EfficientNetB3_Level8          | (10, 10, 384)   | 1200 | 300      | 4.000 !
+# EfficientNetB3_Level9          | (10, 10, 1536)  | 1200 | 300      | 4.000 !
+# EfficientNetB6_Level6          | (33, 33, 200)   | 987  | 528      | 1.869 
+# EfficientNetB6_Level7          | (17, 17, 344)   | 1056 | 528      | 2.000 !
+# EfficientNetB6_Level8          | (17, 17, 576)   | 1056 | 528      | 2.000 !
+# EfficientNetB6_Level9          | (17, 17, 2304)  | 1056 | 528      | 2.000 !
+# MobileNetV2                    | (7, 7, 1280)    | 491  | 224      | 2.192 !
+# MobileNetV2_Block12            | (14, 14, 96)    | 267  | 224      | 1.192 
+# MobileNetV2_Block14            | (7, 7, 160)     | 363  | 224      | 1.621 
+# MobileNetV2_Block16            | (7, 7, 320)     | 491  | 224      | 2.192 !
+# MobileNetV2_Block3             | (28, 28, 32)    | 27   | 224      | 0.121 
+# MobileNetV2_Block6             | (14, 14, 64)    | 75   | 224      | 0.335 
+# MobileNetV2_Block9             | (14, 14, 64)    | 171  | 224      | 0.763 
+# ResNet50V2                     | (7, 7, 2048)    | 479  | 224      | 2.138 !
+# ResNet50V2_LargeImage          | (15, 15, 2048)  | 479  | 449      | 1.067 
+# ResNet50V2_Stack3              | (14, 14, 512)   | 95   | 224      | 0.424 
+# ResNet50V2_Stack3_LargeImage   | (29, 29, 512)   | 95   | 449      | 0.212 
+# ResNet50V2_Stack4              | (7, 7, 1024)    | 287  | 224      | 1.281 
+# ResNet50V2_Stack4_LargeImage   | (15, 15, 1024)  | 287  | 449      | 0.639 
+# VGG16                          | (14, 14, 512)   | 181  | 224      | 0.808 
+# VGG16_Block3                   | (56, 56, 512)   | 37   | 224      | 0.165 
+# VGG16_Block4                   | (28, 28, 512)   | 85   | 224      | 0.379

@@ -49,17 +49,17 @@ class FeatureExtractorEfficientNetB0_Level9(__FeatureExtractorEfficientNetBase__
         self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
         self.model.trainable = False
     
-class FeatureExtractorEfficientNetB0_Level4(FeatureExtractorEfficientNetB0_Level9):
-    """Feature extractor based on EfficientNetB0 (trained on noisy-student)."""
-    LAYER_NAME      = "block3b_add"
-    OUTPUT_SHAPE    = (28, 28, 40)
-    RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (67, 67)}
+# class FeatureExtractorEfficientNetB0_Level4(FeatureExtractorEfficientNetB0_Level9):
+#     """Feature extractor based on EfficientNetB0 (trained on noisy-student)."""
+#     LAYER_NAME      = "block3b_add"
+#     OUTPUT_SHAPE    = (28, 28, 40)
+#     RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (67, 67)}
 
-class FeatureExtractorEfficientNetB0_Level5(FeatureExtractorEfficientNetB0_Level9):
-    """Feature extractor based on EfficientNetB0 (trained on noisy-student)."""
-    LAYER_NAME      = "block4c_add"
-    OUTPUT_SHAPE    = (14, 14, 80)
-    RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (147, 147)}
+# class FeatureExtractorEfficientNetB0_Level5(FeatureExtractorEfficientNetB0_Level9):
+#     """Feature extractor based on EfficientNetB0 (trained on noisy-student)."""
+#     LAYER_NAME      = "block4c_add"
+#     OUTPUT_SHAPE    = (14, 14, 80)
+#     RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (147, 147)}
 
 class FeatureExtractorEfficientNetB0_Level6(FeatureExtractorEfficientNetB0_Level9):
     """Feature extractor based on EfficientNetB0 (trained on noisy-student)."""
@@ -101,17 +101,17 @@ class FeatureExtractorEfficientNetB3_Level9(__FeatureExtractorEfficientNetBase__
         self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
         self.model.trainable = False
 
-class FeatureExtractorEfficientNetB3_Level4(FeatureExtractorEfficientNetB3_Level9):
-    """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
-    LAYER_NAME      = "block3c_add"
-    OUTPUT_SHAPE    = (38, 38, 48)
-    RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (111, 111)}
+# class FeatureExtractorEfficientNetB3_Level4(FeatureExtractorEfficientNetB3_Level9):
+#     """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
+#     LAYER_NAME      = "block3c_add"
+#     OUTPUT_SHAPE    = (38, 38, 48)
+#     RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (111, 111)}
 
-class FeatureExtractorEfficientNetB3_Level5(FeatureExtractorEfficientNetB3_Level9):
-    """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
-    LAYER_NAME      = "block4e_add"
-    OUTPUT_SHAPE    = (19, 19, 96)
-    RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (255, 255)}
+# class FeatureExtractorEfficientNetB3_Level5(FeatureExtractorEfficientNetB3_Level9):
+#     """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
+#     LAYER_NAME      = "block4e_add"
+#     OUTPUT_SHAPE    = (19, 19, 96)
+#     RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (255, 255)}
 
 class FeatureExtractorEfficientNetB3_Level6(FeatureExtractorEfficientNetB3_Level9):
     """Feature extractor based on EfficientNetB3 (trained on noisy-student)."""
@@ -153,17 +153,17 @@ class FeatureExtractorEfficientNetB6_Level9(__FeatureExtractorEfficientNetBase__
         self.model = tf.keras.Model(model_full.inputs, model_full.get_layer(self.LAYER_NAME).output)   
         self.model.trainable = False
 
-class FeatureExtractorEfficientNetB6_Level4(FeatureExtractorEfficientNetB6_Level9):
-    """Feature extractor based on EfficientNetB6 (trained on noisy-student)."""
-    LAYER_NAME      = "block3f_add"
-    OUTPUT_SHAPE    = (66, 66, 72)
-    RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (235, 235)}
+# class FeatureExtractorEfficientNetB6_Level4(FeatureExtractorEfficientNetB6_Level9):
+#     """Feature extractor based on EfficientNetB6 (trained on noisy-student)."""
+#     LAYER_NAME      = "block3f_add"
+#     OUTPUT_SHAPE    = (66, 66, 72)
+#     RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (235, 235)}
 
-class FeatureExtractorEfficientNetB6_Level5(FeatureExtractorEfficientNetB6_Level9):
-    """Feature extractor based on EfficientNetB6 (trained on noisy-student)."""
-    LAYER_NAME      = "block4h_add"
-    OUTPUT_SHAPE    = (33, 33, 144)
-    RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (475, 475)}
+# class FeatureExtractorEfficientNetB6_Level5(FeatureExtractorEfficientNetB6_Level9):
+#     """Feature extractor based on EfficientNetB6 (trained on noisy-student)."""
+#     LAYER_NAME      = "block4h_add"
+#     OUTPUT_SHAPE    = (33, 33, 144)
+#     RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (475, 475)}
 
 class FeatureExtractorEfficientNetB6_Level6(FeatureExtractorEfficientNetB6_Level9):
     """Feature extractor based on EfficientNetB6 (trained on noisy-student)."""

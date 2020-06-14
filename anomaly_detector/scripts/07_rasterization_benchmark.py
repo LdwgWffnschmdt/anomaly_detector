@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Benchmark the specified anomaly models.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.FEATURES_PATH + "Benchmark/*.h5",
+parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.FEATURES_PATH + "*.h5",
                     help="The feature file(s). Supports \"path/to/*.h5\"")
 
 parser.add_argument("--output", metavar="OUT", dest="output", type=str,
@@ -50,10 +50,10 @@ def rasterization_benchmark():
         files_expanded += glob(s)
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
-    files = filter(lambda f: not "EfficientNet" in f, files)
+    # files = filter(lambda f: not "EfficientNet" in f, files)
 
     if args.output is None:
-        filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark_rasterization.csv"))
+        filename = os.path.join(consts.BENCHMARK_PATH, datetime.now().strftime("%Y_%m_%d_%H_%M_benchmark_rasterization.csv"))
     else:
         filename = args.output
     
