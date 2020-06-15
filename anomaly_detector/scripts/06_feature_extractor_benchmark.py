@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Benchmark the specified feature extractors.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("--files", metavar="F", dest="files", type=str, default=consts.EXTRACT_FILES_TEST,
+parser.add_argument("--files", metavar="F", dest="files", type=str, default=consts.EXTRACT_FILES,
                     help="File(s) to use for benchmarks (*.tfrecord, *.jpg)")
 
 parser.add_argument("--extractor", metavar="EXT", dest="extractor", nargs="*", type=str,
@@ -90,7 +90,7 @@ def feature_extractor_benchmark():
     if len(args.extractor) > 1:
         csvfile.close()
         for extractor_name in tqdm(args.extractor, desc="Benchmarking extractors", file=sys.stderr):
-            command = "/home/ldwg/anomaly_detector/.env/bin/python /home/ldwg/anomaly_detector/anomaly_detector/scripts/feature_extractor_benchmark.py --extractor %s --output %s" % (extractor_name, filename)
+            command = "/home/ldwg/anomaly_detector/.env/bin/python /home/ldwg/anomaly_detector/anomaly_detector/scripts/06_feature_extractor_benchmark.py --extractor %s --output %s" % (extractor_name, filename)
             process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
             for line in process.stdout:
                 tqdm.write(line)

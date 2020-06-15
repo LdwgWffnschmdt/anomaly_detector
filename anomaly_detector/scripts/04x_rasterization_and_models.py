@@ -40,7 +40,7 @@ from tqdm import tqdm
 import numpy as np
 
 from common import utils, logger, PatchArray
-from anomaly_model import AnomalyModelSVG, AnomalyModelBalancedDistribution, AnomalyModelBalancedDistributionSVG, AnomalyModelSpatialBinsBase, AnomalyModelSpatialBinsSingleBase
+from anomaly_model import AnomalyModelSVG, AnomalyModelMVG, AnomalyModelBalancedDistribution, AnomalyModelBalancedDistributionSVG, AnomalyModelSpatialBinsBase
 
 def calculate_locations():
     ################
@@ -61,17 +61,8 @@ def calculate_locations():
         files_expanded += glob(s)
     files = sorted(list(set(files_expanded))) # Remove duplicates
 
-    # files = filter(lambda f: "EfficientNet" in f, files)
-    # files = filter(lambda f: f not in ["/media/ldwg/DataBig/data/WZL/Features/EfficientNetB6_Level9.h5",
-    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB3_Level9.h5",
-    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB0_Level9.h5",
-    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB6_Level7.h5",
-    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB3_Level7.h5",
-    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB0_Level7.h5",
-    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB3_Level6.h5",
-    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB0_Level6.h5",
-    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB0_Level8.h5",
-    #                                "/media/ldwg/DataBig/data/WZL/Features/EfficientNetB3_Level8.h5"], files)
+    # files = filter(lambda f: "EfficientNetINB0_Level6" in f or "EfficientNetB0_Level6" in f, files)
+    # files = filter(lambda f: f in ["/media/ldwg/DataBig/data/WZL/Features/ResNet50V2_Stack4.h5"], files)
 
     if args.index is not None:
         files = files[args.index::args.total]
@@ -101,7 +92,7 @@ def calculate_locations():
                 # Load the file
                 patches = PatchArray(features_file)
 
-                models =[AnomalyModelSVG()]
+                models = [AnomalyModelSVG(), AnomalyModelMVG()]
 
                 # Calculate and save the locations
                 for fake in [True, False]:
@@ -113,14 +104,30 @@ def calculate_locations():
                         patches.calculate_rasterization(cell_size, fake=fake)
 
                         models.append(AnomalyModelSpatialBinsBase(AnomalyModelSVG, patches, cell_size=cell_size, fake=fake))
+                        models.append(AnomalyModelSpatialBinsBase(AnomalyModelMVG, patches, cell_size=cell_size, fake=fake))
 
-                        threshold_learning = int(np.mean(patches.mahalanobis_distances["SpatialBin/SVG/%s" % key]))
-                        models.append(AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistributionSVG(initial_normal_features=10, threshold_learning=threshold_learning, pruning_parameter=0.5), patches, cell_size=cell_size, fake=fake))
+                        # BalancedDistribution uses SVG mean as learning threshold
+                        if patches.contains_mahalanobis_distances and "SpatialBin/SVG/%s" % key in patches.mahalanobis_distances.dtype.names:
+                            threshold_learning = int(np.mean(patches.mahalanobis_distances["SpatialBin/SVG/%s" % key]))
+                            models.append(AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistributionSVG(initial_normal_features=10, threshold_learning=threshold_learning, pruning_parameter=0.5), patches, cell_size=cell_size, fake=fake))
 
-                # Calculate anomaly models
+                # BalancedDistribution uses SVG mean as learning threshold
                 if patches.contains_mahalanobis_distances and "SVG" in patches.mahalanobis_distances.dtype.names:
                     threshold_learning = int(np.mean(patches.mahalanobis_distances["SVG"]))
                     models.append(AnomalyModelBalancedDistributionSVG(initial_normal_features=500, threshold_learning=threshold_learning, pruning_parameter=0.5))
+
+                # # For BalancedDistributionTest
+                # if patches.contains_mahalanobis_distances and "SVG" in patches.mahalanobis_distances.dtype.names:
+                #     for threshold_learning in np.linspace(np.min(patches.mahalanobis_distances["SVG"]), np.max(patches.mahalanobis_distances["SVG"]), 5, dtype=np.int):
+                #         for pruning_parameter in [0.2, 0.5, 0.8]:
+                #             for initial_normal_features in [10, 500, 1000]:
+                #                 models.append(AnomalyModelBalancedDistributionSVG(initial_normal_features=initial_normal_features, threshold_learning=threshold_learning, pruning_parameter=pruning_parameter))
+
+                # if patches.contains_mahalanobis_distances and "MVG" in patches.mahalanobis_distances.dtype.names:
+                #     for threshold_learning in np.linspace(np.min(patches.mahalanobis_distances["MVG"]), np.max(patches.mahalanobis_distances["MVG"]), 5, dtype=np.int):
+                #         for pruning_parameter in [0.2, 0.5, 0.8]:
+                #             for initial_normal_features in [10, 500, 1000]:
+                #                 models.append(AnomalyModelBalancedDistribution(initial_normal_features=initial_normal_features, threshold_learning=threshold_learning, pruning_parameter=pruning_parameter))
 
                 with tqdm(total=len(models), file=sys.stderr) as pbar2:
                     for m in models:
@@ -131,7 +138,7 @@ def calculate_locations():
                             model, mdist = m.is_in_file(features_file)
 
                             if not model:
-                                m.load_or_generate(patches, silent=True)
+                                m.load_or_generate(patches, silent=False)
                             elif not mdist:
                                 logger.info("Model already calculated")
                                 m.load_from_file(features_file)
