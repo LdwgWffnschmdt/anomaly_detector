@@ -460,33 +460,33 @@ class Visualize(object):
                     self._scores = scores
                     self._thresh = thresh
 
-                    if metric.name != "patch":
-                        for r in np.reshape(np.diff(np.r_[0, labels == 0, 0]).nonzero()[0], (-1,2)):
-                            self._metrics_ax1.axvspan(r[0], r[1], facecolor='black', alpha=0.1)
-
-                        for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 2, scores >= thresh), 0]).nonzero()[0], (-1,2)):
-                            self._metrics_ax1.axvspan(r[0], r[1], facecolor='g', alpha=0.2)
-
-                        for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 1, scores >= thresh), 0]).nonzero()[0], (-1,2)):
-                            self._metrics_ax1.axvspan(r[0], r[1], facecolor='r', alpha=0.2)
-
-                        for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 0, scores >= thresh), 0]).nonzero()[0], (-1,2)):
-                            self._metrics_ax1.axvspan(r[0], r[1], facecolor='g', alpha=0.05)
-
-                        for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 2, scores < thresh), 0]).nonzero()[0], (-1,2)):
-                            self._metrics_ax1.axvspan(r[0], r[1], facecolor='b', alpha=0.2)
-
-                        for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 0, scores < thresh), 0]).nonzero()[0], (-1,2)):
-                            self._metrics_ax1.axvspan(r[0], r[1], facecolor='b', alpha=0.05)
-
-                        self._metrics_ax1.set_ylim(0, np.max(scores))
-                        self._metrics_ax1.plot(scores, lw=1, label=metric.name, color="black")
-                        # self._metrics_ax1.axvline(x=self.index, linewidth=0.5, color="black")
-                        self._metrics_ax1.axhline(y=thresh, linewidth=0.5, color="black")
-                        self._metrics_fig.suptitle(metric.name)
-                        self._metrics_fig.canvas.set_window_title("%s [scores]" % self.title)
-                    
                     if not only_refresh_image:
+                        if metric.name != "patch":
+                            for r in np.reshape(np.diff(np.r_[0, labels == 0, 0]).nonzero()[0], (-1,2)):
+                                self._metrics_ax1.axvspan(r[0], r[1], facecolor='black', alpha=0.1)
+
+                            for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 2, scores >= thresh), 0]).nonzero()[0], (-1,2)):
+                                self._metrics_ax1.axvspan(r[0], r[1], facecolor='g', alpha=0.2)
+
+                            for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 1, scores >= thresh), 0]).nonzero()[0], (-1,2)):
+                                self._metrics_ax1.axvspan(r[0], r[1], facecolor='r', alpha=0.2)
+
+                            for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 0, scores >= thresh), 0]).nonzero()[0], (-1,2)):
+                                self._metrics_ax1.axvspan(r[0], r[1], facecolor='g', alpha=0.05)
+
+                            for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 2, scores < thresh), 0]).nonzero()[0], (-1,2)):
+                                self._metrics_ax1.axvspan(r[0], r[1], facecolor='b', alpha=0.2)
+
+                            for r in np.reshape(np.diff(np.r_[0, np.logical_and(labels == 0, scores < thresh), 0]).nonzero()[0], (-1,2)):
+                                self._metrics_ax1.axvspan(r[0], r[1], facecolor='b', alpha=0.05)
+
+                            self._metrics_ax1.set_ylim(0, np.max(scores))
+                            self._metrics_ax1.plot(scores, lw=1, label=metric.name, color="black")
+                            # self._metrics_ax1.axvline(x=self.index, linewidth=0.5, color="black")
+                            self._metrics_ax1.axhline(y=thresh, linewidth=0.5, color="black")
+                            self._metrics_fig.suptitle(metric.name)
+                            self._metrics_fig.canvas.set_window_title("%s [scores]" % self.title)
+                        
                         self._histogram_ax1.clear()
                         self._histogram_ax2.clear()
 

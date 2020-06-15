@@ -751,11 +751,11 @@ class PatchArray(np.recarray):
             2: (54, 67, 244)
         }
         
-        def __init__(self, name, label_name, per_patch=False, sum=False, names=None, colors=None):
+        def __init__(self, name, label_name, per_patch=False, mean=False, names=None, colors=None):
             self.name = name
             self.label_name = label_name
             self.per_patch = per_patch
-            self.sum = sum
+            self.mean = mean
 
             self.names = names if names is not None else {
                 0: "Unknown",
@@ -777,16 +777,16 @@ class PatchArray(np.recarray):
         def get_values(self, mahalanobis_distances):
             if self.per_patch:
                 return mahalanobis_distances.ravel()
-            elif self.sum:
-                return np.sum(mahalanobis_distances, axis=(1,2))
+            elif self.mean:
+                return np.mean(mahalanobis_distances, axis=(1,2))
             else:
                 return np.max(mahalanobis_distances, axis=(1,2))
     
     METRICS = [
         Metric("patch",       "patch_labels", per_patch=True),
-        Metric("frame (sum)", "labels", sum=True),
+        Metric("frame (mean)", "labels", mean=True),
         Metric("frame (max)", "labels"),
-        Metric("stop (sum)",  "stop", sum=True, names={-1: "Not set", 0: "It's OK to stop", 1: "Don't stop", 2: "Stop"}),
+        Metric("stop (mean)",  "stop", mean=True, names={-1: "Not set", 0: "It's OK to stop", 1: "Don't stop", 2: "Stop"}),
         Metric("stop (max)",  "stop", names={-1: "Not set", 0: "It's OK to stop", 1: "Don't stop", 2: "Stop"})
     ]
 
@@ -929,6 +929,11 @@ class PatchArray(np.recarray):
 
         # with h5py.File(self.filename, "r+") as hf:
         for name, score in scores.items():
+            if name.startswith("BalancedDistribution"):
+                if not "/%i/" % int(np.mean(self.mahalanobis_distances["SVG"])) in name:
+                    continue
+                name = "BalancedDistributionSVG"
+
             fpr, tpr, thresholds_roc = metrics.roc_curve(labels, score, pos_label=2)
             roc_auc = metrics.auc(fpr, tpr)
             
@@ -960,11 +965,15 @@ class PatchArray(np.recarray):
                         color = "#FFE082"   # amber lighten-3
                     else:
                         color = "#FFC107"   # amber
+            # elif "MVG" in name:
+            #     color = "#E91E63"   # pink  
             else:
                 color = "#F44336"   # red  
 
             if "Balanced" in name:
-                style = ":"    # dashed line style
+                style = ":"    # dotted line style
+            elif "MVG" in name:
+                style = "--"    # dashed line style
             else:
                 style = "-"     # solid line style
             

@@ -18,7 +18,7 @@ class AnomalyModelBalancedDistributionSVG(AnomalyModelBalancedDistribution):
     Reference: https://www.mdpi.com/2076-3417/9/4/757
     """
     def __init__(self, initial_normal_features=1000, threshold_learning=50, threshold_classification=5, pruning_parameter=0.5):
-        AnomalyModelBalancedDistribution.__init__(self, initial_normal_features, threshold_learning, pruning_parameter)
+        AnomalyModelBalancedDistribution.__init__(self, initial_normal_features, threshold_learning, threshold_classification, pruning_parameter)
         self._var       = None # Variance σ²
 
     def _calculate_mean_and_covariance(self):

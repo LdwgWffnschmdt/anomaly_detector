@@ -62,7 +62,7 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
 
         feature = patch["features"]
         assert feature.shape[0] == self._mean.shape[0] == self._covI.shape[0] == self._covI.shape[1], \
-            "Shapes don't match (x: %s, μ: %s, Σ¯¹: %s)" % (feature.shape, self._mean.shape, self._covI.shape)
+            "Shapes don't match (x: %s, μ: %s, Σ⁻¹: %s)" % (feature.shape, self._mean.shape, self._covI.shape)
         
         return distance.mahalanobis(feature, self._mean, self._covI)
 
