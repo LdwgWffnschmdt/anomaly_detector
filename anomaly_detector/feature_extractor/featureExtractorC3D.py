@@ -6,7 +6,7 @@ from featureExtractorBase import FeatureExtractorBase
 from Models.C3D.c3d import C3D
 from Models.C3D.sports1M_utils import preprocess_input
 
-class FeatureExtractorC3D(FeatureExtractorBase):
+class FeatureExtractorC3D_Block5(FeatureExtractorBase):
     """Feature extractor based on C3D (trained on sports1M).
     Output layer: conv5b + MaxPooling3D to reduce frames"""
     IMG_SIZE            = 112
@@ -47,7 +47,7 @@ class FeatureExtractorC3D(FeatureExtractorBase):
             batch = np.expand_dims(batch, axis=0)
         return tf.squeeze(self.model(batch))
 
-class FeatureExtractorC3D_Block4(FeatureExtractorC3D):
+class FeatureExtractorC3D_Block4(FeatureExtractorC3D_Block5):
     """Feature extractor based on C3D (trained on sports1M).
     Output layer: conv4b + MaxPooling3D to reduce frames"""
     BATCH_SIZE      = 32
@@ -55,7 +55,7 @@ class FeatureExtractorC3D_Block4(FeatureExtractorC3D):
     OUTPUT_SHAPE    = (14, 14, 512)
     RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (55, 55)}
 
-class FeatureExtractorC3D_Block3(FeatureExtractorC3D):
+class FeatureExtractorC3D_Block3(FeatureExtractorC3D_Block5):
     """Feature extractor based on C3D (trained on sports1M).
     Output layer: conv3b + MaxPooling3D to reduce frames"""
     BATCH_SIZE      = 32
@@ -66,7 +66,7 @@ class FeatureExtractorC3D_Block3(FeatureExtractorC3D):
 # Only for tests
 if __name__ == "__main__":
     from common import PatchArray
-    extractor = FeatureExtractorC3D()
+    extractor = FeatureExtractorC3D_Block5()
     # extractor.plot_model(extractor.model)
     patches = PatchArray()
 

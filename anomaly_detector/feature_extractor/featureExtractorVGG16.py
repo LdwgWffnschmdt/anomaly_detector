@@ -3,8 +3,8 @@ from tensorflow.keras.applications.vgg16 import preprocess_input
 
 from featureExtractorBase import FeatureExtractorBase
 
-class FeatureExtractorVGG16(FeatureExtractorBase):
-    """Feature extractor based on VGG16 without the last max pooling layer (trained on ImageNet)."""
+class FeatureExtractorVGG16_Block5(FeatureExtractorBase):
+    """Feature extractor based on VGG16 at block 5 without the last max pooling layer (trained on ImageNet)."""
     IMG_SIZE        = 224
     BATCH_SIZE      = 32
     LAYER_NAME      = "block5_conv3"
@@ -35,16 +35,16 @@ class FeatureExtractorVGG16(FeatureExtractorBase):
     def extract_batch(self, batch):
         return self.model(batch)
 
-class FeatureExtractorVGG16_Block4(FeatureExtractorVGG16):
-    """Feature extractor based on VGG16 at Bock 4 without the last max pooling layer (trained on ImageNet)."""
+class FeatureExtractorVGG16_Block4(FeatureExtractorVGG16_Block5):
+    """Feature extractor based on VGG16 at block 4 without the last max pooling layer (trained on ImageNet)."""
     IMG_SIZE   = 224
     BATCH_SIZE = 32
     LAYER_NAME  = "block4_conv3"
     OUTPUT_SHAPE = (28, 28, 512)
     RECEPTIVE_FIELD = {'stride': (8.0, 8.0),   'size': (85, 85)}
 
-class FeatureExtractorVGG16_Block3(FeatureExtractorVGG16):
-    """Feature extractor based on VGG16 at Bock 3 without the last max pooling layer (trained on ImageNet)."""
+class FeatureExtractorVGG16_Block3(FeatureExtractorVGG16_Block5):
+    """Feature extractor based on VGG16 at block 3 without the last max pooling layer (trained on ImageNet)."""
     IMG_SIZE   = 224
     BATCH_SIZE = 32
     LAYER_NAME  = "block3_conv3"
@@ -53,6 +53,6 @@ class FeatureExtractorVGG16_Block3(FeatureExtractorVGG16):
 
 # Only for tests
 if __name__ == "__main__":
-    extractor = FeatureExtractorVGG16()
+    extractor = FeatureExtractorVGG16_Block5()
     extractor.plot_model(extractor.model)
     extractor.extract_files()

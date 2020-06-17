@@ -3,7 +3,7 @@ from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 from featureExtractorBase import FeatureExtractorBase
 
-class FeatureExtractorMobileNetV2(FeatureExtractorBase):
+class FeatureExtractorMobileNetV2_Last(FeatureExtractorBase):
     """Feature extractor based on MobileNetV2 (trained on ImageNet)."""
     IMG_SIZE        = 224
     BATCH_SIZE      = 64
@@ -34,7 +34,7 @@ class FeatureExtractorMobileNetV2(FeatureExtractorBase):
     def extract_batch(self, batch):
         return self.model(batch)
 
-class FeatureExtractorMobileNetV2_Block16(FeatureExtractorMobileNetV2):
+class FeatureExtractorMobileNetV2_Block16(FeatureExtractorMobileNetV2_Last):
     """Feature extractor based on MobileNetV2 (trained on ImageNet)."""
     IMG_SIZE        = 224
     BATCH_SIZE      = 64
@@ -42,7 +42,7 @@ class FeatureExtractorMobileNetV2_Block16(FeatureExtractorMobileNetV2):
     OUTPUT_SHAPE    = (7, 7, 320)
     RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (491, 491)}
 
-class FeatureExtractorMobileNetV2_Block14(FeatureExtractorMobileNetV2):
+class FeatureExtractorMobileNetV2_Block14(FeatureExtractorMobileNetV2_Last):
     """Feature extractor based on MobileNetV2 (trained on ImageNet)."""
     IMG_SIZE        = 224
     BATCH_SIZE      = 64
@@ -50,7 +50,7 @@ class FeatureExtractorMobileNetV2_Block14(FeatureExtractorMobileNetV2):
     OUTPUT_SHAPE    = (7, 7, 160)
     RECEPTIVE_FIELD = {'stride': (32.0, 32.0), 'size': (363, 363)}
 
-class FeatureExtractorMobileNetV2_Block12(FeatureExtractorMobileNetV2):
+class FeatureExtractorMobileNetV2_Block12(FeatureExtractorMobileNetV2_Last):
     """Feature extractor based on MobileNetV2 (trained on ImageNet)."""
     IMG_SIZE        = 224
     BATCH_SIZE      = 64
@@ -58,7 +58,7 @@ class FeatureExtractorMobileNetV2_Block12(FeatureExtractorMobileNetV2):
     OUTPUT_SHAPE    = (14, 14, 96)
     RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (267, 267)}
 
-class FeatureExtractorMobileNetV2_Block9(FeatureExtractorMobileNetV2):
+class FeatureExtractorMobileNetV2_Block09(FeatureExtractorMobileNetV2_Last):
     """Feature extractor based on MobileNetV2 (trained on ImageNet)."""
     IMG_SIZE        = 224
     BATCH_SIZE      = 64
@@ -66,7 +66,7 @@ class FeatureExtractorMobileNetV2_Block9(FeatureExtractorMobileNetV2):
     OUTPUT_SHAPE    = (14, 14, 64)
     RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (171, 171)}
 
-class FeatureExtractorMobileNetV2_Block6(FeatureExtractorMobileNetV2):
+class FeatureExtractorMobileNetV2_Block06(FeatureExtractorMobileNetV2_Last):
     """Feature extractor based on MobileNetV2 (trained on ImageNet)."""
     IMG_SIZE        = 224
     BATCH_SIZE      = 64
@@ -74,7 +74,7 @@ class FeatureExtractorMobileNetV2_Block6(FeatureExtractorMobileNetV2):
     OUTPUT_SHAPE    = (14, 14, 64)
     RECEPTIVE_FIELD = {'stride': (16.0, 16.0), 'size': (75, 75)}
 
-class FeatureExtractorMobileNetV2_Block3(FeatureExtractorMobileNetV2):
+class FeatureExtractorMobileNetV2_Block03(FeatureExtractorMobileNetV2_Last):
     """Feature extractor based on MobileNetV2 (trained on ImageNet)."""
     IMG_SIZE        = 224
     BATCH_SIZE      = 64
@@ -85,6 +85,6 @@ class FeatureExtractorMobileNetV2_Block3(FeatureExtractorMobileNetV2):
 
 # Only for tests
 if __name__ == "__main__":
-    extractor = FeatureExtractorMobileNetV2()
+    extractor = FeatureExtractorMobileNetV2_Last()
     extractor.plot_model(extractor.model)
     extractor.extract_files()

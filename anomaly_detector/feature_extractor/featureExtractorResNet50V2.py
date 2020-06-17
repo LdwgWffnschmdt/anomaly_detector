@@ -3,7 +3,7 @@ from featureExtractorBase import FeatureExtractorBase
 import tensorflow as tf
 from tensorflow.keras.applications.resnet_v2 import preprocess_input
 
-class FeatureExtractorResNet50V2(FeatureExtractorBase):
+class FeatureExtractorResNet50V2_Block5(FeatureExtractorBase):
     """Feature extractor based on ResNet50V2 (trained on ImageNet)."""
     IMG_SIZE        = 224
     BATCH_SIZE      = 32
@@ -34,14 +34,14 @@ class FeatureExtractorResNet50V2(FeatureExtractorBase):
     def extract_batch(self, batch):
         return self.model(batch)
 
-class FeatureExtractorResNet50V2_Stack4(FeatureExtractorResNet50V2):
+class FeatureExtractorResNet50V2_Block4(FeatureExtractorResNet50V2_Block5):
     OUTPUT_SHAPE    = (7, 7, 1024)
     IMG_SIZE        = 224
     BATCH_SIZE      = 32
     LAYER_NAME      = "conv4_block6_out"
     RECEPTIVE_FIELD = {"stride": (32.0, 32.0), 'size': (287, 287)}
 
-class FeatureExtractorResNet50V2_Stack3(FeatureExtractorResNet50V2):
+class FeatureExtractorResNet50V2_Block3(FeatureExtractorResNet50V2_Block5):
     OUTPUT_SHAPE    = (14, 14, 512)
     IMG_SIZE        = 224
     BATCH_SIZE      = 32
@@ -49,23 +49,23 @@ class FeatureExtractorResNet50V2_Stack3(FeatureExtractorResNet50V2):
     RECEPTIVE_FIELD = {"stride": (16.0, 16.0), "size":  (95, 95)}
 
 # More info on image size: https://github.com/tensorflow/models/blob/master/research/slim/nets/resnet_v2.py#L128
-class FeatureExtractorResNet50V2_LargeImage(FeatureExtractorResNet50V2):
+class FeatureExtractorResNet50V2_LargeImage_Block5(FeatureExtractorResNet50V2_Block5):
     OUTPUT_SHAPE    = (15, 15, 2048)
     IMG_SIZE        = 449
     BATCH_SIZE      = 4
 
-class FeatureExtractorResNet50V2_Stack4_LargeImage(FeatureExtractorResNet50V2_Stack4):
+class FeatureExtractorResNet50V2_LargeImage_Block4(FeatureExtractorResNet50V2_LargeImage_Block5):
     OUTPUT_SHAPE    = (15, 15, 1024)
     IMG_SIZE        = 449
     BATCH_SIZE      = 4
 
-class FeatureExtractorResNet50V2_Stack3_LargeImage(FeatureExtractorResNet50V2_Stack3):
+class FeatureExtractorResNet50V2_LargeImage_Block3(FeatureExtractorResNet50V2_LargeImage_Block5):
     OUTPUT_SHAPE    = (29, 29, 512)
     IMG_SIZE        = 449
     BATCH_SIZE      = 8
 
 # Only for tests
 if __name__ == "__main__":
-    extractor = FeatureExtractorResNet50V2()
+    extractor = FeatureExtractorResNet50V2_Block5()
     extractor.plot_model(extractor.model)
     extractor.extract_files()

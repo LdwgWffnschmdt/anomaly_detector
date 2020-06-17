@@ -112,9 +112,9 @@ if __name__ == "__main__":
 
 # NAME                           | OUTPUT SHAPE    | RF   | IMG SIZE | RF / IMG
 # --------------------------------------------------------------------------------
-# C3D                            | (7, 7, 512)     | 119  | 112      | 1.062 
 # C3D_Block3                     | (28, 28, 256)   | 23   | 112      | 0.205 
 # C3D_Block4                     | (14, 14, 512)   | 55   | 112      | 0.491 
+# C3D_Block5                     | (7, 7, 512)     | 119  | 112      | 1.062 
 # EfficientNetB0_Level6          | (14, 14, 112)   | 339  | 224      | 1.513 
 # EfficientNetB0_Level7          | (7, 7, 192)     | 787  | 224      | 3.513 !
 # EfficientNetB0_Level8          | (7, 7, 320)     | 819  | 224      | 3.656 !
@@ -127,19 +127,19 @@ if __name__ == "__main__":
 # EfficientNetB6_Level7          | (17, 17, 344)   | 1056 | 528      | 2.000 !
 # EfficientNetB6_Level8          | (17, 17, 576)   | 1056 | 528      | 2.000 !
 # EfficientNetB6_Level9          | (17, 17, 2304)  | 1056 | 528      | 2.000 !
-# MobileNetV2                    | (7, 7, 1280)    | 491  | 224      | 2.192 !
+# MobileNetV2_Block03            | (28, 28, 32)    | 27   | 224      | 0.121 
+# MobileNetV2_Block06            | (14, 14, 64)    | 75   | 224      | 0.335 
+# MobileNetV2_Block09            | (14, 14, 64)    | 171  | 224      | 0.763 
 # MobileNetV2_Block12            | (14, 14, 96)    | 267  | 224      | 1.192 
 # MobileNetV2_Block14            | (7, 7, 160)     | 363  | 224      | 1.621 
 # MobileNetV2_Block16            | (7, 7, 320)     | 491  | 224      | 2.192 !
-# MobileNetV2_Block3             | (28, 28, 32)    | 27   | 224      | 0.121 
-# MobileNetV2_Block6             | (14, 14, 64)    | 75   | 224      | 0.335 
-# MobileNetV2_Block9             | (14, 14, 64)    | 171  | 224      | 0.763 
-# ResNet50V2                     | (7, 7, 2048)    | 479  | 224      | 2.138 !
-# ResNet50V2_LargeImage          | (15, 15, 2048)  | 479  | 449      | 1.067 
-# ResNet50V2_Stack3              | (14, 14, 512)   | 95   | 224      | 0.424 
-# ResNet50V2_Stack3_LargeImage   | (29, 29, 512)   | 95   | 449      | 0.212 
-# ResNet50V2_Stack4              | (7, 7, 1024)    | 287  | 224      | 1.281 
-# ResNet50V2_Stack4_LargeImage   | (15, 15, 1024)  | 287  | 449      | 0.639 
-# VGG16                          | (14, 14, 512)   | 181  | 224      | 0.808 
+# MobileNetV2_Last               | (7, 7, 1280)    | 491  | 224      | 2.192 !
+# ResNet50V2_Block3              | (14, 14, 512)   | 95   | 224      | 0.424 
+# ResNet50V2_Block4              | (7, 7, 1024)    | 287  | 224      | 1.281 
+# ResNet50V2_Block5              | (7, 7, 2048)    | 479  | 224      | 2.138 !
+# ResNet50V2_LargeImage_Block3   | (29, 29, 512)   | 95   | 449      | 0.212 
+# ResNet50V2_LargeImage_Block4   | (15, 15, 1024)  | 287  | 449      | 0.639 
+# ResNet50V2_LargeImage_Block5   | (15, 15, 2048)  | 479  | 449      | 1.067 
 # VGG16_Block3                   | (56, 56, 512)   | 37   | 224      | 0.165 
 # VGG16_Block4                   | (28, 28, 512)   | 85   | 224      | 0.379
+# VGG16_Block5                   | (14, 14, 512)   | 181  | 224      | 0.808 

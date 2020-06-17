@@ -10,7 +10,7 @@ import anomaly_model
 
 def anomaly_detector():
     rospy.init_node("anomaly_detector")
-    # extractor = feature_extractor.FeatureExtractorMobileNetV2()
+    # extractor = feature_extractor.FeatureExtractorMobileNetV2_Block14()
     model = anomaly_model.AnomalyModelSVG()
 
 if __name__ == "__main__":
