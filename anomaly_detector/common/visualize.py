@@ -1040,7 +1040,7 @@ class Visualize(object):
         other_filter = [None, "erosion", "dilation"][cv2.getTrackbarPos("1_erosion_dilation", self.WINDOWS_MAHA)]
 
         return "%s - %s + %s (%s, %s)" % (self.metric.name, extractor, model, gauss_filter, other_filter)
-
+    
     def record(self):
         """ Start or stop recording to a video file """
 

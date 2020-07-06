@@ -14,8 +14,6 @@ import cv2
 from tqdm import tqdm
 from glob import glob
 
-
-
 from scipy.ndimage.filters import correlate1d, _gaussian_kernel1d, _ni_support
 
 def gaussian_filter(input, sigma, order=0, output=None,

@@ -37,6 +37,8 @@ from common import utils, logger, ImageLocationUtility
 import consts
 
 class Patch(np.record):
+    """A single feature vector (patch) with metadata."""
+
     # image_cache = LRUCache(maxsize=20*60*2)  # Least recently used cache for images
 
     # @cached(image_cache, key=lambda self, *args: self.times) # The cache should only be based on the timestamp
@@ -57,17 +59,23 @@ class Patch(np.record):
             np.record.__setattr__(self, attr, val)
 
 class PatchArray(np.recarray):
-    """Array with metadata."""
+    """Array with metadata. This is the central class of the anomaly detector
+    and contains all feature vectors (patches) and/or images alongside their metadata.
+    It is based on a numpy recarray which simplifies access to metadata."""
     
     __metadata_attrs__ = list()
 
     root = None
 
-    def __new__(cls, filename=None, metadata_filename=None, **kwargs):
-        """Reads metadata and features from a HDF5 file.
-        
+    def __new__(cls, filename=None, images_path=consts.IMAGES_PATH):
+        """Array with metadata. This is the central class of the anomaly detector
+        and contains all feature vectors (patches) and/or images alongside their metadata.
+
+        It is based on a numpy recarray which simplifies access to metadata.
+
         Args:
-            filename (str): filename to read
+            filename (str): Features file to read (*.h5). If None, only the images and their metadata are loaded.
+            images_path (str): Path where images AND the metadata file "metadata_cache.h5" are located.
 
         Returns:
             A new PatchArray
@@ -75,11 +83,13 @@ class PatchArray(np.recarray):
         if cls.root is not None:
             logger.warning("There is already a root PatchArray loaded.")
         
+        assert os.path.exists(images_path) and os.path.isdir(images_path), "Path to images does not exist (%s)" % images_path
+
+        filename_metadata = os.path.join(images_path, "metadata_cache.h5")
+        assert os.path.exists(filename_metadata), "No metadata file called \"metadata_cache.h5\" in %s" % images_path
+
         logger.info("Reading metadata and features from: %s" % filename)
 
-        images_path = kwargs.get("images_path", consts.IMAGES_PATH)
-        
-        filename_metadata = os.path.join(images_path, "metadata_cache.h5")
         metadata = dict()
 
         with h5py.File(filename_metadata, "r") as hf:
@@ -238,6 +248,7 @@ class PatchArray(np.recarray):
         return obj
 
     def __array_finalize__(self, obj):
+        """Only for internal use"""
         if obj is None: return
         self._ilu = getattr(obj, "_ilu", None)
         self.filename              = getattr(obj, "filename", None)
@@ -252,8 +263,9 @@ class PatchArray(np.recarray):
         self.contains_mahalanobis_distances = getattr(obj, "contains_mahalanobis_distances", False)
     
     def __setattr__(self, attr, val):
+        """Keep track if metadata is changed"""
         if self.dtype.names is not None and attr in self.dtype.names:
-            # Try finding the attribute in the metadata (will throw if there it is not in metadata)
+            # Try finding the attribute in the metadata (will throw if it is not in metadata)
             old_val = self.__getattribute__(attr)
             if not np.all(old_val == val): # Check if any value changed
                 if attr != "changed" and attr in self.__metadata_attrs__:
@@ -269,6 +281,7 @@ class PatchArray(np.recarray):
             object.__setattr__(self, attr, val)
 
     def __getitem__(self, indx):
+        """Cast patches to the correct class"""
         obj = np.recarray.__getitem__(self, indx)
 
         if isinstance(obj, np.record):
@@ -276,11 +289,22 @@ class PatchArray(np.recarray):
         
         return obj
     
-    #################
-    #     Views     #
-    #################
+    #########################
+    # Commonly used subsets #
+    # (unfortunately copies,#
+    # not views)            #
+    #########################
 
     def _filter(self, name, f):
+        """Return a subset of this PatchArray
+
+        Args:
+            name (str): Metadata key
+            f (func): Filter function
+
+        Returns:
+            A new PatchArray
+        """
         return self[f(self[name][:, 0, 0])] if self.ndim == 3 else self[f(self[name][:])]
 
     unknown_anomaly = property(lambda self: self._filter("labels", lambda f: f == 0))
@@ -356,6 +380,14 @@ class PatchArray(np.recarray):
     metadata_changed = property(lambda self: self[self.changed[:, 0, 0]] if self.ndim == 3 else self[self.changed[:]])
 
     def save_metadata(self, filename=None):
+        """Save all metadata that changed. Will always create a backup.
+
+        Args:
+            filename (str): New metadata file (default: currently opened metadata file)
+
+        Returns:
+            success (bool)
+        """
         if filename is None:
             filename = os.path.join(self.images_path, "metadata_cache.h5")
         try:
@@ -374,7 +406,11 @@ class PatchArray(np.recarray):
             return False
 
     def extract_current_patches(self):
-        """ Create a new metadata file and copy images to a new subfolder """
+        """Create a new metadata file and copy images to a new subfolder
+
+        Returns:
+            success (bool)
+        """
         folder = os.path.join(consts.BASE_PATH, "Images_subset_%s" % datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
         os.mkdir(folder)
 
@@ -392,11 +428,21 @@ class PatchArray(np.recarray):
             logger.error(traceback.format_exc())
             return False
 
-    #################
-    # Spatial stuff #
-    #################
+    ###################
+    # Spatial binning #
+    ###################
 
     def _calculate_grid(self, cell_size, fake=False):
+        """Calculate the cells for spatial binning
+
+        Args:
+            cell_size (float): Spatial bin size
+            fake (bool): Use simple non-overlapping receptive field
+
+        Returns:
+            grid (STRtree): Search tree with all (rectangle) cells
+            shape (int, int): Grid shape
+        """
         key = "%.2f" % cell_size
         if fake: key = "fake_" + key
 
@@ -426,12 +472,25 @@ class PatchArray(np.recarray):
         
         return (grid, shape)
 
-    # @profile
     def _bin(self, i, grid, shape, rf_factor, key, fake, cell_size):
+        """Calculate the corresponding spatial bins for the patches given defined by index i.
+
+        Args:
+            i (int): Frame index
+            grid (STRtree): Search tree with all (rectangle) cells
+            rf_factor (float): Receptive field size divided by image size
+            key (str): Metadata key where the bin information is stored
+            fake (bool): Use simple non-overlapping receptive field
+            cell_size (float): Spatial bin size
+
+        Returns:
+            None
+        """
         locations_key = "locations"
         if fake: locations_key = "fake_" + locations_key
 
         for y, x in np.ndindex(self.shape[1:]):
+            # Calculate a new intersection
             if fake or rf_factor < 2 or (y, x) == (0, 0):
                 f = self[i, y, x]
                 poly = Polygon([(f[locations_key].tl.x, f[locations_key].tl.y),
@@ -439,9 +498,10 @@ class PatchArray(np.recarray):
                                 (f[locations_key].br.x, f[locations_key].br.y),
                                 (f[locations_key].bl.x, f[locations_key].bl.y)])
                 
+                # This will quickly find the possible intersection candidates
                 bins = grid.query(poly)
 
-                # # pr = prep(poly)
+                # Calculate the bins that really intersect the polygon
                 bins = filter(poly.intersects, bins)
                 
                 # if len(bins) == 0:
@@ -456,6 +516,18 @@ class PatchArray(np.recarray):
             self[i, y, x]["bins_" + key] = np.array(list(_loop()), dtype=np.uint32)
 
     def _save_rasterization(self, key, grid, shape, start=None, end=None):
+        """Save the spatial binning result to the currently opened features file
+
+        Args:
+            key (str): Metadata key where the bin information is stored
+            grid (STRtree): Search tree with all (rectangle) cells
+            shape (int, int): Grid shape
+            start (int): Start timestamp
+            end (int): End timestamp
+
+        Returns:
+            None
+        """
         logger.info("Opening %s" % self.filename)
         # Save to file
         with h5py.File(self.filename, "r+") as hf:
@@ -491,6 +563,15 @@ class PatchArray(np.recarray):
                 hf["rasterization_" + key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
 
     def calculate_rasterization(self, cell_size, fake=False):
+        """Calculate the corresponding spatial bins for each patch.
+
+        Args:
+            cell_size (float): Spatial bin size
+            fake (bool): Use simple non-overlapping receptive field
+
+        Returns:
+            None
+        """
         key = "%.2f" % cell_size
         if fake: key = "fake_" + key
 
@@ -524,6 +605,7 @@ class PatchArray(np.recarray):
         
         Args:
             cell_size (float): Round to cell size (increases bounds to fit next cell size)
+            fake (bool): Use simple non-overlapping receptive field
         
         Returns:
             Tuple (x_min, y_min, x_max, y_max)
@@ -548,12 +630,17 @@ class PatchArray(np.recarray):
         
         return (x_min, y_min, x_max, y_max)
 
+    #################
+    #   Locations   #
+    #################
+    
     def calculate_receptive_field(self, y, x, scale_y=1.0, scale_x=1.0, fake=False):
         """Calculate the receptive field of a patch
 
         Args:
             y, x (int): Patch indices
             scale_y, scale_x (float): Scale factor
+            fake (bool): Use simple non-overlapping receptive field
 
         Returns:
             Tuple (tl, tr, br, bl) with pixel coordinated of the receptive field
@@ -580,12 +667,15 @@ class PatchArray(np.recarray):
         
         return (tl, tr, br, bl)
 
-    #################
-    #   Locations   #
-    #################
-    
     def _get_receptive_fields(self, fake=False):
-        """ Get the receptive fields for each patch (in image coordinates) """
+        """ Get the receptive fields for each patch (in image coordinates)
+
+        Args:
+            fake (bool): Use simple non-overlapping receptive field
+
+        Returns:
+            image_locations (np.array): Receptive fields in image coordinates (h, w, 4, 2)
+        """
         n, h, w = self.locations.shape
         
         image_locations = np.zeros((h, w, 4, 2), dtype=np.float32)
@@ -600,7 +690,11 @@ class PatchArray(np.recarray):
         return image_locations
 
     def _get_centers(self):
-        """ Get the center for each patch (in image coordinates) """
+        """ Get the center for each patch (in image coordinates)
+
+        Returns:
+            image_locations (np.array): Image centers in image coordinates (h, w, 2)
+        """
         n, h, w = self.locations.shape
         
         image_locations = np.zeros((h, w, 2), dtype=np.float32)
@@ -611,14 +705,41 @@ class PatchArray(np.recarray):
         return image_locations
 
     def _image_to_relative(self, image_locations):
+        """Convert image coordinates to relative coordinates
+
+        Args:
+            image_locations (np.array): Input in image coordinates
+
+        Returns:
+            relative_locations (np.array): Input in relative coordinates
+        """
         return self._ilu.image_to_relative(image_locations, image_width=self.image_size, image_height=self.image_size)         # (h, w, 4, 2)
     
     def _relative_to_absolute(self, relative_locations, camera_locations):
+        """Convert relative coordinates to absolute coordinates
+
+        Args:
+            relative_locations (np.array): Input in relative coordinates
+            camera_locations (np.array): Respective camera locations
+
+        Returns:
+            absolute_locations (np.array): Input in absolute coordinates
+        """
         res = self._ilu.relative_to_absolute(relative_locations, camera_locations)
         res = np.rec.fromarrays(res.transpose(), dtype=[("y", np.float32), ("x", np.float32)]).transpose()
         return np.rec.fromarrays(res.transpose(), dtype=self.locations.dtype) # No transpose here smh
 
     def _save_patch_locations(self, key, start=None, end=None):
+        """Save the patch locations to the currently opened features file
+
+        Args:
+            key (str): Metadata key where the location information is stored
+            start (int): Start timestamp
+            end (int): End timestamp
+
+        Returns:
+            None
+        """
         with h5py.File(self.filename, "r+") as hf:
             # Remove the old locations dataset
             if key in hf.keys():
@@ -633,7 +754,14 @@ class PatchArray(np.recarray):
                 hf[key].attrs["Duration (formatted)"] = utils.format_duration(end - start)
 
     def calculate_patch_locations(self, fake=False):
-        """Calculate the real world coordinates of every feature"""
+        """Calculate the real world coordinates of every feature vector (patch)
+
+        Args:
+            fake (bool): Use simple non-overlapping receptive field
+
+        Returns:
+            None
+        """
         key = "locations"
         if fake: key = "fake_" + key
 
@@ -656,7 +784,14 @@ class PatchArray(np.recarray):
         self._save_patch_locations(key, start, end)
 
     def calculate_patch_center_locations(self):
-        """Calculate the real world coordinates of the center of every feature"""
+        """Calculate the real world coordinates of the center of every feature vector (patch)
+
+        *This is currently not in use, but was intended for the spatial binning
+        variant that only uses the central bin for anomaly detection*
+        
+        Returns:
+            None
+        """
         key = "locations_center"
 
         assert self.contains_features, "Can only compute patch locations if there are patches"
@@ -680,12 +815,15 @@ class PatchArray(np.recarray):
     #################
     
     def var(self):
+        """Calculate the variance"""
         return np.var(self.ravel().features, axis=0, dtype=np.float64)
 
     def cov(self):
+        """Calculate the covariance matrix"""
         return np.cov(self.ravel().features, rowvar=False)
 
     def mean(self):
+        """Calculate the mean"""
         return np.mean(self.ravel().features, axis=0, dtype=np.float64)
 
     #################
@@ -693,6 +831,11 @@ class PatchArray(np.recarray):
     #################
     
     def to_dataset(self):
+        """Returns a TensorFlow Dataset of all contained images
+        
+        Returns:
+            TensorFlow Dataset with all images in this PatchArray
+        """
         import tensorflow as tf
 
         def _gen():
@@ -710,10 +853,22 @@ class PatchArray(np.recarray):
     isview = property(lambda self: np.shares_memory(self, self.root))
 
     def get_batch(self, frame, temporal_batch_size):
+        """Gets a temporal batch for a given frame by 
+
+        Args:
+            frame (PatchArray): Frame to get the temporal batch for
+            temporal_batch_size (int): Number of frames in the batch
+        
+        Returns:
+            np.ndarray with the frames
+        """
+        # Only take patches from the current round (no jumps from the end of the last round).
+        # Use the root array, so every frame is considered (e.g. no FPS reduction on root array)
         current_round = self.root.round_number(frame.round_numbers)
         time_index = np.argwhere(current_round.times == frame.times).flat[0]
         res = None
         for res_i, arr_i in enumerate(range(time_index - temporal_batch_size, time_index)):
+            # Get and convert the image
             image = cv2.cvtColor(current_round[max(0, arr_i), 0, 0].get_image(), cv2.COLOR_BGR2RGB)
             if res is None:
                 res = np.zeros((temporal_batch_size,) + image.shape)
@@ -721,6 +876,14 @@ class PatchArray(np.recarray):
         return res
 
     def to_temporal_dataset(self, temporal_batch_size=16):
+        """Returns a TensorFlow Dataset of all contained images with temporal batches
+
+        Args:
+            temporal_batch_size (int): Number of frames in the batch
+        
+        Returns:
+            TensorFlow Dataset with temporal batches of all images in this PatchArray
+        """
         import tensorflow as tf
 
         def _gen():
@@ -749,6 +912,7 @@ class PatchArray(np.recarray):
     #     labels[f] = 2
 
     class Metric(object):
+        """Helper class for the calculation of different metrics"""
         COLORS = {
             -1: (100, 100, 100),
             0: (150, 150, 150),
@@ -757,6 +921,19 @@ class PatchArray(np.recarray):
         }
         
         def __init__(self, name, label_name, per_patch=False, mean=False, names=None, colors=None):
+            """Create a new metric
+            
+            Args:
+                name (str): Metric name
+                label_name (str): Metadata key for the used label
+                per_patch (bool): Calculate metric for each patch (referred to as "per-pixel" in thesis)
+                mean (bool): True: Take the mean of anomaly scores per frame. False: Use the maximum AD score
+                names (dict): Dictionary mapping the label values to readable names
+                colors (dict): Dictionary mapping the label values to colors
+
+            Returns:
+                A new Metric
+            """
             self.name = name
             self.label_name = label_name
             self.per_patch = per_patch
@@ -771,15 +948,18 @@ class PatchArray(np.recarray):
             self.current_threshold = -1
 
         def get_relevant(self, patches):
+            """Get all patches that will be considered (label value != 0)"""
             return patches[patches[self.label_name][:,0,0] != 0]
 
         def get_labels(self, patches):
+            """Get all labels"""
             if self.per_patch:
                 return patches[self.label_name].ravel()
             else:
                 return patches[self.label_name][:,0,0]
         
         def get_values(self, mahalanobis_distances):
+            """Get all anomaly scores"""
             if self.per_patch:
                 return mahalanobis_distances.ravel()
             elif self.mean:
@@ -788,14 +968,15 @@ class PatchArray(np.recarray):
                 return np.max(mahalanobis_distances, axis=(1,2))
     
     METRICS = [
-        Metric("patch",       "patch_labels", per_patch=True),
+        Metric("patch",        "patch_labels", per_patch=True),
         Metric("frame (mean)", "labels", mean=True),
-        Metric("frame (max)", "labels"),
+        Metric("frame (max)",  "labels"),
         Metric("stop (mean)",  "stop", mean=True, names={-1: "Not set", 0: "It's OK to stop", 1: "Don't stop", 2: "Stop"}),
-        Metric("stop (max)",  "stop", names={-1: "Not set", 0: "It's OK to stop", 1: "Don't stop", 2: "Stop"})
+        Metric("stop (max)",   "stop", names={-1: "Not set", 0: "It's OK to stop", 1: "Don't stop", 2: "Stop"})
     ]
 
     def calculate_tsne(self):
+        """Calculate and visualize a t-SNE (DEPRECATED)"""
         assert self.contains_mahalanobis_distances, "Can't calculate t-SNE without mahalanobis distances calculated"
 
         # TODO: Maybe only validation?
@@ -846,6 +1027,7 @@ class PatchArray(np.recarray):
         plt.savefig(self.filename.replace(".h5", "_TSNE.png"))
 
     def calculate_metrics(self):
+        """Calculate the metrics for all considered variants using the features in this PatchArray"""
         assert self.contains_mahalanobis_distances, "Can't calculate ROC without mahalanobis distances calculated"
         # (Name, ROC_AUC, AUC_PR, f1)
         results = list()
@@ -866,8 +1048,8 @@ class PatchArray(np.recarray):
             labels = metric.get_labels(relevant)
             for other_filter in other_filters:
                 for gauss_filter in gauss_filters:
-                    # Don't compute gauss filters (in image space) for per sum metrics (they take the average anyways)
-                    if metric.name.endswith("(mean)") and gauss_filter != None and gauss_filter[1] > 0:
+                    # Don't compute gauss filters (in image space) for mean metrics (they take the average anyways)
+                    if metric.mean and gauss_filter != None and gauss_filter[1] > 0:
                         continue
 
                     title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, metric.name, gauss_filter, other_filter)
@@ -907,6 +1089,7 @@ class PatchArray(np.recarray):
 
 
     def calculate_roc(self, title, labels, scores, filename=None):
+        """Calculate the """
         # (Name, ROC_AUC, AUC_PR, f1)
         results = list()
 
