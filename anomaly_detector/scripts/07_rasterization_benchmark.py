@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Benchmark the specified anomaly models.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.FEATURES_PATH + "*.h5",
+parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.BENCHMARK_PATH + "*.h5",
                     help="The feature file(s). Supports \"path/to/*.h5\"")
 
 parser.add_argument("--output", metavar="OUT", dest="output", type=str,

@@ -753,8 +753,11 @@ class Visualize(object):
                 self._map_ax.set_ylim([self.extent[1], self.extent[3]])
                 self._map_ax.set_aspect(1)
                 
-                self._map_ax.set_xticks(np.arange(self.extent[0], self.extent[2], 0.5), minor=True)
-                self._map_ax.set_yticks(np.arange(self.extent[1], self.extent[3], 0.5), minor=True)
+                self._map_ax.set_xticks(np.arange(self.extent[0], self.extent[2], 0.2), minor=True)
+                self._map_ax.set_yticks(np.arange(self.extent[1], self.extent[3], 0.2), minor=True)
+                
+                self._map_ax.set_xticks(np.arange(self.extent[0], self.extent[2], 2), minor=False)
+                self._map_ax.set_yticks(np.arange(self.extent[1], self.extent[3], 2), minor=False)
                 
                 self._map_ax.grid(linestyle="-", alpha=0.3, which="both")
 
@@ -816,7 +819,9 @@ class Visualize(object):
                 p1 = (int(x * patch_size[1]), int(y * patch_size[0]))               # (x, y)
                 p2 = (int(p1[0] + patch_size[1]), int(p1[1] + patch_size[0]))       # (x, y)
                 
-                cv2.rectangle(overlay, p1, p2, self.patch_to_color(patch), -1)
+                color = self.patch_to_color(patch)
+                if color != (0,0,0):
+                    cv2.rectangle(overlay, p1, p2, color, -1)
 
                 if self.show_values:
                     text = "%.2f" % self.patch_to_text(patch)
@@ -1044,7 +1049,7 @@ class Visualize(object):
             if not os.path.exists(folder):
                 os.mkdir(folder)
 
-            self._video_writer = cv2.VideoWriter(os.path.join(folder, "%s_%s.avi" % (self.title, datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))), cv2.VideoWriter_fourcc(*'DIVX'), 6.0, (640, 480))
+            self._video_writer = cv2.VideoWriter(os.path.join(folder, "%s_%s.avi" % (self.title.replace("/", "_"), datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))), cv2.VideoWriter_fourcc(*'DIVX'), 6.0, (640, 480))
             self.__draw__()
         else: # Stop recording
             self._video_writer.release()

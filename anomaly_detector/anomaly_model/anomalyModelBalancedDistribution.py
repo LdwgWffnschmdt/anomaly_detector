@@ -53,7 +53,10 @@ class AnomalyModelBalancedDistribution(AnomalyModelBase):
         
         self._mean = np.mean(self.balanced_distribution["features"], axis=0, dtype=np.float64)  # Mean
         cov = np.cov(self.balanced_distribution["features"], rowvar=False)                      # Covariance matrix
-        self._covI = np.linalg.pinv(cov)                                            # Inverse of covariance matrix
+        try:
+            self._covI = np.linalg.pinv(cov)                                            # Pseudo Inverse of covariance matrix
+        except np.linalg.LinAlgError:
+            self._covI = np.linalg.inv(cov)                                            # Inverse of covariance matrix
     
     def __mahalanobis_distance__(self, patch):
         """Calculate the Mahalanobis distance between the input and the model"""

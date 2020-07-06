@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Benchmark the specified anomaly models.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
-parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.FEATURES_PATH + "*.h5",
+parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.BENCHMARK_PATH + "*.h5",
                     help="The feature file(s). Supports \"path/to/*.h5\"")
 
 parser.add_argument("--output", metavar="OUT", dest="output", type=str,
@@ -28,7 +28,7 @@ from glob import glob
 import numpy as np
 import csv
 from tqdm import tqdm
-from anomaly_model import AnomalyModelSVG, AnomalyModelBalancedDistribution, AnomalyModelBalancedDistributionSVG, AnomalyModelSpatialBinsBase
+from anomaly_model import AnomalyModelSVG, AnomalyModelMVG, AnomalyModelBalancedDistribution, AnomalyModelBalancedDistributionSVG, AnomalyModelSpatialBinsBase
 
 def anomaly_model_benchmark():
     ################
@@ -61,7 +61,7 @@ def anomaly_model_benchmark():
     #     for features_file in files:
     #         # Load the file
     #         patches = PatchArray(features_file)
-    #         models = [AnomalyModelSVG()]
+    #         models = [AnomalyModelSVG(), AnomalyModelMVG()]
     #         for fake in [True, False]:
     #             for cell_size in [0.2, 0.5]:
     #                 models.append(AnomalyModelSpatialBinsBase(AnomalyModelSVG, patches, cell_size=cell_size, fake=fake))
@@ -92,7 +92,7 @@ def anomaly_model_benchmark():
                 # Load the file
                 patches = PatchArray(features_file)
                 
-                models = [AnomalyModelSVG()]
+                models = [AnomalyModelSVG(), AnomalyModelMVG()]
 
                 for fake in [True, False]:
                     for cell_size in [0.2, 0.5]:
@@ -104,16 +104,21 @@ def anomaly_model_benchmark():
                         threshold_learning = int(np.mean(patches.mahalanobis_distances["SpatialBin/SVG/%s" % key]))
                         models.append(AnomalyModelSpatialBinsBase(lambda: AnomalyModelBalancedDistributionSVG(initial_normal_features=10, threshold_learning=threshold_learning, pruning_parameter=0.5), patches, cell_size=cell_size, fake=fake))
 
-                # Calculate anomaly models
+                # BalancedDistributionSVG uses SVG mean as learning threshold
                 if patches.contains_mahalanobis_distances and "SVG" in patches.mahalanobis_distances.dtype.names:
                     threshold_learning = int(np.mean(patches.mahalanobis_distances["SVG"]))
                     models.append(AnomalyModelBalancedDistributionSVG(initial_normal_features=20, threshold_learning=threshold_learning, pruning_parameter=0.5))
 
+                # BalancedDistribution uses MVG mean as learning threshold
+                if patches.contains_mahalanobis_distances and "MVG" in patches.mahalanobis_distances.dtype.names:
+                    threshold_learning = int(np.mean(patches.mahalanobis_distances["MVG"]))
+                    models.append(AnomalyModelBalancedDistribution(initial_normal_features=20, threshold_learning=threshold_learning, pruning_parameter=0.5))
+
                 with tqdm(total=len(models), file=sys.stderr) as pbar2:
                     for m in models:
                         base_name = m.NAME
-                        if not "Spatial" in base_name and "Balanced" in base_name:
-                            base_name = "BalancedDistributionSVG"
+                        if not "Spatial" in base_name and "BalancedDistribution" in base_name:
+                            base_name = "BalancedDistribution"
                         try:
                             pbar2.set_description(base_name)
                             logger.info("Calculating %s" % base_name)

@@ -10,6 +10,8 @@ from datetime import datetime
 
 import matplotlib as mpl
 mpl.rcParams['savefig.dpi'] = 300
+mpl.rcParams['font.family'] = 'sans-serif'
+mpl.rcParams['font.sans-serif'] = ['Arial']
 
 import numpy as np
 import numpy.lib.recfunctions
@@ -140,6 +142,9 @@ class PatchArray(np.recarray):
                         patches_dict[x] = y
                     elif x.endswith("/mahalanobis_distances"):
                         n = x.replace("/mahalanobis_distances", "")
+                        if "balanced_distribution" in y.parent.keys():
+                            bd = y.parent["balanced_distribution"]
+                            n = "%s/%i" % (n, bd.shape[0])
                         mahalanobis_dict[n] = numpy.array(y)
                         mahalanobis_dict[n][np.isnan(mahalanobis_dict[n])] = -1
 
@@ -862,7 +867,7 @@ class PatchArray(np.recarray):
             for other_filter in other_filters:
                 for gauss_filter in gauss_filters:
                     # Don't compute gauss filters (in image space) for per sum metrics (they take the average anyways)
-                    if metric.name.endswith("(sum)") and gauss_filter != None and gauss_filter[1] > 0:
+                    if metric.name.endswith("(mean)") and gauss_filter != None and gauss_filter[1] > 0:
                         continue
 
                     title = "Metrics for %s (%s, filter:%s + %s)" % (extractor, metric.name, gauss_filter, other_filter)
