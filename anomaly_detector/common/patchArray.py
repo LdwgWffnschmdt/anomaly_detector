@@ -1081,15 +1081,15 @@ class PatchArray(np.recarray):
                         scores[name] = metric.get_values(maha)
                         
                     filename = os.path.join(consts.METRICS_PATH, "%s_%s_%s_%s.jpg" % (extractor, metric.name, gauss_filter, other_filter))
-                    result = self.calculate_roc(title, labels, scores, filename)
+                    result = self.__calculate_roc__(title, labels, scores, filename)
                     for model, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5 in result:
                         results.append((extractor, metric.name, model, gauss_filter, other_filter, roc_auc, auc_pr, max_f1, fpr0, fpr1, fpr2, fpr3, fpr4, fpr5))
         
         return results
 
 
-    def calculate_roc(self, title, labels, scores, filename=None):
-        """Calculate the """
+    def __calculate_roc__(self, title, labels, scores, filename=None):
+        """ Calculate the metrics and create ROC and PR diagrams """
         # (Name, ROC_AUC, AUC_PR, f1)
         results = list()
 
@@ -1223,6 +1223,9 @@ class PatchArray(np.recarray):
         return results
 
     def calculate_patch_labels(self):
+        """Calculate per-pixel labels from annotation images (red=anomaly).
+        Annotated images need to be in a folder called "Labels" at the same level as the "Images" folder.
+        """
         if not self.contains_features or self.filename is None:
             logger.error("Can only do this on feature files")
             return
@@ -1268,43 +1271,9 @@ class PatchArray(np.recarray):
             hf.create_dataset("patch_labels", data=self.patch_labels)
 
 if __name__ == "__main__":
-    p = PatchArray(consts.FEATURES_FILE)
-    # p.calculate_patch_labels()
-    p.calculate_metrics()
-    # p.calculate_roc()
-
-
-    # p.calculate_rasterization(0.2, fake=False)
-
     from common import Visualize
-    # from scipy.misc import imresize
-
-    # p = PatchArray().training_and_validation
+    
+    p = PatchArray(consts.FEATURES_FILE)
 
     vis = Visualize(p)
     vis.show()
-    # for p in patches:
-    #     from feature_extractor.Models.C3D.sports1M_utils import preprocess_input_python
-    #     b = preprocess_input_python(patches.get_batch(p.times[0, 0], 16))
-    #     im = numpy.concatenate([np.concatenate(b[4*i:4*i+4,...], axis=1) for i in range(4)], axis=0)
-    #     im = im.astype(np.uint8)
-    #     cv2.imshow("Batch", im)
-    #     cv2.waitKey(1)
-
-    # f = np.zeros(patches.shape[0], dtype=np.bool)
-    # f[0:3] = True
-    # f[5:10] = True
-    # patches = patches[f]
-
-    # print patches.isview
-
-    # patches[0, 0, 0].labels = 2
-    # print patches[0:5, 0, 0].labels
-    # print patches[0:5, 0, 0].changed
-
-    # patches[0:2, 0, 0].labels = 2
-
-    # print patches[0:5, 0, 0].labels
-    # print patches[0:5, 0, 0].changed
-
-    # print patches.root[0:15, 0, 0].changed

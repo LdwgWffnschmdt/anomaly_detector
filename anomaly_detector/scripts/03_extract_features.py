@@ -4,7 +4,7 @@
 import consts
 import argparse
 
-parser = argparse.ArgumentParser(description="Extract features from tfrecords.",
+parser = argparse.ArgumentParser(description="Extract features from images.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
 parser.add_argument("--list", dest="list", action="store_true",

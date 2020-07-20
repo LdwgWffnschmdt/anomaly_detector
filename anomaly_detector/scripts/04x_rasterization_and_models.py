@@ -8,24 +8,23 @@
 #   - models + mahalanobis distances.                                                           #
 # These calculations - especially rasterization and mahalanobis distances - are very slow       #
 # and only seem to use one core.                                                                #
-# You can call *04_rasterization_and_models_parallel.sh* instead for to run multiple            #
-# instances of this script, which will then utilize more CPU cores. But beware heyvy RAM use!   #
+# You can call *04_rasterization_and_models_parallel.sh* instead to run multiple instances of   #
+# this script, which will then utilize more CPU cores. But beware heavy RAM use!                #
 #################################################################################################
-
 
 import consts
 import argparse
 
-parser = argparse.ArgumentParser(description="Add patch locations to feature files.",
+parser = argparse.ArgumentParser(description="Calculate spatial binning rasterizations and anomaly models for feature files.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
 parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.FEATURES_FILES,
                     help="The feature file(s). Supports \"path/to/*.h5\"")
 
 parser.add_argument("--index", metavar="I", dest="index", type=int, default=None,
-                    help="")
+                    help="Used for parallelization (see 04_rasterization_and_models_parallel.sh)")
 parser.add_argument("--total", metavar="T", dest="total", type=int, default=None,
-                    help="")
+                    help="Used for parallelization (see 04_rasterization_and_models_parallel.sh)")
 
 args = parser.parse_args()
 
@@ -76,19 +75,6 @@ def calculate_locations():
                 continue
 
             try:
-                # keys = ["rasterization_fake_0.20_count", "rasterization_fake_0.20", "rasterization_0.20_count", "rasterization_0.20",
-                #         "rasterization_fake_0.50_count", "rasterization_fake_0.50", "rasterization_0.50_count", "rasterization_0.50",
-                #         "bins_0.20","bins_fake_0.20","bins_0.50","bins_fake_0.50",
-                #         "SpatialBin"]
-                # with h5py.File(features_file, "r+") as hf:
-                #     # Remove the old shit
-                #     for k in keys:
-                #         if k in hf.keys():
-                #             logger.info("Deleting %s from %s" % (k, features_file))
-                #             del hf[k]
-                # pbar.update()
-                # continue
-
                 # Load the file
                 patches = PatchArray(features_file)
 

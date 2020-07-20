@@ -14,7 +14,7 @@ from tqdm import tqdm
 import consts
 
 class FeatureExtractorBase(object):
-    NAME       = property(lambda self: self.__class__.__name__.replace("FeatureExtractor", ""))
+    NAME = property(lambda self: self.__class__.__name__.replace("FeatureExtractor", ""))
     
     # OVERRIDE THESE WITH THE RESPECTIVE IMPLEMENTATION
     IMG_SIZE            = 224
@@ -79,7 +79,7 @@ class FeatureExtractorBase(object):
         """Loads a set of files, extracts the features and saves them to file
         Args:
             dataset (tf.data.Dataset): Dataset containing the input data
-            totla (int): Number of items in Dataset
+            total (int): Number of items in Dataset
             output_file (str): Filename and path of the output file
             batch_size (str): Size of image batches fed to the extractor. Set to 0 for no batching. (Default: self.BATCH_SIZE)
             compression (str): Output file compression, set to None for no compression (Default: None), lzf is feasable, gzip can be extremely slow combined with HDF5

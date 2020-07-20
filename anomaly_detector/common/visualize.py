@@ -36,7 +36,8 @@ class Visualize(object):
         (0: Unknown, 1: No anomaly, 2: Contains an anomaly)
         
         Args:
-            image (Image)
+            image (Image): Image object
+            frame (PatchArray): Current frame
         """
         
         font                   = cv2.FONT_HERSHEY_SIMPLEX
@@ -1024,7 +1025,7 @@ class Visualize(object):
 
     @property
     def title(self):
-        if self.patches.filename is None:
+        if self.patches.filename is None or not self.patches.contains_features:
             return "Images"
         extractor = os.path.basename(self.patches.filename).replace(".h5", "")
         model = sorted(self.patches.mahalanobis_distances.dtype.names)[self.model_index - 1]

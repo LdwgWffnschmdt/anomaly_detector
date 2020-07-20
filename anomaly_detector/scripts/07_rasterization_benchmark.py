@@ -4,7 +4,7 @@
 import consts
 import argparse
 
-parser = argparse.ArgumentParser(description="Benchmark the specified anomaly models.",
+parser = argparse.ArgumentParser(description="Benchmark rasterization for spatial binning.",
                                  formatter_class=argparse.RawTextHelpFormatter)
 
 parser.add_argument("--files", metavar="F", dest="files", type=str, nargs='*', default=consts.BENCHMARK_PATH + "*.h5",
