@@ -178,16 +178,18 @@ def rosbag_to_images():
                         if args.image_scale != 1.0:
                             cv_image = cv2.resize(cv_image, (int(cv_image.shape[1] * args.image_scale),
                                                             int(cv_image.shape[0] * args.image_scale)), cv2.INTER_AREA)
-
+                        
+                        # Save the image as jpg file
                         cv2.imwrite(output_file + ".jpg", cv_image)
                         
-                        meta.append((((translation.x, translation.y, translation.z), (euler[0], euler[1], euler[2])),
-                                    t.to_nsec(),
-                                    label, # 0: Unknown, 1: No anomaly, 2: Contains an anomaly
-                                    -1,
-                                    -1,
-                                    -1,
-                                    bag_file_name))
+                        # Add accompanying metadata to the metadata list
+                        meta.append((((translation.x, translation.y, translation.z), (euler[0], euler[1], euler[2])),   # Position and rotation
+                                    t.to_nsec(),          # Timestamp
+                                    label,                # Label (0: Unknown, 1: No anomaly, 2: Contains an anomaly)
+                                    -1,                   # Direction
+                                    -1,                   # Round number
+                                    -1,                   # Stop label (per-frame label)
+                                    bag_file_name))       # Filename of the current bag
 
                     except KeyboardInterrupt:
                         logger.info("Cancelled")
@@ -200,9 +202,10 @@ def rosbag_to_images():
                     pbar.update()
 
     logger.info("Writing metadata")
-
+  
+    # Turn metadata into a numpy recarray. This also dictates the datatypes used in the HDF5 file.
     dt = h5py.string_dtype(encoding='ascii')
-    metadata = np.rec.array(meta, dtype=[('camera_locations', [('translation', [('x', '<f4'), ('y', '<f4'), ('z', '<f4')]),
+    metadata = np.rec.array(meta, dtype=[('camera_locations', [('translation', [('x', '<f4'), ('y', '<f4'), ('z', '<f4')]), # Complex datatype (see https://numpy.org/doc/stable/reference/arrays.dtypes.html)
                                                                 ('rotation', [('x', '<f4'), ('y', '<f4'), ('z', '<f4')])]),
                                             ('times', '<u8'),
                                             ('labels', 'i1'),
@@ -211,6 +214,7 @@ def rosbag_to_images():
                                             ('stop', 'i1'),
                                             ('bag_file', dt)])
 
+    # Save the metadata as HDF5 file
     meta_filename = os.path.join(output_dir, "metadata_cache.h5")
     with h5py.File(meta_filename, "w") as hf:
         hf.attrs["Created"] = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
@@ -221,7 +225,7 @@ def rosbag_to_images():
         hf.create_dataset("round_numbers",    data=metadata.round_numbers)
         hf.create_dataset("stop",             data=metadata.stop)
         hf.create_dataset("bag_file",         data=metadata.bag_file)
-                
+    
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
